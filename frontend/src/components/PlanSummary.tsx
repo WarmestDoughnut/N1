@@ -10,7 +10,7 @@ export function PlanFacts({ plan, deviceName }: { plan: Plan; deviceName: (id: s
         <tr><th>Signals shared</th><td>{plan.signals.map(signalLabel).join(', ')}</td></tr>
         <tr><th>Window</th><td>{formatDate(plan.window.start)} → {formatDate(plan.window.end)}</td></tr>
         {plan.observational && (
-          <tr><th>Hypothesis</th><td>{signalLabel(plan.observational.signal)} is <strong>{plan.observational.direction}</strong> in the 1–{plan.observational.max_lag_days} days before episodes</td></tr>
+          <tr><th>Hypothesis</th><td>{signalLabel(plan.observational.signal)} is <strong>{plan.observational.direction}</strong> in the {(plan.observational.min_lag_days ?? 1) === plan.observational.max_lag_days ? plan.observational.max_lag_days : `${plan.observational.min_lag_days ?? 1}–${plan.observational.max_lag_days}`} days before episodes</td></tr>
         )}
         {plan.intervention && (
           <tr><th>Design</th><td>A = {plan.intervention.arm_a}, B = {plan.intervention.arm_b}. {plan.intervention.n_periods} periods × {plan.intervention.period_days} days, {plan.intervention.washout_days}-day washout. Outcome: {signalLabel(plan.intervention.outcome_signal)} ({plan.intervention.better} is better)</td></tr>

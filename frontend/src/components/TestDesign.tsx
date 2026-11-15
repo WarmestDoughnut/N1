@@ -73,8 +73,10 @@ export function StrengthMeter({ bars, tone = 'ok' }: { bars: number; tone?: 'ok'
 }
 
 // ---------- pattern: days-before strip ----------
-export function PatternStrip({ from, to, episodeLabel }: { from: number; to: number; episodeLabel: string }) {
-  const days = Array.from({ length: to }, (_, i) => to - i) // to … 1
+export function PatternStrip({ min, max, episodeLabel }: { min: number; max: number; episodeLabel: string }) {
+  // Window L = the L days right before the episode, for each L in min..max: days 1..min are in every
+  // tested window (strong), days min+1..max only in the longer ones (light).
+  const days = Array.from({ length: max }, (_, i) => max - i) // max … 1
   return (
     <div className="td-scroll">
       <div className="td-strip">
@@ -83,9 +85,9 @@ export function PatternStrip({ from, to, episodeLabel }: { from: number; to: num
           <div className="td-days">{[0, 1, 2].map((i) => <div key={i} className="td-day" />)}</div>
         </div>
         <div className="td-strip-group">
-          <span className="td-strip-label hot">{from === to ? `${to} day${to > 1 ? 's' : ''} before` : `${from}–${to} days before`}</span>
+          <span className="td-strip-label hot">{min === max ? `${max} day${max > 1 ? 's' : ''} before` : `${min}–${max} days before`}</span>
           <div className="td-days hot">
-            {days.map((d) => <div key={d} className={`td-day ${d >= from ? 'in' : 'near'}`}>-{d}</div>)}
+            {days.map((d) => <div key={d} className="td-day in" style={d > min ? { opacity: 0.55 } : undefined}>-{d}</div>)}
           </div>
         </div>
         <div className="td-strip-group">

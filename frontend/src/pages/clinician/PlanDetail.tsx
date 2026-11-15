@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { api, ApiError, friendlyError } from '../../api'
+import { api, friendlyError } from '../../api'
 import type { Device, Plan, Results } from '../../types'
 import { navigate, useAsync } from '../../lib/hooks'
 import { Icon } from '../../components/Icon'
@@ -7,6 +7,7 @@ import { StatusChip } from '../../components/Verdict'
 import { ResultsView } from '../../components/ResultsView'
 import { History, PlanFacts, PlanSchedule } from '../../components/PlanSummary'
 import { useToast } from '../../components/Shell'
+import { RunProgress, resultsWithRetry } from '../../components/RunProgress'
 import type { ClinicianData } from './ClinicianApp'
 
 export function PlanDetail({ planId, data }: { planId: string; data: ClinicianData }) {
@@ -16,7 +17,7 @@ export function PlanDetail({ planId, data }: { planId: string; data: ClinicianDa
   const plan = planQ.data
   const hasResults = plan && (plan.status === 'complete' || plan.status === 'stopped')
   const resultsQ = useAsync<Results | null>(
-    () => (hasResults ? api.results(planId).catch((e) => { if (e instanceof ApiError && e.status === 404) return null; throw e }) : Promise.resolve(null)),
+    () => (hasResults ? resultsWithRetry(planId) : Promise.resolve(null)),
     [planId, plan?.status],
   )
   const [busy, setBusy] = useState(false)
@@ -59,6 +60,7 @@ export function PlanDetail({ planId, data }: { planId: string; data: ClinicianDa
           )}
         </div>
       </section>
+      {busy && <div className="card mb" style={{ padding: '14px 18px' }}><RunProgress plan={plan} active={busy} /></div>}
 
       {err && <div className="alert alert-error"><Icon name="info" />{err}</div>}
 
@@ -70,10 +72,10 @@ export function PlanDetail({ planId, data }: { planId: string; data: ClinicianDa
       {plan.status === 'paused' && <div className="alert alert-warn"><Icon name="pause" /><span className="grow">The patient paused this plan. No new data is collected until they resume.</span></div>}
 
       {hasResults ? (
-        resultsQ.loading && !resultsQ.data ? <div className="spinner">Loading results…</div>
+        resultsQ.loading && !resultsQ.data ? <div className="spinner">Calculating the result…</div>
           : resultsQ.error ? <div className="alert alert-error">{resultsQ.error}</div>
             : resultsQ.data ? <ResultsView results={resultsQ.data} plan={plan} audience="clinician" aside={facts} />
-              : <div className="alert alert-info">Results aren't ready yet.</div>
+              : <div className="alert alert-info" style={{ justifyContent: 'space-between' }}>The result is still being calculated.<button className="button secondary sm" onClick={resultsQ.reload}>Check again</button></div>
       ) : (
         <section className="bottom-grid">
           {facts}

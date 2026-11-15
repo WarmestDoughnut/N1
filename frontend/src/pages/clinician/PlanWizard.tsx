@@ -12,14 +12,16 @@ import { getSession, initials } from '../../lib/session'
 import { ALL_SIGNALS, daysBetween, formatDate, formatDateShort, SIGNAL_INFO, signalLabel } from '../../lib/util'
 
 const STEPS = ['Patient', 'Devices', 'Signals', 'Test design', 'Review & send']
-/** Backend lag scan today: days 1..max_lag_days, max 3 (a "from" day > 1 and up to 14 needs a contract change). */
-const LAG_MAX = 3
+/** v1.4 lag scan: look-back windows of min_lag_days..max_lag_days (1 ≤ min ≤ max ≤ 14); window L = the L days before each episode. */
+const LAG_MAX = 14
 const SENSOR_SIGNALS: SignalId[] = ALL_SIGNALS.filter((s) => s !== 'episode')
 
-interface ObsForm { signal: SignalId | null; direction: Direction | null; max_lag_days: number | null }
+/** "3 days" or "2–7 days" */
+const lagRange = (a: number, b: number) => (a === b ? `${a} day${a > 1 ? 's' : ''}` : `${a}–${b} days`)
+interface ObsForm { signal: SignalId | null; direction: Direction | null; min_lag_days: number | null; max_lag_days: number | null }
 interface IvForm { arm_a: string; arm_b: string; outcome_signal: SignalId | null; better: Direction | null; period_days: number | null; washout_days: number | null; n_periods: number | null; seed: number }
 /** Nothing pre-filled: every slot of the test design is the clinician's choice (only the randomization seed is internal). */
-const EMPTY_OBS: ObsForm = { signal: null, direction: null, max_lag_days: null }
+const EMPTY_OBS: ObsForm = { signal: null, direction: null, min_lag_days: null, max_lag_days: null }
 const EMPTY_IV: IvForm = { arm_a: '', arm_b: '', outcome_signal: null, better: null, period_days: null, washout_days: null, n_periods: null, seed: 42 }
 const NO_WIN = { start: '', end: '' }
 
@@ -75,7 +77,7 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
       setType(p.type)
       setDevices(p.devices)
       setSignals(p.signals)
-      if (p.observational) setObs(p.observational)
+      if (p.observational) setObs({ ...p.observational, min_lag_days: p.observational.min_lag_days ?? 1 })
       if (p.intervention) { const { schedule: _s, ...rest } = p.intervention; void _s; setIv(rest) }
       setTitle(p.title); setTitleTouched(true)
       setClinician(p.clinician_name)
@@ -134,7 +136,7 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
     if (step !== 3) return
     if (type === 'observational') {
       if (!obsReady) setOpenSlot(2)
-      else if (obs.max_lag_days == null) setOpenSlot(3)
+      else if (obs.min_lag_days == null || obs.max_lag_days == null) setOpenSlot(3)
       else if (!obsWin.start || !obsWin.end) setOpenSlot(4)
     } else {
       if (!iv.outcome_signal || !iv.better) setOpenSlot(1)
@@ -208,7 +210,7 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
       if (type === 'observational' && obsBlocked) return 'No episodes logged, so use an A/B test.'
       if (type === 'observational' && !obs.signal) return 'Choose what might come first (slot 2).'
       if (type === 'observational' && !obs.direction) return 'Choose lower or higher before episodes (slot 2).'
-      if (type === 'observational' && obs.max_lag_days == null) return 'Choose how far back to look (slot 3).'
+      if (type === 'observational' && (obs.min_lag_days == null || obs.max_lag_days == null)) return 'Choose how far back to look (slot 3).'
       if (type === 'observational' && (!window_.start || !window_.end)) return 'Choose the plan dates (slot 4).'
       if (type === 'observational' && window_.end <= window_.start) return 'The plan end date must be after its start date.'
       if (type === 'intervention') {
@@ -237,7 +239,7 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
       signals: finalSignals,
       window: window_,
       // stepError guarantees these are chosen before Send is enabled
-      observational: type === 'observational' ? { ...obs, signal: obs.signal!, direction: obs.direction!, max_lag_days: obs.max_lag_days! } : null,
+      observational: type === 'observational' ? { ...obs, signal: obs.signal!, direction: obs.direction!, min_lag_days: obs.min_lag_days!, max_lag_days: obs.max_lag_days! } : null,
       intervention: type === 'intervention'
         ? { ...iv, arm_a: iv.arm_a.trim(), arm_b: iv.arm_b.trim(), outcome_signal: iv.outcome_signal!, better: iv.better!, period_days: ss.periodDays ?? 1, washout_days: ss.breakDays ?? 0, n_periods: ss.count, schedule }
         : null,
@@ -265,7 +267,7 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
             <h3>What this test will do</h3>
             <Fact k="Explains">Episodes ({episodes} logged, at least 5 needed)</Fact>
             <Fact k="Using">{obs.signal ? `${lbl(obs.signal)}${obs.direction ? `, expected to be ${obs.direction}` : ''}` : <span className="muted">Not chosen yet</span>}</Fact>
-            <Fact k="Looks back">{obs.max_lag_days == null ? <span className="muted">Not chosen yet</span> : <>{obs.max_lag_days === 1 ? '1 day' : `1 to ${obs.max_lag_days} days`} before each episode{obs.max_lag_days > 1 ? ', each tested and corrected for' : ''}</>}</Fact>
+            <Fact k="Looks back">{obs.min_lag_days == null || obs.max_lag_days == null ? <span className="muted">Not chosen yet</span> : <>{lagRange(obs.min_lag_days, obs.max_lag_days)} before each episode{obs.max_lag_days > obs.min_lag_days ? ', each window tested and corrected for' : ''}</>}</Fact>
             <Fact k="Chance check">The same comparison on 2,000 random shifts of {firstName}'s episode dates</Fact>
             <Fact k="Shared with you">{obs.signal ? `${lbl(obs.signal)} and the episode log` : 'The episode log'}, {range ? `${range} only` : 'for the dates you choose'}</Fact>
           </div>
@@ -363,7 +365,7 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
 
         {step === 3 && patient && (() => {
           const firstName = patient?.display_name.replace(/,.*$/, '') ?? 'the patient'
-          const lagText = obs.max_lag_days == null ? 'the days' : obs.max_lag_days === 1 ? 'the day' : `the ${obs.max_lag_days} days`
+          const lagText = obs.min_lag_days == null || obs.max_lag_days == null ? 'the days' : obs.max_lag_days === 1 ? 'the day' : `the ${lagRange(obs.min_lag_days, obs.max_lag_days)}`
           const winDays = window_.start && window_.end ? daysBetween(window_.start, window_.end) + 1 : 0
           const toggle = (n: number) => setOpenSlot(openSlot === n ? null : n)
           const sourceOf = (s: SignalId) => catalog.filter((d) => devices.includes(d.id) && d.signals.includes(s)).map((d) => d.name).join(', ')
@@ -415,8 +417,8 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
                       <Slot n={2} label="What might come first" empty={!obsReady}
                         value={obs.signal ? `${lbl(obs.signal)}${obs.direction ? `, ${obs.direction}` : ''}` : 'Choose a signal'}
                         sub={!obs.signal ? `from ${firstName}'s devices` : obs.direction ? 'than on normal days' : 'lower or higher?'} open={openSlot === 2} onOpen={() => toggle(2)} />
-                      <Slot n={3} label="How far back" empty={obs.max_lag_days == null}
-                        value={obs.max_lag_days == null ? 'Choose days' : `${obs.max_lag_days} day${obs.max_lag_days > 1 ? 's' : ''}`} sub="before each episode" open={openSlot === 3} onOpen={() => toggle(3)} />
+                      <Slot n={3} label="How far back" empty={obs.min_lag_days == null || obs.max_lag_days == null}
+                        value={obs.min_lag_days == null || obs.max_lag_days == null ? 'Choose days' : lagRange(obs.min_lag_days, obs.max_lag_days)} sub="before each episode" open={openSlot === 3} onOpen={() => toggle(3)} />
                       <Slot n={4} label="Over what dates" empty={!window_.start || !window_.end}
                         value={window_.start && window_.end ? `${formatDateShort(window_.start)} to ${formatDateShort(window_.end)}` : 'Choose dates'}
                         sub={window_.start && window_.end ? `${winDays} days` : `${firstName} has ${patient.n_days} days of data`} open={openSlot === 4} onOpen={() => toggle(4)} />
@@ -436,11 +438,15 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
                     {openSlot === 3 && (
                       <SlotEditor title="Editing 3: how far back to look" onDone={() => setOpenSlot(null)}>
                         <div className="td-inline">
-                          <span>From</span><Stepper label="First day of the range" value={1} min={1} max={1} onChange={() => {}} disabled />
-                          <span>to</span><Stepper label="Last day of the range" value={obs.max_lag_days} min={1} max={LAG_MAX} onChange={(n) => setObs({ ...obs, max_lag_days: n })} />
+                          <span>Look back between</span>
+                          <Stepper label="Shortest look-back" value={obs.min_lag_days} min={1} max={obs.max_lag_days ?? LAG_MAX}
+                            onChange={(n) => setObs({ ...obs, min_lag_days: n, max_lag_days: obs.max_lag_days != null && obs.max_lag_days < n ? n : obs.max_lag_days })} />
+                          <span>and</span>
+                          <Stepper label="Longest look-back" value={obs.max_lag_days} min={obs.min_lag_days ?? 1} max={LAG_MAX}
+                            onChange={(n) => setObs({ ...obs, max_lag_days: n, min_lag_days: obs.min_lag_days != null && obs.min_lag_days > n ? n : obs.min_lag_days })} />
                           <span>days before each episode</span>
                         </div>
-                        <p className="td-note">Each day in the range is tested, and the p-value is corrected for testing several. Ranges that start later or reach past {LAG_MAX} days are coming soon.</p>
+                        <p className="td-note">Each window from the shortest to the longest is tested (the days right before the episode, up to that length), and the p-value is corrected for testing several. Long windows leave fewer normal days to compare against.</p>
                       </SlotEditor>
                     )}
                     {openSlot === 4 && (
@@ -516,7 +522,7 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
               {type === 'observational' ? (
                 <section className="td-section">
                   <h3 className="td-h">What gets compared, for one episode</h3>
-                  <PatternStrip from={1} to={obs.max_lag_days ?? 3} episodeLabel="Episode day" />
+                  <PatternStrip min={obs.min_lag_days ?? 1} max={obs.max_lag_days ?? 3} episodeLabel="Episode day" />
                   {obs.max_lag_days == null && <p className="td-note">Showing 3 days as an example. Choose how far back in slot 3.</p>}
                   <p className="td-note">Illustration, not {firstName}'s data. Shaded days are compared with normal days; episode days are left out.</p>
                 </section>
@@ -577,7 +583,7 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
                       {droppedSignals.length > 0 && <div className="small muted">Not shared, because this test doesn't use them: {droppedSignals.map(signalLabel).join(', ')}</div>}</td></tr>
                     <tr><th>Window</th><td>{formatDate(window_.start)} → {formatDate(window_.end)}</td></tr>
                     {type === 'observational' ? (
-                      <tr><th>Test</th><td>Observational: is {lbl(obs.signal).toLowerCase()} <strong>{obs.direction}</strong> in the 1–{obs.max_lag_days} days before episodes?</td></tr>
+                      <tr><th>Test</th><td>Observational: is {lbl(obs.signal).toLowerCase()} <strong>{obs.direction}</strong> in the {lagRange(obs.min_lag_days ?? 1, obs.max_lag_days ?? 1)} before episodes?</td></tr>
                     ) : (
                       <tr><th>Test</th><td>A/B trial: {iv.n_periods} periods × {iv.period_days} days, {iv.washout_days}-day washout. Outcome: {lbl(iv.outcome_signal).toLowerCase()} ({iv.better} is better)</td></tr>
                     )}

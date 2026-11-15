@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { api, ApiError, friendlyError } from '../../api'
+import { api, friendlyError } from '../../api'
 import type { Device, Plan, PlanAction, Results } from '../../types'
 import { useAsync } from '../../lib/hooks'
 import { DEVICE_ICON, Icon, SIGNAL_ICON } from '../../components/Icon'
@@ -7,6 +7,7 @@ import { StatusChip } from '../../components/Verdict'
 import { ResultsView } from '../../components/ResultsView'
 import { PlanSchedule } from '../../components/PlanSummary'
 import { useToast } from '../../components/Shell'
+import { RunProgress, resultsWithRetry } from '../../components/RunProgress'
 import { daysBetween, formatDate, SIGNAL_INFO } from '../../lib/util'
 import type { PatientData } from './PatientApp'
 
@@ -17,19 +18,27 @@ export function PatientPlan({ planId, data }: { planId: string; data: PatientDat
   const plan = planQ.data
   const finished = plan && (plan.status === 'complete' || plan.status === 'stopped')
   const resultsQ = useAsync<Results | null>(
-    () => (finished ? api.results(planId).catch((e) => { if (e instanceof ApiError && e.status === 404) return null; throw e }) : Promise.resolve(null)),
+    () => (finished ? resultsWithRetry(planId) : Promise.resolve(null)),
     [planId, plan?.status],
   )
   const [busy, setBusy] = useState(false)
+  /** which action is in flight (button label + simulate progress) */
+  const [running, setRunning] = useState<PlanAction | 'simulate' | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [confirm, setConfirm] = useState<'decline' | 'stop' | null>(null)
   const [logOpen, setLogOpen] = useState(false)
 
-  const act = async (fn: () => Promise<Plan>, msg: string) => {
-    setBusy(true); setErr(null); setConfirm(null)
-    try { planQ.setData(await fn()); toast(msg) } catch (e) { setErr(friendlyError(e)) } finally { setBusy(false) }
+  const act = async (fn: () => Promise<Plan>, msg: string, key: PlanAction | 'simulate') => {
+    if (busy) return
+    setBusy(true); setRunning(key); setErr(null); setConfirm(null)
+    try { planQ.setData(await fn()); toast(msg) }
+    catch (e) {
+      // Visible even when the page is scrolled: the in-page alert sits at the top.
+      const m = friendlyError(e)
+      setErr(m); toast(`That didn't go through: ${m}`)
+    } finally { setBusy(false); setRunning(null) }
   }
-  const doAction = (a: PlanAction, msg: string) => act(() => api.planAction(planId, a), msg)
+  const doAction = (a: PlanAction, msg: string) => act(() => api.planAction(planId, a), msg, a)
 
   if (planQ.error) return <div className="stack"><a href="#/tests">← My tests</a><div className="alert alert-error">{planQ.error}</div></div>
   if (!plan) return <div className="spinner">Loading…</div>
@@ -107,8 +116,8 @@ export function PatientPlan({ planId, data }: { planId: string; data: PatientDat
             <div className="big-actions">
               <button className="button primary lg" onClick={() => setLogOpen(true)}><Icon name="plus" /> Log an episode</button>
               {plan.status === 'active'
-                ? <button className="button secondary lg" disabled={busy} onClick={() => doAction('pause', 'Paused. Nothing new will be collected.')}><Icon name="pause" /> Pause</button>
-                : <button className="button secondary lg" disabled={busy} onClick={() => doAction('resume', 'Resumed.')}><Icon name="play" /> Resume</button>}
+                ? <button className="button secondary lg" disabled={busy} onClick={() => doAction('pause', 'Paused. Nothing new will be collected.')}><Icon name="pause" /> {running === 'pause' ? 'Pausing…' : 'Pause'}</button>
+                : <button className="button secondary lg" disabled={busy} onClick={() => doAction('resume', 'Resumed.')}><Icon name="play" /> {running === 'resume' ? 'Resuming…' : 'Resume'}</button>}
               <button className="button danger lg" disabled={busy} onClick={() => setConfirm('stop')}><Icon name="stop" /> Stop test</button>
             </div>
           </article>
@@ -122,18 +131,19 @@ export function PatientPlan({ planId, data }: { planId: string; data: PatientDat
                 <li key={d} className="muted small"><span className="ic tone-gray"><Icon name={DEVICE_ICON[d] ?? 'watch'} size={17} /></span>{(devicesQ.data ?? []).find((x) => x.id === d)?.name ?? d}</li>
               ))}
             </ul>
-            <button className="button demo mt" style={{ width: '100%' }} disabled={busy} onClick={() => act(() => api.simulateComplete(planId), 'Test complete. Here are your results.')}>
-              <Icon name="fastForward" /> Simulate complete (demo)
+            <button className="button demo mt" style={{ width: '100%' }} disabled={busy} onClick={() => act(() => api.simulateComplete(planId), 'Test complete. Here are your results.', 'simulate')}>
+              <Icon name="fastForward" /> {running === 'simulate' ? 'Running…' : 'Simulate complete (demo)'}
             </button>
+            <RunProgress plan={plan} active={running === 'simulate'} audience="patient" />
           </aside>
         </section>
       )}
 
       {finished && (
-        resultsQ.loading && !resultsQ.data ? <div className="spinner">Loading results…</div>
+        resultsQ.loading && !resultsQ.data ? <div className="spinner">Calculating your result…</div>
           : resultsQ.error ? <div className="alert alert-error">{resultsQ.error}</div>
             : resultsQ.data ? <ResultsView results={resultsQ.data} plan={plan} audience="patient" />
-              : <div className="card"><h1>{plan.title}</h1><p>Your results aren't ready yet. Check back soon.</p></div>
+              : <div className="card"><h1>{plan.title}</h1><p>Your result is still being calculated.</p><button className="button secondary" onClick={resultsQ.reload}>Check again</button></div>
       )}
 
       {confirm && (

@@ -223,7 +223,9 @@ function computeObservational(plan: Plan, incomplete: boolean): Results {
   }
 
   const epIdx = eps.flatMap((e, i) => (e ? [i] : []))
-  const lags = Array.from({ length: Math.max(1, cfg.max_lag_days) }, (_, i) => i + 1)
+  // v1.4: window sizes min_lag_days..max_lag_days (window L = the L days before each episode), like the backend
+  const minLag = Math.max(1, cfg.min_lag_days ?? 1)
+  const lags = Array.from({ length: Math.max(1, cfg.max_lag_days - minLag + 1) }, (_, i) => minLag + i)
   const observed = lags.map((l) => effectAt(epIdx, l))
   const N_PERM = 2000
   const nullMax: number[] = []
