@@ -93,7 +93,7 @@ function notifyMutation(method: string) {
 
 const token = () => getSession()?.token ?? null
 
-async function call<T>(method: string, path: string, body: unknown, viaMock: () => Promise<T>, optional = false): Promise<T> {
+export async function call<T>(method: string, path: string, body: unknown, viaMock: () => Promise<T>, optional = false): Promise<T> {
   const out = await callRaw<T>(method, path, body, viaMock, optional)
   notifyMutation(method)
   return out
