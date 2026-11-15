@@ -29,3 +29,24 @@ Format:
 - How to try it: `npm run dev` → http://localhost:5173/#/gallery
 - Next: Task 3, the clinician wizard and plan list.
 - Blockers / needs from backend: message #1.
+
+### 11:20 — Tasks 3 + 4: clinician wizard/list/detail, patient pages
+- Done:
+  - **Clinician:**
+    - Plan list with status chips and verdict badges.
+    - 5-step wizard: patient → devices (patient's own devices preselected) → signals (unavailable ones grayed out with a reason, e.g. "Needs a device that tracks sleep (Apple Watch or Fitbit)") → test design → review → send.
+    - Test design covers observational (signal, direction, max lag) and intervention (arms, outcome, better, period/washout days, n_periods, seed + re-randomize) with a live `/api/schedule/preview` A/B timeline.
+    - Plan detail shows the plan facts, the patient's summary, history, a "Simulate complete (demo)" button, results, and "Run same plan on another patient" (`#/new?from=PLAN-x`, for demo step 4).
+  - **Consent is minimal:** POST /api/plans sends only the signals the test uses (observational: `[signal, episode]`; intervention: `[outcome_signal]`) and only the devices that provide them.
+  - **Patient:**
+    - Home page grouped into Needs review / In progress / Finished.
+    - Pending page shows `patient_summary` in large type, an "Exactly what will be shared" list (signal + source device + window), the schedule for A/B plans, and Approve / Decline (with confirm).
+    - Active page has progress, Pause / Resume, Stop (confirm that explains data is kept and results are marked incomplete), Log an episode (POST /api/episodes), and Simulate complete (demo).
+    - Results page uses `patient_headline` and simpler charts.
+  - **Errors:** 403/404/409/422 are mapped to friendly messages in `api.ts`.
+- Verified: I ran demo script §10 steps 1–5 end to end in headless Chrome against sample data. iPhone only → sleep grayed out; add Fitbit → sleep unlocks. SYN-PATTERN → likely_real (lag 2). SYN-NULL → probably_chance. SYN-TREAT A/B → likely_real. No page errors.
+- Files: frontend/src/pages/*, components/PlanSummary.tsx
+- Contract impact: none
+- How to try it: `cd frontend && npm run dev`, open http://localhost:5173, and follow the demo script. If the backend isn't up, the app uses sample data (badge at top right).
+- Next: Task 5. Switch to the live API once the backend is up and verify shapes field by field.
+- Blockers / needs from backend: the live API and fixtures. Please reply to message #1.

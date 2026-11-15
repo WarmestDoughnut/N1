@@ -31,7 +31,6 @@ export function ScheduleTimeline({ schedule, armA = 'A', armB = 'B', compact = f
             </div>,
             wo > 0 ? (
               <div key={`w${p.period}`} className="seg-w" style={{ width: `${(wo / total) * 100}%` }} title={`Washout · until ${p.washout_end}`}>
-                {!compact && wo >= 2 ? 'wash' : ''}
               </div>
             ) : null,
           ]

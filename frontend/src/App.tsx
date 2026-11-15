@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { api } from './api'
 import type { Patient, Role } from './types'
 import { useAsync, useHashRoute, navigate } from './lib/hooks'
@@ -33,6 +33,7 @@ export default function App() {
     // Keep the same plan open when switching roles, otherwise go home.
     if (route[0] !== 'plans') navigate('/')
   }
+  const switchPatientQuietly = useCallback((id: string) => { setPatientIdState(id); writeLS('n1.patient', id) }, [])
   const setPatientId = (id: string) => {
     setPatientIdState(id)
     writeLS('n1.patient', id)
@@ -43,11 +44,11 @@ export default function App() {
   if (route[0] === 'gallery') page = <ResultsGallery />
   else if (role === 'clinician') {
     if (route[0] === 'new') page = <PlanWizard patients={patients.data ?? []} />
-    else if (route[0] === 'plans' && route[1]) page = <ClinicianPlanDetail planId={route[1]} patients={patients.data ?? []} />
+    else if (route[0] === 'plans' && route[1]) page = <ClinicianPlanDetail planId={route[1]} patients={patients.data ?? []} onRole={setRole} />
     else page = <ClinicianPlans patients={patients.data ?? []} />
   } else {
     const patient = patients.data?.find((p) => p.id === patientId)
-    if (route[0] === 'plans' && route[1]) page = <PatientPlan planId={route[1]} patient={patient} onSwitchPatient={setPatientIdState} />
+    if (route[0] === 'plans' && route[1]) page = <PatientPlan planId={route[1]} patient={patient} onSwitchPatient={switchPatientQuietly} />
     else page = <PatientHome patient={patient} />
   }
 
