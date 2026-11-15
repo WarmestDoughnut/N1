@@ -96,12 +96,60 @@ Hard rules:
 - Prefer concrete, short answers and point to the exact screen/step. If unsure, say so."""
 
 
-def build_system_prompt(devices_catalog, capabilities):
+DRAFT_PLAN = """\
+Filling out a test for the physician (draft plan):
+When the clinician asks you to SET UP / CREATE / DESIGN / "fill out" a specific test or data
+collection (not for general questions), end your reply with EXACTLY ONE fenced ```json block
+containing a `draft_plan` the app can use to pre-fill the create wizard. Shape:
+  {"draft_plan": {
+     "type": "observational" | "intervention" | "collection",
+     "title": "<short human title>",
+     "devices": ["<device id from the catalog/capabilities>", ...],
+     "signals": ["<signal id>", ...],
+     // include ONLY the block matching `type`:
+     "observational": {"signal": "<signal id>", "direction": "lower"|"higher",
+                       "min_lag_days": 1, "max_lag_days": 3},
+     "intervention":  {"arm_a": "<label>", "arm_b": "<label>", "outcome_signal": "<signal id>",
+                       "better": "higher"|"lower", "period_days": 6, "washout_days": 2, "n_periods": 12},
+     "collection":    {"instructions": "<one plain line for the patient>"}
+  }}
+Draft rules:
+- Use ONLY device ids and signal ids present in the catalog/capabilities above. Prefer signals the
+  patient already has data for (present_signals); never invent a signal or device.
+- Respect the design rules: observational max_lag_days 1..30; intervention n_periods >= 10 (default 12).
+- Do NOT put concrete window dates in the draft — the wizard fills the date window from the patient's
+  own data. Choose `type` to fit the question (A/B only makes sense for a FUTURE window; for past-only
+  data use observational or a data collection, never intervention).
+- Keep your normal plain-language explanation ABOVE the json block — if the app can't use the draft,
+  that explanation is the physician's step-by-step fallback. Emit at most one json block."""
+
+
+WORKFLOW = """\
+Workflow questions (summarize / triage the clinician's own queue):
+You may be given a WORKFLOW SNAPSHOT — a list the app has already loaded for the signed-in clinician
+(e.g. what came in today, which results are still awaiting a clinician comment, plan statuses). It is
+the clinician's own dashboard view handed to you; you did NOT fetch it and you cannot fetch more.
+- You MAY summarize, count, group, and triage ONLY what is in that snapshot (e.g. "3 results came in
+  today; 2 still need a comment: <titles>"). Point to the exact item (title / patient label) as given.
+- You may NOT infer, fetch, or invent anything beyond the snapshot: no values you weren't given, no
+  other patients, no clinical interpretation of the numbers, and never a diagnosis. If the snapshot is
+  empty or the ask needs data that isn't in it, say you don't see it and suggest where to look in the app.
+- Reference patients only by the label the snapshot uses; do not guess identities."""
+
+
+def build_system_prompt(devices_catalog, capabilities, context=None):
     """devices_catalog: the public /api/devices list. capabilities: {available_signals:[...],
-    present_signals:[...], devices:[...]} for the CURRENT clinician context (no PHI)."""
+    present_signals:[...], devices:[...]} for the CURRENT clinician context (no PHI).
+    context: optional non-PHI WORKFLOW SNAPSHOT the frontend supplies (today's activity, items needing
+    a comment, plan statuses) — the clinician's own already-loaded dashboard view. The assistant never
+    fetches it; it can only summarize what is handed in."""
     catalog = "\n".join(
         f"- {d['id']} ({d.get('name')}, {d.get('availability')}): signals {d.get('signals')}"
         for d in devices_catalog)
+    workflow_block = ""
+    if context:
+        workflow_block = (f"CURRENT WORKFLOW SNAPSHOT (the clinician's own queue, handed to you — "
+                          f"not fetched; summarize only this):\n{json.dumps(context)}\n\n")
     return (
         "You are the N1 Hub design copilot for physicians.\n\n"
         f"HOW THE SITE WORKS:\n{SITE_GUIDE}\n\n"
@@ -109,6 +157,9 @@ def build_system_prompt(devices_catalog, capabilities):
         f"DESIGN RULES:\n{DESIGN_RULES}\n\n"
         f"CURRENT CONTEXT (non-identifying capabilities the clinician selected):\n"
         f"{json.dumps(capabilities)}\n\n"
+        f"{workflow_block}"
+        f"{DRAFT_PLAN}\n\n"
+        f"{WORKFLOW}\n\n"
         f"{REFUSALS}\n"
     )
 
@@ -129,15 +180,16 @@ def _sanitize(messages):
     return clean
 
 
-def answer(messages, devices_catalog, capabilities):
-    """messages: [{role, content}] chat turns (clinician). Returns assistant text.
+def answer(messages, devices_catalog, capabilities, context=None):
+    """messages: [{role, content}] chat turns (clinician). context: optional non-PHI workflow snapshot
+    (today's activity / items needing a comment) the frontend supplies. Returns assistant text.
     Raises RuntimeError('assistant_disabled') if the kill switch is engaged."""
     if not is_enabled():
         raise RuntimeError("assistant_disabled")
     clean = _sanitize(messages)
     if not clean:
         raise RuntimeError("empty_message")
-    system = build_system_prompt(devices_catalog, capabilities)
+    system = build_system_prompt(devices_catalog, capabilities, context)
 
     if PROVIDER == "anthropic_api":
         from anthropic import Anthropic           # lazy: only needed when enabled
