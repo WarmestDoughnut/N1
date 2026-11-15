@@ -101,6 +101,10 @@ async function createPlan(patient, { intervention = false, grayOutDemo = false }
     }
   } else {
     // Pattern test: nothing is pre-filled. Pick the signal and the direction (slot 2 opens by itself).
+    // Slot 1 opens first: what the test explains = the patient's own symptom (v1.5 B1).
+    await page.waitForSelector('.td-editor .td-chip', { timeout: 10000 })
+    await page.evaluate(() => document.querySelector('.td-editor .td-chip').click()); await sleep(300); await click('Done')
+    await click('What might come first', '.td-slot')
     await click('Sleep', '.td-chip'); await click('lower', '.td-editor .seg button'); await click('Done')
     await click('How far back', '.td-slot'); await page.type('[aria-label="Shortest look-back"]', '1'); await page.type('[aria-label="Longest look-back"]', '3'); await click('Done')
     await click('Over what dates', '.td-slot'); await click('Use all', 'button'); await click('Done')
