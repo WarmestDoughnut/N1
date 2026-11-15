@@ -6,6 +6,7 @@ import type { Session } from '../../lib/session'
 import { Shell, type NavItem, type SearchItem } from '../../components/Shell'
 import { Overview } from './Overview'
 import { PatientsPage } from './PatientsPage'
+import { ConnectionsPage } from './ConnectionsPage'
 import { PlansPage } from './PlansPage'
 import { PlanDetail } from './PlanDetail'
 import { PlanWizard } from './PlanWizard'
@@ -55,9 +56,10 @@ export function ClinicianApp({ session, route, patients }: { session: Session; r
 
   const nav: NavItem[] = [
     { label: 'Overview', icon: 'grid', href: '#/', match: (r) => r.length === 0 },
-    { label: 'Patients', icon: 'people', href: '#/patients', badge: data.requests.length || undefined, match: (r) => r[0] === 'patients' },
+    { label: 'Patients', icon: 'user', href: '#/patients', match: (r) => r[0] === 'patients' },
     { label: 'Test plans', icon: 'clipboard', href: '#/plans', badge: pending || undefined, match: (r) => r[0] === 'plans' },
     { label: 'New test plan', icon: 'plus', href: '#/new', match: (r) => r[0] === 'new' },
+    { label: 'Connections', icon: 'people', href: '#/connections', badge: data.requests.length || undefined, match: (r) => r[0] === 'connections' },
   ]
   const secondary: NavItem[] = [
     { label: 'Validation', icon: 'flask', href: '#/validation', match: (r) => r[0] === 'validation' },
@@ -71,6 +73,7 @@ export function ClinicianApp({ session, route, patients }: { session: Session; r
   let page: JSX.Element
   switch (route[0]) {
     case 'patients': page = <PatientsPage data={data} selectedId={route[1]} />; break
+    case 'connections': page = <ConnectionsPage data={data} />; break
     case 'plans': page = route[1] ? <PlanDetail planId={route[1]} data={data} /> : <PlansPage data={data} />; break
     case 'new': page = <PlanWizard patients={data.patients} />; break
     case 'validation': page = <ResultsGallery />; break

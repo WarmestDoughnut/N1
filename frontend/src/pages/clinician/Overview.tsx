@@ -48,7 +48,7 @@ export function Overview({ session, data }: { session: Session; data: ClinicianD
 
       <section className="summary-grid four" aria-label="Summary">
         <SummaryButton icon="people" tone="tone-purple" k="Connected patients" v={patients.length}
-          s={data.requests.length ? <><b style={{ color: 'var(--yellow)' }}>{data.requests.length}</b> new request{data.requests.length > 1 ? 's' : ''}</> : <><b>{patients.filter((p) => (p.source === 'real' || p.source === 'pmdata')).length}</b> with real-world data</>} href="#/patients" />
+          s={data.requests.length ? <><b style={{ color: 'var(--yellow)' }}>{data.requests.length}</b> new request{data.requests.length > 1 ? 's' : ''}</> : <><b>{patients.filter((p) => (p.source === 'real' || p.source === 'pmdata')).length}</b> with real-world data</>} href={data.requests.length ? '#/connections' : '#/patients'} />
         <SummaryButton icon="activity" tone="tone-green" k="Active tests" v={active.length} s={<>{active.filter((p) => p.status === 'paused').length} paused by patient</>} href="#/plans" />
         <SummaryButton icon="bell" tone="tone-yellow" k="Awaiting approval" v={pending.length} s={<>patient must consent first</>} href="#/plans" />
         <SummaryButton icon="sparkles" tone="tone-coral" k="Results ready" v={finished.length} s={<><b>{likely}</b> likely real</>} href="#/plans" />
