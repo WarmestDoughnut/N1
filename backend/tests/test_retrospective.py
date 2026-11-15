@@ -6,7 +6,7 @@ Focus: the human's binding product rules —
   * past data is classified as retrospective; future as prospective; spanning as mixed.
 Run from backend/:  python -m pytest tests/test_retrospective.py -q
 """
-from app.main import _delivery, delivery_preview, _as_of
+from app.main import _delivery, _apply_delivery, delivery_preview, _as_of
 
 
 def _win(start, end):
@@ -50,3 +50,26 @@ def test_ab_allowed_on_future():
 def test_window_before_data_flagged():
     p = delivery_preview(start="2020-01-01", end="2026-09-28", patient_id="P01-MARIA")
     assert p["window_before_data"] is True
+
+
+def test_seeded_plan_forced_prospective():
+    # FE #15: seeded DEMO plans keep the original approve->active->simulate-complete flow
+    d = _delivery({"seeded": True, "window": {"start": "2026-06-01", "end": "2026-09-28"}})
+    assert d["delivery"] == "prospective"
+
+
+def test_retrospective_patient_progress_shows_delivered_not_countdown():
+    # FE #15 bug: a past-only plan must present as 'sent', with no day-X-of-N countdown
+    plan = {"window": {"start": "2026-06-01", "end": "2026-09-28"}}
+    _apply_delivery(plan)
+    assert plan["delivered"] is True
+    assert plan["window"]["live_days"] == 0
+    assert plan["window"]["live_start"] is None
+
+
+def test_mixed_counts_down_only_the_live_portion():
+    plan = {"window": {"start": "2026-06-01", "end": "2099-01-05"}}
+    _apply_delivery(plan)
+    assert plan["delivered"] is False
+    assert plan["window"]["live_days"] > 0
+    assert plan["window"]["past_end"] == _as_of()

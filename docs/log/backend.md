@@ -253,3 +253,17 @@ Format:
   (DEMO-P01-MARIA → likely_real lag 2), retro-A/B block, window_before_data guard.
 - Next: none — handed back to FE.
 - Blockers / needs from other side: none. (Did NOT touch the assistant endpoint/assistant.py — parent owns it.)
+
+### 16:10 — v1.6 follow-up: FE #15 + patient-progress bug (A/B future-only, seeded exempt, delivered flag)
+- Done: renamed error `intervention_requires_future` → `ab_requires_future_window` (FE #15 contract name);
+  seeded DEMO-* plans forced `delivery:"prospective"` so their approve→active→simulate-complete flow (incl.
+  A/B demo) is untouched; new `plan.delivered` + `window.live_days` so a retrospective (past-only) plan renders
+  as "sent" with NO "day X of N" countdown (patient-progress bug); `simulate-complete` idempotent on already-
+  complete plans; `source_collection_id` passed through; CONTRACT §10 + fixtures updated.
+- Files: backend/app/main.py (seeded exemption in `_delivery`, `_live_days`, `delivered`/`live_days` in
+  `_apply_delivery`, error rename), docs/CONTRACT.md, docs/messages/{to-backend,to-frontend}.md,
+  shared/fixtures/{plan_collection_retrospective,plan_mixed}.json, backend/tests/test_retrospective.py (+3 tests).
+- Contract impact: implemented v1.6 (additive; answers FE #13/#14/#15).
+- Verified: 21 tests pass; live smoke — retro collection delivered:true/live_days:0/"sent" wording;
+  seeded DEMO-P03-AISHA prospective + approve→active; new retro A/B → 422 ab_requires_future_window.
+- Blockers / needs from other side: none. Did NOT touch assistant.py / /api/assistant / health assistant fields.
