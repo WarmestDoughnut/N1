@@ -15,8 +15,10 @@ function readDraft(pid: string): Draft {
   try { return { added: [], removed: [], ...(JSON.parse(localStorage.getItem(KEY(pid)) ?? '{}') as Partial<Draft>) } } catch { return { added: [], removed: [] } }
 }
 /** Catalog devices list some signals the app has no label for yet ("screen_time_min"); show those as plain words. */
-const tidy = (id: string) => { const t = id.replace(/_(min|pct|flag|score|log)$/, '').replace(/_/g, ' '); return t.charAt(0).toUpperCase() + t.slice(1) }
+const tidy = (id: string) => { const t = id.replace(/_min$/, '').replace(/_/g, ' '); return t.charAt(0).toUpperCase() + t.slice(1) }
 const plain = (s: SignalId) => SIGNAL_INFO[s]?.label ?? tidy(s)
+/** One comma-separated line of labels with repeats removed (two catalog ids can share a label). */
+const signalList = (ids: SignalId[]) => [...new Set(ids.map(plain))].join(', ')
 /** Health data the Apple Watch step asks for, in the same words the consent screens use. */
 const WATCH_DATA = ['Steps', 'Sleep', 'Heart rate', 'Heart rate variability']
 
@@ -73,7 +75,7 @@ export function PatientDevices({ patient }: { patient?: Patient }) {
                       <span className="summary-icon tone-green"><Icon name={DEVICE_ICON[d.id] ?? 'watch'} /></span>
                       <div><strong>{d.name}</strong><small><Icon name="check" size={13} /> Connected</small></div>
                     </div>
-                    <p className="dev-signals">{d.signals.length ? d.signals.map(plain).join(', ') : 'No signals listed'}</p>
+                    <p className="dev-signals">{d.signals.length ? signalList(d.signals) : 'No signals listed'}</p>
                     <div className="dev-foot">
                       <span className="muted small">{d.id === 'apple_watch' && draft.watchSyncedAt ? 'Last synced just now (test sync)' : 'Last synced: not shown in this preview'}</span>
                       <button className="button ghost sm" onClick={() => setConfirmOff(d)}>Disconnect</button>
@@ -94,7 +96,7 @@ export function PatientDevices({ patient }: { patient?: Patient }) {
                   <span className="summary-icon tone-purple"><Icon name={DEVICE_ICON[d.id] ?? 'watch'} /></span>
                   <div><strong>{d.name}</strong></div>
                 </div>
-                <p className="dev-signals">{d.signals.map(plain).join(', ')}</p>
+                <p className="dev-signals">{signalList(d.signals)}</p>
                 <div className="dev-foot"><span /><button className="button secondary sm" onClick={() => setConnecting(d)}><Icon name="plus" size={14} /> Connect</button></div>
               </div>
             ))}
@@ -114,7 +116,7 @@ export function PatientDevices({ patient }: { patient?: Patient }) {
                       <span className="summary-icon tone-gray"><Icon name={DEVICE_ICON[d.id] ?? 'watch'} /></span>
                       <div><strong>{d.name}</strong><small>Coming soon</small></div>
                     </div>
-                    <p className="dev-signals">{d.signals.map(plain).join(', ')}</p>
+                    <p className="dev-signals">{signalList(d.signals)}</p>
                   </div>
                 ))}
               </div>
