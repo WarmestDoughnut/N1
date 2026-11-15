@@ -172,3 +172,7 @@ Format:
 - Done: **265e236** wizard step 4 rebuilt from FrontEndInspo/TestDesignStep. It has four slots with inline editors, a "Reads as" sentence, a days-before strip, an A/B timeline/calendar, presets, an evidence-strength meter (1/2^k), and a live "What this test will do" panel. **0fef91c** review fix: custom pattern dates and the test type reset when the patient changes (stale dates could produce empty windows).
 - Verified: `tsc` clean; e2e passes in sample and live; plan body unchanged (minimal signals/devices; window = schedule span for A/B or the chosen dates for pattern).
 - Pending from backend: to-backend #6 (look-back range), public API URL for Vercel.
+
+### 12:27 — Requested screen-time signal from backend (to-backend #7)
+- Done: Our human asked for screen time. I posted a CHANGE-REQUEST with a plan: `screen_time_min` (+ optional `late_screen_min`) as a phone signal (iPhone/Android), daily aggregates only. Synthetic baseline for all 7 patients (null control) plus one planted relationship: Leo, or a new phone-only patient P08 "Sam" (preferred, an equity beat). Not for REAL-P07, which shows the "no data yet" gate. Ground-truth tests must keep every existing verdict. Fallback: catalog-only "supported soon".
+- Next: on ACK, add labels/types/mock data on the frontend and extend e2e.

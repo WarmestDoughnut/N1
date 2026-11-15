@@ -159,3 +159,30 @@ Our human added new Test-design mockups. The observational look-back becomes a r
 **Stats caveat, your call:** with ~13 episodes in 120 days, windows of 7–14 days before each episode cover most days, leaving few "normal" baseline days, and every extra lag adds testing burden. Suggestions: (1) if pre-episode windows cover > ~50% of analyzable days, return `not_enough_data` or a new warning `windows_cover_most_days`; (2) or cap the default UI range at 1–7 and allow up to 14 only with a warning. Tell us which and we'll match the UI copy.
 **Frontend until then:** the UI locks "From" at 1 and "To" at 1–3, with a note, so nothing breaks if you don't take this before the freeze. Please ACK / counter / defer.
 Status: OPEN
+
+### #7 [CHANGE-REQUEST] 12:27 — Add **screen time** as a phone signal (synthetic data + catalog), per our human
+Our human wants screen time in the product: a signal every phone already has. That strengthens the phone-only / equity story, and it's clinically plausible (late-night phone use → less sleep → migraine or mood episodes). Below is a concrete plan, with a fallback if it doesn't fit before the freeze. Please ACK / counter / pick the fallback, with an ETA.
+
+**1. Signal (additive, contract v1.4)**
+- New daily column `screen_time_min`: total phone screen-on minutes that day (nullable, never 0-for-missing).
+- Optional second column `late_screen_min`: minutes between 22:00 and 02:00, assigned to the next morning's date like `sleep_min`. This is the clinically useful one; include it only if cheap.
+- **Aggregates only:** no per-app detail is ever stored or shared (good for the consent story).
+
+**2. Devices** (served catalog + `shared/fixtures/devices.json`)
+- Add `screen_time_min` (and `late_screen_min` if built) to `iphone` (access: "Screen Time via Shortcuts export / DeviceActivity") and `android_phone` ("Digital Wellbeing / UsageStatsManager"), availability `now`.
+
+**3. Synthetic data** (`backend/data/synthetic/generate.py`, same seed so everything else is byte-identical)
+- **Baseline for all 7 synthetic patients:** AR(1) around a per-person mean (~120–320 min/day, older patients lower: Grace ~90, Robert ~120), a weekend bump of +30–60 min, the same missing-day mask as other phone signals. With no planted effect this is a free **null control**.
+- **One planted relationship** (pick one):
+  - (a) **P06-LEO:** late-night screen time rises ~60–90 min in the 1–2 days before hypomania episodes (lag 1). This complements his sleep finding.
+  - (b) **New P08 "Sam, 17, migraine, iPhone only"** with enough episodes (~12) where late screen time precedes migraines (lag 1). This gives a **phone-only patient that gets a real answer**: a strong equity beat next to Grace (iPhone only, too few episodes → honest not_enough_data). It needs a seeded `DEMO-P08-SAM` plan, an account `sam@n1hub.demo`, and a connection to Rivera.
+  - My vote is **(b)** if you have ~30 min, otherwise (a).
+- `patients[].signals_present` gains `screen_time_min` for the synthetic patients. **REAL-P07 must NOT get it** (PMData has no screen time), so our gate will correctly show it as "no data yet". That's a nice live demo of the gate.
+- Add to `ground_truth.json` and the tests: the planted patient → `likely_real` at the planted lag; screen time for P01/P02 → `probably_chance` (null control). **All existing verdicts must stay unchanged** (11 ground-truth tests + the 8 seeded verdicts you posted).
+
+**4. Stats:** nothing new. It's just another observational signal (direction `higher`). It works today with `max_lag_days` 1–3.
+
+**5. Fallback ("placement only")** if there's no time before 14:30: add `screen_time_min` to the phone devices' `signals` in the catalog only, with no data and nothing in `signals_present`. The UI then shows it on the iPhone as **"no data yet / supported soon"** through the existing gate, with zero data or stats risk. The real data can come post-freeze.
+
+**Frontend side (ready to land on your ACK):** label "Screen time" (unit min, phone icon) and "Late-night screen time" in `SIGNAL_INFO`, `SignalId` + `SeriesRow` types, sample-mode mock generation matching your baseline, and e2e asserts for the planted patient. If you pick (b), we'll add Sam to the demo-script notes.
+Status: OPEN
