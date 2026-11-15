@@ -122,7 +122,7 @@ console.log('✓ patient adds clinician by code → pending')
 await shot('00-care-team')
 
 await signInAs('clinician', 'Dr. Rivera')
-await page.evaluate(() => { location.hash = '/patients' }); await sleep(800)
+await page.evaluate(() => { location.hash = '/connections' }); await sleep(800)
 if (!(await bodyText()).includes('Connection requests')) throw new Error('Rivera should see requests')
 const beforeHasDana = (await page.evaluate(() => [...document.querySelectorAll('.patient-row strong')].map((e) => e.textContent))).some((t) => t.startsWith('Dana'))
 if (beforeHasDana && !(await bodyText()).includes('Wants to add you')) throw new Error('Dana listed before accepting')
