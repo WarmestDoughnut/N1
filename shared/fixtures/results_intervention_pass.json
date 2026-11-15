@@ -1,0 +1,993 @@
+{
+  "plan_id": "DEMO-P03-AISHA",
+  "type": "intervention",
+  "complete": true,
+  "verdict": "likely_real",
+  "headline": "Melatonin 3 mg improved sleep by 13% vs No melatonin.",
+  "patient_headline": "Melatonin 3 mg seemed to help your sleep compared with No melatonin. Worth discussing with your clinician.",
+  "effect_pct": 12.6,
+  "p_value": 0.0156,
+  "n_permutations": 64,
+  "n_episodes": 0,
+  "n_days": 120,
+  "warnings": [],
+  "observational": null,
+  "intervention": {
+    "mean_a": 363.7,
+    "mean_b": 409.5,
+    "effect_pct": 12.6,
+    "n_periods_a": 6,
+    "n_periods_b": 6,
+    "period_means": [
+      {
+        "period": 1,
+        "arm": "A",
+        "mean": 364.7
+      },
+      {
+        "period": 2,
+        "arm": "B",
+        "mean": 367.5
+      },
+      {
+        "period": 3,
+        "arm": "B",
+        "mean": 397.8
+      },
+      {
+        "period": 4,
+        "arm": "A",
+        "mean": 362.3
+      },
+      {
+        "period": 5,
+        "arm": "A",
+        "mean": 394.6
+      },
+      {
+        "period": 6,
+        "arm": "B",
+        "mean": 437.5
+      },
+      {
+        "period": 7,
+        "arm": "B",
+        "mean": 380.0
+      },
+      {
+        "period": 8,
+        "arm": "A",
+        "mean": 360.8
+      },
+      {
+        "period": 9,
+        "arm": "A",
+        "mean": 347.3
+      },
+      {
+        "period": 10,
+        "arm": "B",
+        "mean": 458.7
+      },
+      {
+        "period": 11,
+        "arm": "A",
+        "mean": 352.7
+      },
+      {
+        "period": 12,
+        "arm": "B",
+        "mean": 415.4
+      }
+    ]
+  },
+  "null_distribution": [
+    7.57,
+    7.31,
+    10.82,
+    10.56,
+    3.64,
+    3.38,
+    6.89,
+    6.63,
+    9.32,
+    9.06,
+    12.57,
+    12.32,
+    5.39,
+    5.13,
+    8.64,
+    8.38,
+    -2.63,
+    -2.89,
+    0.62,
+    0.36,
+    -6.57,
+    -6.83,
+    -3.32,
+    -3.58,
+    -0.88,
+    -1.14,
+    2.37,
+    2.11,
+    -4.81,
+    -5.07,
+    -1.56,
+    -1.82,
+    1.82,
+    1.56,
+    5.07,
+    4.81,
+    -2.11,
+    -2.37,
+    1.14,
+    0.88,
+    3.58,
+    3.32,
+    6.83,
+    6.57,
+    -0.36,
+    -0.62,
+    2.89,
+    2.63,
+    -8.38,
+    -8.64,
+    -5.13,
+    -5.39,
+    -12.32,
+    -12.57,
+    -9.06,
+    -9.32,
+    -6.63,
+    -6.89,
+    -3.38,
+    -3.64,
+    -10.56,
+    -10.82,
+    -7.31,
+    -7.57
+  ],
+  "series": [
+    {
+      "date": "2026-06-01",
+      "value": null,
+      "episode": 0,
+      "arm": null,
+      "in_window": false
+    },
+    {
+      "date": "2026-06-02",
+      "value": 347.0,
+      "episode": 0,
+      "arm": null,
+      "in_window": false
+    },
+    {
+      "date": "2026-06-03",
+      "value": 383.0,
+      "episode": 0,
+      "arm": null,
+      "in_window": false
+    },
+    {
+      "date": "2026-06-04",
+      "value": 357.0,
+      "episode": 0,
+      "arm": null,
+      "in_window": false
+    },
+    {
+      "date": "2026-06-05",
+      "value": 373.0,
+      "episode": 0,
+      "arm": null,
+      "in_window": false
+    },
+    {
+      "date": "2026-06-06",
+      "value": 363.0,
+      "episode": 0,
+      "arm": null,
+      "in_window": false
+    },
+    {
+      "date": "2026-06-07",
+      "value": 394.0,
+      "episode": 0,
+      "arm": null,
+      "in_window": false
+    },
+    {
+      "date": "2026-06-08",
+      "value": 348.0,
+      "episode": 0,
+      "arm": "A",
+      "in_window": false
+    },
+    {
+      "date": "2026-06-09",
+      "value": 387.0,
+      "episode": 0,
+      "arm": "A",
+      "in_window": false
+    },
+    {
+      "date": "2026-06-10",
+      "value": 368.0,
+      "episode": 0,
+      "arm": "A",
+      "in_window": false
+    },
+    {
+      "date": "2026-06-11",
+      "value": 363.0,
+      "episode": 0,
+      "arm": "A",
+      "in_window": false
+    },
+    {
+      "date": "2026-06-12",
+      "value": 349.0,
+      "episode": 0,
+      "arm": "A",
+      "in_window": false
+    },
+    {
+      "date": "2026-06-13",
+      "value": 373.0,
+      "episode": 0,
+      "arm": "A",
+      "in_window": false
+    },
+    {
+      "date": "2026-06-14",
+      "value": 347.0,
+      "episode": 0,
+      "arm": "washout",
+      "in_window": false
+    },
+    {
+      "date": "2026-06-15",
+      "value": 313.0,
+      "episode": 0,
+      "arm": "washout",
+      "in_window": false
+    },
+    {
+      "date": "2026-06-16",
+      "value": 343.0,
+      "episode": 0,
+      "arm": "B",
+      "in_window": false
+    },
+    {
+      "date": "2026-06-17",
+      "value": 363.0,
+      "episode": 0,
+      "arm": "B",
+      "in_window": false
+    },
+    {
+      "date": "2026-06-18",
+      "value": 375.0,
+      "episode": 0,
+      "arm": "B",
+      "in_window": false
+    },
+    {
+      "date": "2026-06-19",
+      "value": 334.0,
+      "episode": 0,
+      "arm": "B",
+      "in_window": false
+    },
+    {
+      "date": "2026-06-20",
+      "value": 366.0,
+      "episode": 0,
+      "arm": "B",
+      "in_window": false
+    },
+    {
+      "date": "2026-06-21",
+      "value": 424.0,
+      "episode": 0,
+      "arm": "B",
+      "in_window": false
+    },
+    {
+      "date": "2026-06-22",
+      "value": null,
+      "episode": 0,
+      "arm": "washout",
+      "in_window": false
+    },
+    {
+      "date": "2026-06-23",
+      "value": 293.0,
+      "episode": 0,
+      "arm": "washout",
+      "in_window": false
+    },
+    {
+      "date": "2026-06-24",
+      "value": 301.0,
+      "episode": 0,
+      "arm": "B",
+      "in_window": false
+    },
+    {
+      "date": "2026-06-25",
+      "value": null,
+      "episode": 0,
+      "arm": "B",
+      "in_window": false
+    },
+    {
+      "date": "2026-06-26",
+      "value": 427.0,
+      "episode": 0,
+      "arm": "B",
+      "in_window": false
+    },
+    {
+      "date": "2026-06-27",
+      "value": 440.0,
+      "episode": 0,
+      "arm": "B",
+      "in_window": false
+    },
+    {
+      "date": "2026-06-28",
+      "value": 421.0,
+      "episode": 0,
+      "arm": "B",
+      "in_window": false
+    },
+    {
+      "date": "2026-06-29",
+      "value": 400.0,
+      "episode": 0,
+      "arm": "B",
+      "in_window": false
+    },
+    {
+      "date": "2026-06-30",
+      "value": 412.0,
+      "episode": 0,
+      "arm": "washout",
+      "in_window": false
+    },
+    {
+      "date": "2026-07-01",
+      "value": 362.0,
+      "episode": 0,
+      "arm": "washout",
+      "in_window": false
+    },
+    {
+      "date": "2026-07-02",
+      "value": 392.0,
+      "episode": 0,
+      "arm": "A",
+      "in_window": false
+    },
+    {
+      "date": "2026-07-03",
+      "value": 346.0,
+      "episode": 0,
+      "arm": "A",
+      "in_window": false
+    },
+    {
+      "date": "2026-07-04",
+      "value": 356.0,
+      "episode": 0,
+      "arm": "A",
+      "in_window": false
+    },
+    {
+      "date": "2026-07-05",
+      "value": 413.0,
+      "episode": 0,
+      "arm": "A",
+      "in_window": false
+    },
+    {
+      "date": "2026-07-06",
+      "value": 342.0,
+      "episode": 0,
+      "arm": "A",
+      "in_window": false
+    },
+    {
+      "date": "2026-07-07",
+      "value": 325.0,
+      "episode": 0,
+      "arm": "A",
+      "in_window": false
+    },
+    {
+      "date": "2026-07-08",
+      "value": 360.0,
+      "episode": 0,
+      "arm": "washout",
+      "in_window": false
+    },
+    {
+      "date": "2026-07-09",
+      "value": 373.0,
+      "episode": 0,
+      "arm": "washout",
+      "in_window": false
+    },
+    {
+      "date": "2026-07-10",
+      "value": 345.0,
+      "episode": 0,
+      "arm": "A",
+      "in_window": false
+    },
+    {
+      "date": "2026-07-11",
+      "value": 333.0,
+      "episode": 0,
+      "arm": "A",
+      "in_window": false
+    },
+    {
+      "date": "2026-07-12",
+      "value": 437.0,
+      "episode": 0,
+      "arm": "A",
+      "in_window": false
+    },
+    {
+      "date": "2026-07-13",
+      "value": 470.0,
+      "episode": 0,
+      "arm": "A",
+      "in_window": false
+    },
+    {
+      "date": "2026-07-14",
+      "value": 388.0,
+      "episode": 0,
+      "arm": "A",
+      "in_window": false
+    },
+    {
+      "date": "2026-07-15",
+      "value": null,
+      "episode": 0,
+      "arm": "A",
+      "in_window": false
+    },
+    {
+      "date": "2026-07-16",
+      "value": 375.0,
+      "episode": 0,
+      "arm": "washout",
+      "in_window": false
+    },
+    {
+      "date": "2026-07-17",
+      "value": 325.0,
+      "episode": 0,
+      "arm": "washout",
+      "in_window": false
+    },
+    {
+      "date": "2026-07-18",
+      "value": 414.0,
+      "episode": 0,
+      "arm": "B",
+      "in_window": false
+    },
+    {
+      "date": "2026-07-19",
+      "value": 432.0,
+      "episode": 0,
+      "arm": "B",
+      "in_window": false
+    },
+    {
+      "date": "2026-07-20",
+      "value": 433.0,
+      "episode": 0,
+      "arm": "B",
+      "in_window": false
+    },
+    {
+      "date": "2026-07-21",
+      "value": 435.0,
+      "episode": 0,
+      "arm": "B",
+      "in_window": false
+    },
+    {
+      "date": "2026-07-22",
+      "value": 467.0,
+      "episode": 0,
+      "arm": "B",
+      "in_window": false
+    },
+    {
+      "date": "2026-07-23",
+      "value": 444.0,
+      "episode": 0,
+      "arm": "B",
+      "in_window": false
+    },
+    {
+      "date": "2026-07-24",
+      "value": 393.0,
+      "episode": 0,
+      "arm": "washout",
+      "in_window": false
+    },
+    {
+      "date": "2026-07-25",
+      "value": 367.0,
+      "episode": 0,
+      "arm": "washout",
+      "in_window": false
+    },
+    {
+      "date": "2026-07-26",
+      "value": 374.0,
+      "episode": 0,
+      "arm": "B",
+      "in_window": false
+    },
+    {
+      "date": "2026-07-27",
+      "value": 397.0,
+      "episode": 0,
+      "arm": "B",
+      "in_window": false
+    },
+    {
+      "date": "2026-07-28",
+      "value": 396.0,
+      "episode": 0,
+      "arm": "B",
+      "in_window": false
+    },
+    {
+      "date": "2026-07-29",
+      "value": null,
+      "episode": 0,
+      "arm": "B",
+      "in_window": false
+    },
+    {
+      "date": "2026-07-30",
+      "value": 374.0,
+      "episode": 0,
+      "arm": "B",
+      "in_window": false
+    },
+    {
+      "date": "2026-07-31",
+      "value": 359.0,
+      "episode": 0,
+      "arm": "B",
+      "in_window": false
+    },
+    {
+      "date": "2026-08-01",
+      "value": 402.0,
+      "episode": 0,
+      "arm": "washout",
+      "in_window": false
+    },
+    {
+      "date": "2026-08-02",
+      "value": 360.0,
+      "episode": 0,
+      "arm": "washout",
+      "in_window": false
+    },
+    {
+      "date": "2026-08-03",
+      "value": 351.0,
+      "episode": 0,
+      "arm": "A",
+      "in_window": false
+    },
+    {
+      "date": "2026-08-04",
+      "value": 389.0,
+      "episode": 0,
+      "arm": "A",
+      "in_window": false
+    },
+    {
+      "date": "2026-08-05",
+      "value": 371.0,
+      "episode": 0,
+      "arm": "A",
+      "in_window": false
+    },
+    {
+      "date": "2026-08-06",
+      "value": 343.0,
+      "episode": 0,
+      "arm": "A",
+      "in_window": false
+    },
+    {
+      "date": "2026-08-07",
+      "value": 337.0,
+      "episode": 0,
+      "arm": "A",
+      "in_window": false
+    },
+    {
+      "date": "2026-08-08",
+      "value": 374.0,
+      "episode": 0,
+      "arm": "A",
+      "in_window": false
+    },
+    {
+      "date": "2026-08-09",
+      "value": 297.0,
+      "episode": 0,
+      "arm": "washout",
+      "in_window": false
+    },
+    {
+      "date": "2026-08-10",
+      "value": 300.0,
+      "episode": 0,
+      "arm": "washout",
+      "in_window": false
+    },
+    {
+      "date": "2026-08-11",
+      "value": 319.0,
+      "episode": 0,
+      "arm": "A",
+      "in_window": false
+    },
+    {
+      "date": "2026-08-12",
+      "value": 364.0,
+      "episode": 0,
+      "arm": "A",
+      "in_window": false
+    },
+    {
+      "date": "2026-08-13",
+      "value": 340.0,
+      "episode": 0,
+      "arm": "A",
+      "in_window": false
+    },
+    {
+      "date": "2026-08-14",
+      "value": 337.0,
+      "episode": 0,
+      "arm": "A",
+      "in_window": false
+    },
+    {
+      "date": "2026-08-15",
+      "value": 334.0,
+      "episode": 0,
+      "arm": "A",
+      "in_window": false
+    },
+    {
+      "date": "2026-08-16",
+      "value": 390.0,
+      "episode": 0,
+      "arm": "A",
+      "in_window": false
+    },
+    {
+      "date": "2026-08-17",
+      "value": 346.0,
+      "episode": 0,
+      "arm": "washout",
+      "in_window": false
+    },
+    {
+      "date": "2026-08-18",
+      "value": null,
+      "episode": 0,
+      "arm": "washout",
+      "in_window": false
+    },
+    {
+      "date": "2026-08-19",
+      "value": 433.0,
+      "episode": 0,
+      "arm": "B",
+      "in_window": false
+    },
+    {
+      "date": "2026-08-20",
+      "value": 471.0,
+      "episode": 0,
+      "arm": "B",
+      "in_window": false
+    },
+    {
+      "date": "2026-08-21",
+      "value": 441.0,
+      "episode": 0,
+      "arm": "B",
+      "in_window": false
+    },
+    {
+      "date": "2026-08-22",
+      "value": 481.0,
+      "episode": 0,
+      "arm": "B",
+      "in_window": false
+    },
+    {
+      "date": "2026-08-23",
+      "value": 474.0,
+      "episode": 0,
+      "arm": "B",
+      "in_window": false
+    },
+    {
+      "date": "2026-08-24",
+      "value": 452.0,
+      "episode": 0,
+      "arm": "B",
+      "in_window": false
+    },
+    {
+      "date": "2026-08-25",
+      "value": 345.0,
+      "episode": 0,
+      "arm": "washout",
+      "in_window": false
+    },
+    {
+      "date": "2026-08-26",
+      "value": 351.0,
+      "episode": 0,
+      "arm": "washout",
+      "in_window": false
+    },
+    {
+      "date": "2026-08-27",
+      "value": 373.0,
+      "episode": 0,
+      "arm": "A",
+      "in_window": false
+    },
+    {
+      "date": "2026-08-28",
+      "value": 349.0,
+      "episode": 0,
+      "arm": "A",
+      "in_window": false
+    },
+    {
+      "date": "2026-08-29",
+      "value": 357.0,
+      "episode": 0,
+      "arm": "A",
+      "in_window": false
+    },
+    {
+      "date": "2026-08-30",
+      "value": 343.0,
+      "episode": 0,
+      "arm": "A",
+      "in_window": false
+    },
+    {
+      "date": "2026-08-31",
+      "value": 380.0,
+      "episode": 0,
+      "arm": "A",
+      "in_window": false
+    },
+    {
+      "date": "2026-09-01",
+      "value": 314.0,
+      "episode": 0,
+      "arm": "A",
+      "in_window": false
+    },
+    {
+      "date": "2026-09-02",
+      "value": 379.0,
+      "episode": 0,
+      "arm": "washout",
+      "in_window": false
+    },
+    {
+      "date": "2026-09-03",
+      "value": 363.0,
+      "episode": 0,
+      "arm": "washout",
+      "in_window": false
+    },
+    {
+      "date": "2026-09-04",
+      "value": null,
+      "episode": 0,
+      "arm": "B",
+      "in_window": false
+    },
+    {
+      "date": "2026-09-05",
+      "value": 369.0,
+      "episode": 0,
+      "arm": "B",
+      "in_window": false
+    },
+    {
+      "date": "2026-09-06",
+      "value": 429.0,
+      "episode": 0,
+      "arm": "B",
+      "in_window": false
+    },
+    {
+      "date": "2026-09-07",
+      "value": 429.0,
+      "episode": 0,
+      "arm": "B",
+      "in_window": false
+    },
+    {
+      "date": "2026-09-08",
+      "value": 432.0,
+      "episode": 0,
+      "arm": "B",
+      "in_window": false
+    },
+    {
+      "date": "2026-09-09",
+      "value": 418.0,
+      "episode": 0,
+      "arm": "B",
+      "in_window": false
+    },
+    {
+      "date": "2026-09-10",
+      "value": 330.0,
+      "episode": 0,
+      "arm": "washout",
+      "in_window": false
+    },
+    {
+      "date": "2026-09-11",
+      "value": 320.0,
+      "episode": 0,
+      "arm": "washout",
+      "in_window": false
+    },
+    {
+      "date": "2026-09-12",
+      "value": 372.0,
+      "episode": 0,
+      "arm": null,
+      "in_window": false
+    },
+    {
+      "date": "2026-09-13",
+      "value": 384.0,
+      "episode": 0,
+      "arm": null,
+      "in_window": false
+    },
+    {
+      "date": "2026-09-14",
+      "value": 393.0,
+      "episode": 0,
+      "arm": null,
+      "in_window": false
+    },
+    {
+      "date": "2026-09-15",
+      "value": 324.0,
+      "episode": 0,
+      "arm": null,
+      "in_window": false
+    },
+    {
+      "date": "2026-09-16",
+      "value": 313.0,
+      "episode": 0,
+      "arm": null,
+      "in_window": false
+    },
+    {
+      "date": "2026-09-17",
+      "value": 324.0,
+      "episode": 0,
+      "arm": null,
+      "in_window": false
+    },
+    {
+      "date": "2026-09-18",
+      "value": 332.0,
+      "episode": 0,
+      "arm": null,
+      "in_window": false
+    },
+    {
+      "date": "2026-09-19",
+      "value": 362.0,
+      "episode": 0,
+      "arm": null,
+      "in_window": false
+    },
+    {
+      "date": "2026-09-20",
+      "value": 376.0,
+      "episode": 0,
+      "arm": null,
+      "in_window": false
+    },
+    {
+      "date": "2026-09-21",
+      "value": 332.0,
+      "episode": 0,
+      "arm": null,
+      "in_window": false
+    },
+    {
+      "date": "2026-09-22",
+      "value": 373.0,
+      "episode": 0,
+      "arm": null,
+      "in_window": false
+    },
+    {
+      "date": "2026-09-23",
+      "value": 387.0,
+      "episode": 0,
+      "arm": null,
+      "in_window": false
+    },
+    {
+      "date": "2026-09-24",
+      "value": 374.0,
+      "episode": 0,
+      "arm": null,
+      "in_window": false
+    },
+    {
+      "date": "2026-09-25",
+      "value": 333.0,
+      "episode": 0,
+      "arm": null,
+      "in_window": false
+    },
+    {
+      "date": "2026-09-26",
+      "value": 338.0,
+      "episode": 0,
+      "arm": null,
+      "in_window": false
+    },
+    {
+      "date": "2026-09-27",
+      "value": 405.0,
+      "episode": 0,
+      "arm": null,
+      "in_window": false
+    },
+    {
+      "date": "2026-09-28",
+      "value": 348.0,
+      "episode": 0,
+      "arm": null,
+      "in_window": false
+    }
+  ],
+  "model": null
+}

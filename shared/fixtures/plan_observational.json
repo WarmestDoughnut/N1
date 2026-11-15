@@ -1,0 +1,34 @@
+{
+  "id": "DEMO-P01-MARIA",
+  "patient_id": "P01-MARIA",
+  "clinician_name": "Dr. Rivera",
+  "title": "Does short sleep precede Maria's migraines?",
+  "type": "observational",
+  "devices": [
+    "iphone",
+    "fitbit"
+  ],
+  "signals": [
+    "sleep_min",
+    "episode"
+  ],
+  "window": {
+    "start": "2026-06-01",
+    "end": "2026-09-28"
+  },
+  "status": "pending_approval",
+  "observational": {
+    "signal": "sleep_min",
+    "direction": "lower",
+    "max_lag_days": 3
+  },
+  "intervention": null,
+  "patient_summary": "Dr. Rivera wants to check whether shorter sleep tends to come before your migraines. This test uses sleep from your Fitbit and your migraine log. Nothing else is shared. You can pause or stop at any time.",
+  "created_at": "2026-11-15T10:00:00",
+  "history": [
+    {
+      "at": "2026-11-15T10:00:00",
+      "event": "created"
+    }
+  ]
+}

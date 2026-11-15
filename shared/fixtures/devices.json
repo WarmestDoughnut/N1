@@ -1,0 +1,257 @@
+[
+  {
+    "id": "iphone",
+    "name": "iPhone",
+    "category": "phone",
+    "availability": "now",
+    "access": "HealthKit (Health export / Shortcuts / iOS app)",
+    "signals": [
+      "steps",
+      "walking_speed",
+      "walking_steadiness",
+      "time_in_bed",
+      "episode",
+      "medication_log",
+      "mood_log"
+    ],
+    "notes": "Every patient has one. Walking metrics + symptom/medication/mood logs with no extra hardware."
+  },
+  {
+    "id": "android_phone",
+    "name": "Android phone",
+    "category": "phone",
+    "availability": "now",
+    "access": "Health Connect",
+    "signals": [
+      "steps",
+      "episode",
+      "medication_log"
+    ],
+    "notes": "Equity: lower-cost phones; Health Connect aggregates Samsung, Fitbit, Oura and others."
+  },
+  {
+    "id": "apple_watch",
+    "name": "Apple Watch (Series 9+/Ultra 2+)",
+    "category": "smartwatch",
+    "availability": "now",
+    "access": "HealthKit",
+    "signals": [
+      "sleep_min",
+      "sleep_score",
+      "resting_hr",
+      "hrv",
+      "steps",
+      "resp_rate",
+      "spo2",
+      "skin_temp_dev",
+      "walking_speed",
+      "afib_burden",
+      "hypertension_flag"
+    ],
+    "notes": "Hypertension notifications (pattern over ~30 days, not a BP reading) and Sleep Score via watchOS 26. ECG and sleep apnea notifications are event-based."
+  },
+  {
+    "id": "galaxy_watch",
+    "name": "Samsung Galaxy Watch8",
+    "category": "smartwatch",
+    "availability": "now",
+    "access": "Health Connect / Samsung Health",
+    "signals": [
+      "sleep_min",
+      "resting_hr",
+      "hrv",
+      "steps",
+      "spo2",
+      "skin_temp_dev",
+      "systolic_bp",
+      "diastolic_bp",
+      "vascular_load"
+    ],
+    "notes": "Cuff-calibrated BP, Vascular Load during sleep, Antioxidant Index (on-demand carotenoid scan)."
+  },
+  {
+    "id": "pixel_watch_fitbit",
+    "name": "Google Pixel Watch / Fitbit",
+    "category": "smartwatch",
+    "availability": "now",
+    "access": "Google Health API / Health Connect",
+    "signals": [
+      "sleep_min",
+      "sleep_score",
+      "resting_hr",
+      "hrv",
+      "steps",
+      "spo2",
+      "skin_temp_dev",
+      "resp_rate"
+    ],
+    "notes": "Cheaper Fitbit bands cover sleep/HR/steps: strong equity option. PMData is Fitbit data."
+  },
+  {
+    "id": "garmin",
+    "name": "Garmin",
+    "category": "smartwatch",
+    "availability": "now",
+    "access": "Garmin Health API (business approval)",
+    "signals": [
+      "sleep_min",
+      "sleep_score",
+      "resting_hr",
+      "hrv",
+      "steps",
+      "spo2",
+      "resp_rate",
+      "stress_score"
+    ],
+    "notes": "Long battery life; popular with active/older users."
+  },
+  {
+    "id": "oura_ring",
+    "name": "Oura Ring 4",
+    "category": "smart_ring",
+    "availability": "now",
+    "access": "Oura API / HealthKit",
+    "signals": [
+      "sleep_min",
+      "sleep_score",
+      "resting_hr",
+      "hrv",
+      "skin_temp_dev",
+      "resp_rate",
+      "spo2"
+    ],
+    "notes": "Best-in-class overnight data; comfortable for patients who won't wear a watch to bed."
+  },
+  {
+    "id": "galaxy_ring",
+    "name": "Samsung Galaxy Ring",
+    "category": "smart_ring",
+    "availability": "now",
+    "access": "Health Connect",
+    "signals": [
+      "sleep_min",
+      "resting_hr",
+      "hrv",
+      "skin_temp_dev",
+      "resp_rate"
+    ],
+    "notes": "No subscription."
+  },
+  {
+    "id": "whoop_mg",
+    "name": "WHOOP MG",
+    "category": "band",
+    "availability": "now",
+    "access": "WHOOP API",
+    "signals": [
+      "sleep_min",
+      "resting_hr",
+      "hrv",
+      "resp_rate",
+      "skin_temp_dev",
+      "spo2",
+      "systolic_bp",
+      "diastolic_bp",
+      "strain_score"
+    ],
+    "notes": "Daily BP estimates (cuff-calibrated, regulatory history: treat as 'emerging'). On-demand ECG."
+  },
+  {
+    "id": "cgm_otc",
+    "name": "OTC CGM (Dexcom Stelo / Abbott Lingo)",
+    "category": "cgm",
+    "availability": "now",
+    "access": "Dexcom API / HealthKit / Health Connect",
+    "signals": [
+      "glucose_tir",
+      "glucose_mean",
+      "glucose_cv"
+    ],
+    "notes": "Over-the-counter, no prescription. 15-day sensors."
+  },
+  {
+    "id": "cgm_rx",
+    "name": "Prescription CGM (Dexcom G7 / FreeStyle Libre 3)",
+    "category": "cgm",
+    "availability": "now",
+    "access": "Dexcom API / LibreView",
+    "signals": [
+      "glucose_tir",
+      "glucose_mean",
+      "glucose_cv"
+    ],
+    "notes": "Often covered by insurance for diabetes."
+  },
+  {
+    "id": "bp_cuff",
+    "name": "Connected BP cuff (Omron / Withings)",
+    "category": "home_device",
+    "availability": "now",
+    "access": "HealthKit / Health Connect / vendor API",
+    "signals": [
+      "systolic_bp",
+      "diastolic_bp",
+      "resting_hr"
+    ],
+    "notes": "Gold-standard home BP; inexpensive. Equity: no smartwatch required."
+  },
+  {
+    "id": "smart_scale",
+    "name": "Smart scale (Withings etc.)",
+    "category": "home_device",
+    "availability": "now",
+    "access": "HealthKit / Health Connect / vendor API",
+    "signals": [
+      "body_weight",
+      "body_fat_pct"
+    ],
+    "notes": "Weight change matters for heart failure and for medication side-effect monitoring."
+  },
+  {
+    "id": "pulse_oximeter",
+    "name": "Connected pulse oximeter",
+    "category": "home_device",
+    "availability": "now",
+    "access": "HealthKit / Health Connect",
+    "signals": [
+      "spo2",
+      "resting_hr"
+    ],
+    "notes": "Cheap; COPD and respiratory monitoring."
+  },
+  {
+    "id": "cuffless_bp_continuous",
+    "name": "Continuous cuffless BP wearable",
+    "category": "emerging",
+    "availability": "emerging",
+    "access": "TBD",
+    "signals": [
+      "systolic_bp",
+      "diastolic_bp"
+    ],
+    "notes": "Roadmap: beat-to-beat or hourly BP without calibration. Demo patient P04 uses this."
+  },
+  {
+    "id": "sweat_hydration",
+    "name": "Sweat / hydration sensor patch",
+    "category": "emerging",
+    "availability": "emerging",
+    "access": "TBD",
+    "signals": [
+      "hydration_index",
+      "sodium_loss"
+    ],
+    "notes": "Roadmap."
+  },
+  {
+    "id": "noninvasive_glucose",
+    "name": "Non-invasive glucose (watch-based)",
+    "category": "emerging",
+    "availability": "emerging",
+    "access": "TBD",
+    "signals": [
+      "glucose_trend"
+    ],
+    "notes": "Roadmap: frequently rumored, not yet cleared."
+  }
+]

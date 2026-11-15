@@ -1,0 +1,124 @@
+{
+  "id": "DEMO-P03-AISHA",
+  "patient_id": "P03-AISHA",
+  "clinician_name": "Dr. Rivera",
+  "title": "Does melatonin improve Aisha's sleep?",
+  "type": "intervention",
+  "devices": [
+    "iphone",
+    "apple_watch"
+  ],
+  "signals": [
+    "sleep_min"
+  ],
+  "window": {
+    "start": "2026-06-08",
+    "end": "2026-09-11"
+  },
+  "status": "pending_approval",
+  "observational": null,
+  "intervention": {
+    "arm_a": "No melatonin",
+    "arm_b": "Melatonin 3 mg",
+    "outcome_signal": "sleep_min",
+    "better": "higher",
+    "period_days": 6,
+    "washout_days": 2,
+    "n_periods": 12,
+    "seed": 2026,
+    "schedule": [
+      {
+        "period": 1,
+        "arm": "A",
+        "start": "2026-06-08",
+        "end": "2026-06-13",
+        "washout_end": "2026-06-15"
+      },
+      {
+        "period": 2,
+        "arm": "B",
+        "start": "2026-06-16",
+        "end": "2026-06-21",
+        "washout_end": "2026-06-23"
+      },
+      {
+        "period": 3,
+        "arm": "B",
+        "start": "2026-06-24",
+        "end": "2026-06-29",
+        "washout_end": "2026-07-01"
+      },
+      {
+        "period": 4,
+        "arm": "A",
+        "start": "2026-07-02",
+        "end": "2026-07-07",
+        "washout_end": "2026-07-09"
+      },
+      {
+        "period": 5,
+        "arm": "A",
+        "start": "2026-07-10",
+        "end": "2026-07-15",
+        "washout_end": "2026-07-17"
+      },
+      {
+        "period": 6,
+        "arm": "B",
+        "start": "2026-07-18",
+        "end": "2026-07-23",
+        "washout_end": "2026-07-25"
+      },
+      {
+        "period": 7,
+        "arm": "B",
+        "start": "2026-07-26",
+        "end": "2026-07-31",
+        "washout_end": "2026-08-02"
+      },
+      {
+        "period": 8,
+        "arm": "A",
+        "start": "2026-08-03",
+        "end": "2026-08-08",
+        "washout_end": "2026-08-10"
+      },
+      {
+        "period": 9,
+        "arm": "A",
+        "start": "2026-08-11",
+        "end": "2026-08-16",
+        "washout_end": "2026-08-18"
+      },
+      {
+        "period": 10,
+        "arm": "B",
+        "start": "2026-08-19",
+        "end": "2026-08-24",
+        "washout_end": "2026-08-26"
+      },
+      {
+        "period": 11,
+        "arm": "A",
+        "start": "2026-08-27",
+        "end": "2026-09-01",
+        "washout_end": "2026-09-03"
+      },
+      {
+        "period": 12,
+        "arm": "B",
+        "start": "2026-09-04",
+        "end": "2026-09-09",
+        "washout_end": "2026-09-11"
+      }
+    ]
+  },
+  "patient_summary": "Dr. Rivera suggests a 14-week test: on some weeks you take melatonin and on others you don't, in a random order. This test uses only sleep from your Apple Watch. You can pause or stop at any time.",
+  "created_at": "2026-11-15T10:00:00",
+  "history": [
+    {
+      "at": "2026-11-15T10:00:00",
+      "event": "created"
+    }
+  ]
+}
