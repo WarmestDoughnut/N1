@@ -10,6 +10,26 @@ Run: uvicorn app.main:app --reload --port 8000
 import os
 from datetime import date, timedelta
 
+
+def _load_dotenv():
+    """Load backend/.env (KEY=VALUE lines) without overriding real env vars. No dependency, and
+    no shell expansion — so passwords with $ / * survive intact. The container host sets real env
+    vars instead, so this is a local-dev convenience only."""
+    path = os.path.join(os.path.dirname(__file__), "..", ".env")
+    if not os.path.exists(path):
+        return
+    for line in open(path):
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, val = line.split("=", 1)
+        key = key.strip()
+        if key and key not in os.environ and "PASTE_" not in val:
+            os.environ[key] = val.strip()
+
+
+_load_dotenv()
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse

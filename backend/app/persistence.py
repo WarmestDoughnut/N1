@@ -23,10 +23,17 @@ EMPTY = {"plans": {}, "results": {}, "episodes": [], "accounts": {},
 
 
 def get_backend(json_path):
-    """PostgresBackend when DATABASE_URL is set, else JsonBackend (local/demo)."""
+    """PostgresBackend when DATABASE_URL is set and reachable, else JsonBackend (local/demo).
+
+    If a DATABASE_URL is configured but Postgres can't be reached at startup, we fall back to the
+    JSON store rather than crash — so the demo keeps working even if Supabase is briefly down.
+    """
     url = os.environ.get("DATABASE_URL") or os.environ.get("SUPABASE_DB_URL")
-    if url:
-        return PostgresBackend(url)
+    if url and "PASTE_" not in url:
+        try:
+            return PostgresBackend(url)
+        except Exception as e:  # connection/schema failure -> safe fallback
+            print(f"[persistence] Postgres unavailable ({type(e).__name__}); using JSON store", flush=True)
     return JsonBackend(json_path)
 
 
