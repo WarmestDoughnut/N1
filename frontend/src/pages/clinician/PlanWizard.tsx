@@ -145,8 +145,12 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
   // ----- step handlers -----
   const pickPatient = (p: Patient) => {
     setPatientId(p.id)
+    // Custom pattern dates belong to the previous patient's data range; don't carry them over.
+    setObsWin(null)
     // No logged episodes → nothing to look "before", so only an A/B test makes sense.
+    // Otherwise default back to a pattern test, unless the design was copied from an existing plan.
     if (p.n_episodes === 0) setType('intervention')
+    else if (!cloneOf) setType('observational')
     if (!cloneOf) {
       setDevices(p.devices)
       const avail = availableFor(p, p.devices)
