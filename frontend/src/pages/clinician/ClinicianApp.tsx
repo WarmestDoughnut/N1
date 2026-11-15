@@ -10,6 +10,7 @@ import { ConnectionsPage } from './ConnectionsPage'
 import { PlansPage } from './PlansPage'
 import { PlanDetail } from './PlanDetail'
 import { PlanWizard } from './PlanWizard'
+import { ResultsPage } from './ResultsPage'
 import { ResultsGallery } from '../ResultsGallery'
 
 export interface ClinicianData {
@@ -58,11 +59,9 @@ export function ClinicianApp({ session, route, patients }: { session: Session; r
     { label: 'Overview', icon: 'grid', href: '#/', match: (r) => r.length === 0 },
     { label: 'Patients', icon: 'user', href: '#/patients', match: (r) => r[0] === 'patients' },
     { label: 'Test plans', icon: 'clipboard', href: '#/plans', badge: pending || undefined, match: (r) => r[0] === 'plans' },
+    { label: 'Results', icon: 'flask', href: '#/results', badge: Object.keys(data.results).length || undefined, match: (r) => r[0] === 'results' },
     { label: 'New test plan', icon: 'plus', href: '#/new', match: (r) => r[0] === 'new' },
     { label: 'Connections', icon: 'people', href: '#/connections', badge: data.requests.length || undefined, match: (r) => r[0] === 'connections' },
-  ]
-  const secondary: NavItem[] = [
-    { label: 'Validation', icon: 'flask', href: '#/validation', match: (r) => r[0] === 'validation' },
   ]
 
   const searchItems: SearchItem[] = useMemo(() => [
@@ -76,6 +75,8 @@ export function ClinicianApp({ session, route, patients }: { session: Session; r
     case 'connections': page = <ConnectionsPage data={data} />; break
     case 'plans': page = route[1] ? <PlanDetail planId={route[1]} data={data} /> : <PlansPage data={data} />; break
     case 'new': page = <PlanWizard patients={data.patients} />; break
+    case 'results': page = <ResultsPage data={data} planId={route[1]} />; break
+    // Reference gallery of every result variant (fixtures + mock). Not in the nav; kept for testing.
     case 'validation': page = <ResultsGallery />; break
     default: page = <Overview session={session} data={data} />
   }
@@ -86,7 +87,6 @@ export function ClinicianApp({ session, route, patients }: { session: Session; r
       subtitle={session.specialty ?? 'Clinician'}
       route={route}
       nav={nav}
-      secondary={secondary}
       searchPlaceholder="Search patients and test plans…"
       searchItems={searchItems}
       notifications={attention}
