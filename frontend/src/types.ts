@@ -4,6 +4,8 @@
 export type SignalId =
   | 'sleep_min' | 'resting_hr' | 'hrv' | 'steps' | 'episode'
   | 'skin_temp_dev' | 'resp_rate' | 'spo2' | 'systolic_bp' | 'glucose_tir' | 'walking_speed'
+  // self-reported in the patient app (backend data pending, see frontend-agents sync #10)
+  | 'mood_log' | 'pain_level'
 export type DeviceId = string // catalog ids, e.g. "iphone" | "apple_watch" | "fitbit"
 
 export interface Device {
@@ -44,6 +46,8 @@ export interface SeriesRow {
   systolic_bp?: number | null
   glucose_tir?: number | null
   walking_speed?: number | null
+  mood_log?: number | null
+  pain_level?: number | null
 }
 
 export interface PatientSeries {

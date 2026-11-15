@@ -6,15 +6,17 @@ import { addDays, daysBetween, formatDateShort } from '../lib/util'
  * Pure UI: PlanWizard owns all state. */
 
 // ---------- slots ----------
-export function Slot({ n, label, value, sub, open, onOpen }: {
+export function Slot({ n, label, value, sub, open, onOpen, empty = false }: {
   n: number; label: string; value: ReactNode; sub?: ReactNode; open: boolean; onOpen: () => void
+  /** nothing chosen yet: shown dashed, as a prompt */
+  empty?: boolean
 }) {
   return (
-    <button type="button" className={`td-slot ${open ? 'open' : ''}`} aria-expanded={open} onClick={onOpen}>
+    <button type="button" className={`td-slot ${open ? 'open' : ''} ${empty ? 'empty' : ''}`} aria-expanded={open} onClick={onOpen}>
       <span className="td-slot-label">{n} · {label}</span>
       <span className="td-slot-value">{value}</span>
       {sub && <span className="td-slot-sub">{sub}</span>}
-      <span className="td-slot-change">{open ? 'Editing' : 'Change'}</span>
+      <span className="td-slot-change">{open ? 'Editing' : empty ? 'Choose' : 'Change'}</span>
     </button>
   )
 }

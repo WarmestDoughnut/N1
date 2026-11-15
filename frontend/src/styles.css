@@ -480,6 +480,11 @@ input:focus, select:focus, textarea:focus { border-color: #a9a3f5; box-shadow: 0
 .td-slot { flex: 1 1 170px; min-width: 0; text-align: left; font: inherit; color: inherit; background: #fff; border: 2px solid #dcdce4; border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; cursor: pointer; transition: border-color 0.15s ease, background 0.15s ease; }
 .td-slot:hover { border-color: #c9c5f6; }
 .td-slot.open { border-color: var(--accent); }
+.td-slot.empty { border-style: dashed; background: #fcfcfe; }
+.td-slot.empty .td-slot-value { color: #8c8d99; }
+.td-slot.empty.open { border-style: solid; }
+.td-off { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 999px; border: 1px dashed #d6d6de; background: #f8f8fa; color: #9a9aa5; font-size: 12.5px; font-weight: 600; text-decoration: line-through; }
+.td-off em { font-style: normal; text-decoration: none; display: inline-block; font-size: 11.5px; color: #94661c; }
 .td-slot-label { font-size: 11.5px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: #5d5e6b; }
 .td-slot-value { font-size: 17px; font-weight: 700; color: #242430; overflow: hidden; text-overflow: ellipsis; }
 .td-slot-sub { font-size: 13px; color: #5d5e6b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

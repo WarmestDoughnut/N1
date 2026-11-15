@@ -59,9 +59,11 @@ export const SIGNAL_INFO: Record<SignalId, { label: string; unit: string; plain:
   systolic_bp: { label: 'Blood pressure (systolic)', unit: 'mmHg', plain: 'blood pressure', noun: 'blood pressure' },
   glucose_tir: { label: 'Glucose time in range', unit: '%', plain: 'glucose time in range', noun: 'glucose' },
   walking_speed: { label: 'Walking speed', unit: 'm/s', plain: 'walking speed', noun: 'walking' },
+  mood_log: { label: 'Mood', unit: '/5', plain: 'mood', noun: 'mood' },
+  pain_level: { label: 'Pain level', unit: '/10', plain: 'pain level', noun: 'pain' },
 }
 
-export const ALL_SIGNALS: SignalId[] = ['sleep_min', 'resting_hr', 'hrv', 'steps', 'walking_speed', 'glucose_tir', 'systolic_bp', 'spo2', 'resp_rate', 'skin_temp_dev', 'episode']
+export const ALL_SIGNALS: SignalId[] = ['sleep_min', 'resting_hr', 'hrv', 'steps', 'walking_speed', 'glucose_tir', 'systolic_bp', 'spo2', 'resp_rate', 'skin_temp_dev', 'mood_log', 'pain_level', 'episode']
 
 export function signalLabel(s: string): string {
   return SIGNAL_INFO[s as SignalId]?.label ?? s.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase())
