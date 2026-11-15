@@ -209,3 +209,54 @@ export function PatientDayPreview({ schedule, armA, armB }: { schedule: Schedule
     </div>
   )
 }
+
+// ---------- dates over past + future (v1.6, to-backend #13) ----------
+const isoPlus = (iso: string, n: number) => addDays(iso, n)
+/** Date range from the patient's first data day into the future, with the past/new split shown live. */
+export function WindowPicker({ value, onChange, dataStart, dataEnd, today, maxEnd }: {
+  value: { start: string; end: string }; onChange: (w: { start: string; end: string }) => void
+  /** patient.date_range */
+  dataStart: string; dataEnd: string
+  /** as-of date (local today) */
+  today: string
+  /** optional upper bound (e.g. a test on a collection's past data) */
+  maxEnd?: string
+}) {
+  const far = maxEnd ?? isoPlus(today, 365)
+  const pastOnly = !!maxEnd && maxEnd <= today
+  const set = (start: string, end: string) => onChange({ start: start < dataStart ? dataStart : start, end })
+  const picks: [string, () => void][] = [
+    ['All past data', () => set(dataStart, today)],
+    ['Last 30 days', () => set(isoPlus(today, -29), today)],
+    ['Last 90 days', () => set(isoPlus(today, -89), today)],
+    ['Past + next 4 weeks', () => set(dataStart, isoPlus(today, 28))],
+    ['Only the next 4 weeks', () => set(isoPlus(today, 1), isoPlus(today, 28))],
+  ].filter(([label]) => !pastOnly || !String(label).includes('next')).map(([l, f]) => [l, pastOnly && l === 'All past data' ? () => set(dataStart, far) : f]) as [string, () => void][]
+  const has = !!(value.start && value.end && value.end >= value.start)
+  const pastEnd = has && value.start <= today ? (value.end < today ? value.end : today) : null
+  const liveStart = has && value.end > today ? (value.start > today ? value.start : isoPlus(today, 1)) : null
+  const delivery = pastEnd && liveStart ? 'Past + new' : pastEnd ? 'Past only' : liveStart ? 'New only' : null
+  return (
+    <div className="stack" style={{ gap: 10 }}>
+      <div className="td-tray-row">
+        {picks.map(([label, fn]) => <button key={label} type="button" className="button secondary sm" onClick={fn}>{label}</button>)}
+      </div>
+      <div className="td-inline">
+        <span>From</span>
+        <input type="date" aria-label="Window start" value={value.start} min={dataStart} max={value.end || far}
+          onChange={(e) => e.target.value && onChange({ start: e.target.value, end: value.end })} style={{ width: 'auto' }} />
+        <span>to</span>
+        <input type="date" aria-label="Window end" value={value.end} min={value.start || dataStart} max={far}
+          onChange={(e) => e.target.value && onChange({ start: value.start, end: e.target.value })} style={{ width: 'auto' }} />
+        {delivery && <span className={`pill no-dot ${delivery === 'Past only' ? 'pill-purple' : delivery === 'New only' ? 'pill-green' : 'pill-yellow'}`}>{delivery}</span>}
+      </div>
+      {has && (
+        <div style={{ display: 'grid', gap: 4, fontSize: 14 }}>
+          {pastEnd && <div><strong>Past data, shared when approved:</strong> {formatDateShort(value.start)} – {formatDateShort(pastEnd)}
+            {pastEnd > dataEnd && <span className="muted small"> (data so far runs to {formatDateShort(dataEnd)})</span>}</div>}
+          {liveStart && <div><strong>New data, collected:</strong> {formatDateShort(liveStart)} – {formatDateShort(value.end)}</div>}
+        </div>
+      )}
+    </div>
+  )
+}

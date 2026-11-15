@@ -23,7 +23,7 @@ import type {
   Verdict,
 } from '../types'
 import { addDays, gauss, mulberry32, nowIso, SIGNAL_INFO } from './util'
-import { fixtureDevices, fixturePatients } from './fixtures'
+import { fixtureDevices, fixtureFiles, fixturePatients } from './fixtures'
 
 export class MockHttpError extends Error {
   constructor(public status: number, public body: { error: string }) {
@@ -159,11 +159,30 @@ let plans: Plan[] = load('n1mock.plans', [])
 let results: Record<string, Results> = load('n1mock.results', {})
 const persist = () => { save('n1mock.plans', plans); save('n1mock.results', results) }
 
+/** Sample mode mirrors the live API's seeded demo plans (fe-main #14 / backend #15): the fixture plans
+ *  (DEMO-P03-AISHA recorded A/B, DEMO-P01-MARIA observational, DEMO-COLLECT-DANA collection) as
+ *  `seeded: true`. Seeded plans keep the prospective flow (approve → active → simulate-complete). */
+const SEED_FIXTURES = ['plan_intervention', 'plan_observational', 'plan_collection']
+function seedDemoPlans() {
+  let added = false
+  for (const name of SEED_FIXTURES) {
+    const f = fixtureFiles[name] as Plan | undefined
+    if (!f?.id || plans.some((p) => p.id === f.id)) continue
+    const seeded = structuredClone(f) as Plan & { seeded?: boolean }
+    seeded.seeded = true
+    if (seeded.intervention && !(seeded.intervention as { assignment?: string }).assignment) (seeded.intervention as { assignment?: string }).assignment = 'randomized'
+    plans.unshift(seeded)
+    added = true
+  }
+  if (added) persist()
+}
+
 export function resetMock() {
   plans = []
   results = {}
   for (const k of Object.keys(extraEpisodes)) delete extraEpisodes[k]
   persist()
+  seedDemoPlans()
   save('n1mock.episodes', extraEpisodes)
 }
 
@@ -184,6 +203,7 @@ export function makeSchedule(p: SchedulePreviewParams): SchedulePeriod[] {
   }
   return out
 }
+seedDemoPlans()
 
 // ---------- analysis (simplified mirror of contract rules) ----------
 function mean(xs: number[]) { return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : NaN }
@@ -400,10 +420,18 @@ function summaryFor(p: PlanCreate): string {
   const devs = p.devices.map((d) => DEVICES.find((x) => x.id === d)?.name ?? d)
   const sigs = p.signals.filter((s) => s !== 'episode').map((s) => SIGNAL_INFO[s]?.plain ?? s)
   const from = `${sigs.join(', ') || 'your data'} from your ${devs.join(' and ')}${p.signals.includes('episode') ? ' and your episode log' : ''}`
-  const what = p.type === 'observational'
-    ? `check whether ${p.observational!.direction === 'lower' ? 'lower' : 'higher'} ${SIGNAL_INFO[p.observational!.signal].plain} tends to come before your episodes`
-    : `compare your ${SIGNAL_INFO[p.intervention!.outcome_signal].plain} on "${p.intervention!.arm_b}" versus "${p.intervention!.arm_a}", switching on a set schedule`
-  return `${p.clinician_name} wants to ${what}. This test uses ${from} from ${p.window.start} to ${p.window.end}. Nothing else is shared. You can pause or stop at any time.`
+  const t = p.type as string
+  const what = t === 'collection'
+    ? `collect ${from}, with no test run yet, so it can be looked at later`
+    : p.type === 'observational'
+      ? `check whether ${p.observational!.direction === 'lower' ? 'lower' : 'higher'} ${SIGNAL_INFO[p.observational!.signal].plain} tends to come before your episodes`
+      : `compare your ${SIGNAL_INFO[p.intervention!.outcome_signal].plain} on "${p.intervention!.arm_b}" versus "${p.intervention!.arm_a}", switching on a set schedule`
+  // v1.6 R4: say plainly when past data is included (it is shared as soon as the patient approves)
+  const today = localToday()
+  const past = p.window.start <= today ? `This includes your past data from ${p.window.start} to ${p.window.end < today ? p.window.end : today}, which will be shared as soon as you approve.` : ''
+  const live = p.window.end > today ? `${past ? ' New' : 'New'} data will be collected until ${p.window.end}.` : ''
+  const uses = t === 'collection' ? '' : ` This test uses ${from}.`
+  return `${p.clinician_name} wants to ${what}.${uses} ${past}${live} Nothing else is shared. You can pause or stop at any time.`.replace(/\s+/g, ' ').trim()
 }
 
 // ---------- transitions ----------
@@ -441,6 +469,9 @@ function collectionResult(plan: Plan, incomplete: boolean): Results {
     warnings: incomplete ? ['incomplete_plan'] : [], series: [], collection: { n_days: rows.length, per_signal },
   } as unknown as Results
 }
+
+/** local as-of date (kept here: importing lib/v15 would create an import cycle via api.ts) */
+function localToday() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 
 // v1.5 B3 (sample mode): tests run on a finished collection's data
 const analyses: Record<string, (Results & { id: string; created_at: string })[]> = {}
@@ -486,6 +517,13 @@ export const mock = {
     if (!t.from.includes(p.status)) throw new MockHttpError(409, { error: 'invalid_transition' })
     p.status = t.to
     p.history.push({ at: nowIso(), event: { approve: 'approved', decline: 'declined', pause: 'paused', resume: 'resumed', stop: 'stopped' }[action] })
+    // v1.6 R2 (mirrors to-backend #13): a window entirely in the past is shared at once on approval,
+    // so the plan goes straight to complete with results. (Mixed windows stay active for the new part.)
+    if (action === 'approve' && p.window.end <= localToday() && !(p as { seeded?: boolean }).seeded) {
+      p.status = 'complete'
+      p.history.push({ at: nowIso(), event: 'shared' })
+      computeResults(p, false)
+    }
     if (action === 'stop') computeResults(p, true)
     persist()
     return structuredClone(p)
@@ -503,7 +541,9 @@ export const mock = {
   analyses: async (cid: string) => structuredClone(analyses[cid] ?? []),
   runAnalysis: async (cid: string, body: { observational?: Plan['observational']; intervention?: Plan['intervention'] }) => {
     const c = getPlanOr404(cid)
-    if (!['complete', 'stopped'].includes(c.status)) throw new MockHttpError(422, { error: 'not_enough_data' })
+    // v1.6 R3: available once data is in, i.e. finished, or approved with a past part (mixed)
+    const pastShared = c.status === 'active' && c.window.start <= localToday()
+    if (!['complete', 'stopped'].includes(c.status) && !pastShared) throw new MockHttpError(422, { error: 'not_enough_data' })
     if (body.observational && !c.signals.includes(body.observational.signal)) throw new MockHttpError(422, { error: 'signal_not_in_collection' })
     if (body.intervention && !c.signals.includes(body.intervention.outcome_signal)) throw new MockHttpError(422, { error: 'signal_not_in_collection' })
     const pseudo = { ...c, type: body.observational ? 'observational' : 'intervention', observational: body.observational ?? null, intervention: body.intervention ?? null } as Plan

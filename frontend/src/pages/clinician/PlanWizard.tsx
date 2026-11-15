@@ -5,15 +5,17 @@ import { navigate, useAsync } from '../../lib/hooks'
 import { ScheduleTimeline } from '../../components/ScheduleTimeline'
 import { Icon } from '../../components/Icon'
 import { DevicePicker, SignalPicker } from '../../components/SourcePicker'
-import { ABTimeline, Fact, PatientDayPreview, PatternStrip, Slot, SlotEditor, Stepper, StrengthMeter, strengthFor } from '../../components/TestDesign'
-import { v15, type Symptom } from '../../lib/v15'
-import { randomizeStints, scheduleToStints, StintCalendar, stintsToSchedule, stintStats, type Assignment, type Stint } from '../../components/StintCalendar'
+import { WindowPicker, ABTimeline, Fact, PatientDayPreview, PatternStrip, Slot, SlotEditor, Stepper, StrengthMeter, strengthFor } from '../../components/TestDesign'
+import { asOf, splitWindow, v15, type Symptom } from '../../lib/v15'
+import { randomizeStints, StintCalendar, stintsToSchedule, stintStats, type Assignment, type Stint } from '../../components/StintCalendar'
 import { useToast } from '../../components/Shell'
 import { getSession, initials } from '../../lib/session'
-import { ALL_SIGNALS, daysBetween, formatDate, formatDateShort, SIGNAL_INFO, signalLabel } from '../../lib/util'
+import { addDays, ALL_SIGNALS, daysBetween, formatDate, formatDateShort, SIGNAL_INFO, signalLabel } from '../../lib/util'
 
 const STEPS = ['Patient', 'Devices', 'Signals', 'Test design', 'Review & send']
 /** v1.4 lag scan: look-back windows of min_lag_days..max_lag_days (1 ≤ min ≤ max ≤ 14); window L = the L days before each episode. */
+/** shown when painted A/B periods sit on past days */
+const PAST_AB_MSG = 'A/B tests can only run forward from today. Use a pattern test for past data.'
 const LAG_MAX_V14 = 14
 const LAG_MAX_V15 = 30
 const SENSOR_SIGNALS: SignalId[] = ALL_SIGNALS.filter((s) => s !== 'episode')
@@ -44,6 +46,8 @@ export function PlanWizard({ patients, patient: fixed, kind = 'test', onDone }: 
 }) {
   /** v1.5 B2: a data collection = consented signals over a window, no test attached */
   const isCollection = kind === 'collection'
+  /** as-of date for past vs new data (v1.6) */
+  const today = asOf()
   const steps = isCollection ? ['Patient', 'Devices', 'Signals', 'Dates', 'Review & send'] : STEPS
   const list = fixed ? [fixed] : (patients ?? [])
   const healthQ = useAsync(() => api.health(), [])
@@ -126,7 +130,13 @@ export function PlanWizard({ patients, patient: fixed, kind = 'test', onDone }: 
 
 
   // Every signal the selected devices provide AND this patient has data for: the test design offers all of them.
-  const designSignals: SignalId[] = SENSOR_SIGNALS.filter((s) => available.has(s))
+  // Amendment fe-main #14: a test on a collection's data is a NEW pattern-test request (separate consent),
+  // prefilled from the collection: its signals only, and a window inside the collection's past part.
+  const fromCollection = fixed ? readParam('collection') : null
+  const colQ = useAsync<Plan | null>(() => (fromCollection ? api.getPlan(fromCollection) : Promise.resolve(null)), [fromCollection])
+  const collection = colQ.data ?? null
+  const colPast = collection ? splitWindow(collection.window).past : null
+  const designSignals: SignalId[] = SENSOR_SIGNALS.filter((s) => available.has(s) && (!collection || collection.signals.includes(s)))
   // If a chosen signal stops being available (device removed), clear it rather than swapping in another.
   useEffect(() => {
     if (obs.signal && !available.has(obs.signal)) setObs((o) => ({ ...o, signal: null }))
@@ -164,8 +174,6 @@ export function PlanWizard({ patients, patient: fixed, kind = 'test', onDone }: 
     : (ivReady ? `Does ${iv.arm_b.trim()} ${iv.better === 'higher' ? 'improve' : 'lower'} ${SIGNAL_INFO[iv.outcome_signal!].plain}?` : '')
   useEffect(() => { if (!titleTouched) setTitle(autoTitle) }, [autoTitle, titleTouched])
 
-  const patientPlans = useAsync<Plan[]>(() => (patientId ? api.listPlans(patientId) : Promise.resolve([])), [patientId])
-  const recordedPlan = (patientPlans.data ?? []).find((p) => p.intervention?.schedule?.length && (p.seeded ?? p.id.startsWith('DEMO-'))) ?? null
   useEffect(() => { setRecorded(null); setObsWin(NO_WIN); setOpenSlot(null); setStints([]); setAssignment('manual') }, [patientId])
   useEffect(() => { setOpenSlot(null) }, [type])
   // Arriving on the design step with nothing chosen: open the first slot that needs input.
@@ -182,19 +190,6 @@ export function PlanWizard({ patients, patient: fixed, kind = 'test', onDone }: 
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, type])
-  const sig = (xs: { start: string; end: string; arm: string | null }[]) => [...xs].sort((a, b) => a.start.localeCompare(b.start)).map((x) => `${x.start}|${x.end}|${x.arm}`).join(',')
-  const applyRecorded = (p: Plan) => {
-    const { schedule: sch, ...rest } = p.intervention!
-    setIv(rest); setStints(scheduleToStints(sch)); setRecorded(p)
-    // the seeded demo schedules were generated by block randomization
-    setAssignment((rest as { assignment?: Assignment }).assignment ?? 'randomized')
-    if (!titleTouched) { setTitle(p.title); setTitleTouched(true) }
-  }
-  // Moving a period after loading the recorded schedule means it no longer matches what the patient did.
-  useEffect(() => {
-    if (recorded?.intervention && sig(stintsToSchedule(stints)) !== sig(recorded.intervention.schedule)) setRecorded(null)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stints, recorded])
 
   // ----- step handlers -----
   const pickPatient = (p: Patient) => {
@@ -243,6 +238,16 @@ export function PlanWizard({ patients, patient: fixed, kind = 'test', onDone }: 
   }, [devices, catalog, finalSignals])
   const droppedSignals = signals.filter((s) => !finalSignals.includes(s))
 
+  // apply the collection prefill once the patient is set (after the fixed-patient prefill resets the form)
+  const [colApplied, setColApplied] = useState(false)
+  useEffect(() => {
+    if (!collection || colApplied || !prefilled) return
+    setType('observational'); setDevices(collection.devices); setSignals(collection.signals)
+    if (colPast) setObsWin(colPast)
+    setStep(3); setColApplied(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [collection, prefilled, colApplied])
+
   const stepError = (() => {
     if (step === 0 && !patient) return 'Choose a patient.'
     if (step === 1 && devices.length === 0) return 'Select at least one device.'
@@ -265,6 +270,8 @@ export function PlanWizard({ patients, patient: fixed, kind = 'test', onDone }: 
         if (!iv.better) return 'Choose whether higher or lower is better (slot 1).'
         if (!iv.arm_b.trim() || !iv.arm_a.trim()) return 'Name what you are trying and what it is compared with (slot 2).'
         if (ss.count === 0) return 'Paint the A and B periods on the calendar (slot 3).'
+        // Amendment fe-main #14: A/B tests only run forward from today (backend 422 ab_requires_future_window).
+        if (stints.some((x) => x.arm !== 'W' && x.start <= today)) return PAST_AB_MSG
         if (ss.count < 10) return `Paint at least 10 periods; you have ${ss.count}. Fewer can never pass the chance check.`
         if (ss.nA < 2 || ss.nB < 2) return 'Each option needs at least 2 periods.'
         if (assignment === 'randomized' && !ss.pairedAB) return 'Randomize again: the pairs changed.'
@@ -285,7 +292,7 @@ export function PlanWizard({ patients, patient: fixed, kind = 'test', onDone }: 
       devices: finalDevices,
       signals: finalSignals,
       window: window_,
-      ...({ instructions: instructions.trim() || null } as object),
+      ...({ instructions: instructions.trim() || null, ...(collection ? { from_collection: collection.id } : {}) } as object),
       // stepError guarantees these are chosen before Send is enabled
       observational: !isCollection && type === 'observational' ? { signal: obs.signal!, direction: obs.direction!, min_lag_days: obs.min_lag_days!, max_lag_days: obs.max_lag_days!, ...({ symptom_id: obs.symptom_id } as object) } : null,
       intervention: !isCollection && type === 'intervention'
@@ -414,15 +421,8 @@ export function PlanWizard({ patients, patient: fixed, kind = 'test', onDone }: 
         {step === 3 && patient && isCollection && (
           <>
             <h2>Over what dates?</h2>
-            <div className="td-inline mt">
-              <span>From</span>
-              <input type="date" aria-label="Collection start" value={obsWin.start} min={patient.date_range[0]} max={obsWin.end || patient.date_range[1]}
-                onChange={(e) => e.target.value && setObsWin({ start: e.target.value, end: obsWin.end })} style={{ width: 'auto' }} />
-              <span>to</span>
-              <input type="date" aria-label="Collection end" value={obsWin.end} min={obsWin.start || patient.date_range[0]} max={patient.date_range[1]}
-                onChange={(e) => e.target.value && setObsWin({ start: obsWin.start, end: e.target.value })} style={{ width: 'auto' }} />
-              <button type="button" className="button secondary sm" onClick={() => setObsWin({ start: patient.date_range[0], end: patient.date_range[1] })}>Use all {patient.n_days} days</button>
-            </div>
+            <p className="muted">Reach back as far as {patient.display_name.replace(/,.*$/, '')}'s data goes, forward into the future, or both. Past data is shared as soon as the patient approves.</p>
+            <WindowPicker value={obsWin} onChange={setObsWin} dataStart={patient.date_range[0]} dataEnd={patient.date_range[1]} today={today} />
             <p className="td-note mt">No test is attached. Once data is in, you can run pattern tests on it from the Data collection tab.</p>
           </>
         )}
@@ -464,7 +464,8 @@ export function PlanWizard({ patients, patient: fixed, kind = 'test', onDone }: 
               <div className="seg td-type" role="radiogroup" aria-label="Test type">
                 <button type="button" role="radio" aria-checked={type === 'observational'} className={type === 'observational' ? 'active' : ''} disabled={obsBlocked}
                   title={obsBlocked ? 'No episodes logged, so use an A/B test' : undefined} onClick={() => setType('observational')}>Look for a pattern</button>
-                <button type="button" role="radio" aria-checked={type === 'intervention'} className={type === 'intervention' ? 'active' : ''} onClick={() => setType('intervention')}>Try a change (A/B trial)</button>
+                <button type="button" role="radio" aria-checked={type === 'intervention'} className={type === 'intervention' ? 'active' : ''} disabled={!!collection}
+                  title={collection ? 'Tests on collected (past) data are pattern tests. A/B tests run forward from today.' : undefined} onClick={() => setType('intervention')}>Try a change (A/B trial)</button>
               </div>
               {obsBlocked && <div className="alert alert-info"><Icon name="info" /><span>{patient.display_name} has no episodes logged, so a pattern test isn't possible. Try a change (A/B trial) instead.</span></div>}
               {!obsBlocked && type === 'observational' && episodes < 5 && (
@@ -528,16 +529,8 @@ export function PlanWizard({ patients, patient: fixed, kind = 'test', onDone }: 
                     )}
                     {openSlot === 4 && (
                       <SlotEditor title="Editing 4: over what dates" onDone={() => setOpenSlot(null)}>
-                        <div className="td-inline">
-                          <span>From</span>
-                          <input type="date" aria-label="Plan start" value={window_.start} min={patient.date_range[0]} max={window_.end || patient.date_range[1]}
-                            onChange={(e) => e.target.value && setObsWin({ start: e.target.value, end: window_.end })} />
-                          <span>to</span>
-                          <input type="date" aria-label="Plan end" value={window_.end} min={window_.start || patient.date_range[0]} max={patient.date_range[1]}
-                            onChange={(e) => e.target.value && setObsWin({ start: window_.start, end: e.target.value })} />
-                          <button type="button" className="button secondary sm" onClick={() => setObsWin({ start: patient.date_range[0], end: patient.date_range[1] })}>Use all {patient.n_days} days</button>
-                        </div>
-                        <p className="td-note">{firstName}'s data runs {formatDate(patient.date_range[0])} to {formatDate(patient.date_range[1])}. Shorter windows contain fewer episodes.</p>
+                        <WindowPicker value={obsWin} onChange={setObsWin} dataStart={colPast?.start ?? patient.date_range[0]} dataEnd={patient.date_range[1]} today={today} maxEnd={colPast?.end} />
+                        <p className="td-note">Past days are tested as soon as the patient approves. New days are added as they come in. Shorter windows contain fewer logged episodes.</p>
                       </SlotEditor>
                     )}
                     <p className="td-reads"><strong>Reads as:</strong>{' '}
@@ -622,23 +615,9 @@ export function PlanWizard({ patients, patient: fixed, kind = 'test', onDone }: 
                       )}
                     </div>
                   </div>
-                  {recordedPlan && (
-                    <div className={`insight ${recorded ? '' : 'warn'}`} style={{ alignItems: 'center' }}>
-                      <span><Icon name="calendar" size={17} /></span>
-                      <p style={{ flex: 1 }}>
-                        <strong>{recorded ? 'Using the schedule this patient followed' : 'This patient already followed a recorded A/B schedule'}</strong>
-                        {recorded
-                          ? `${recorded.intervention!.arm_a} vs ${recorded.intervention!.arm_b}, ${recorded.intervention!.n_periods} periods from ${formatDate(recorded.window.start)}. Demo data is historical, so the analysis must use the order the patient actually followed. Moving a period undoes this.`
-                          : 'Demo data is historical: periods placed by hand would not match the days the patient actually took each option. Use the recorded schedule for an honest result.'}
-                      </p>
-                      {recorded
-                        ? <button className="button ghost sm" onClick={() => { setRecorded(null); setStints([]) }}>Place my own instead</button>
-                        : <button className="button primary sm" onClick={() => applyRecorded(recordedPlan)}>Use recorded schedule</button>}
-                    </div>
-                  )}
                   {abView === 'timeline' && schedule.length
                     ? <ABTimeline schedule={schedule} armA={iv.arm_a.trim() || 'Option A'} armB={iv.arm_b.trim() || 'Option B'} />
-                    : <StintCalendar range={{ start: patient.date_range[0], end: patient.date_range[1] }} stints={stints} onChange={setStints}
+                    : <StintCalendar range={{ start: addDays(today, 1), end: addDays(today, 180) }} stints={stints} onChange={setStints}
                         armA={iv.arm_a.trim() || 'Option A'} armB={iv.arm_b.trim() || 'Option B'} assignment={assignment} onAssignment={setAssignment} />}
                   {ss.count > 0 && assignment === 'manual' && !recorded && (
                     <p className="td-note">Order set by hand: results will be marked as <strong>not randomized</strong>. “Randomize for me” gives the strongest result.</p>
@@ -652,6 +631,7 @@ export function PlanWizard({ patients, patient: fixed, kind = 'test', onDone }: 
         {step === 4 && patient && (
           <>
             <h2>Review & send to patient</h2>
+            {collection && <div className="alert alert-info mb"><Icon name="info" /><span>This sends a test request to {patient.display_name}, even though they already shared this data ({collection.title}).</span></div>}
             <div className="grid-2">
               <div>
                 <div className="field"><label htmlFor="t">Question (shown to the patient)</label>
@@ -694,7 +674,7 @@ export function PlanWizard({ patients, patient: fixed, kind = 'test', onDone }: 
         )}
 
         <div className="wizard-nav">
-          <button className="button ghost" onClick={() => (step === 0 || (fixed && step === 1) ? navigate(fixed ? `/patients/${fixed.id}` : '/') : setStep(step - 1))}>{step === 0 || (fixed && step === 1) ? 'Cancel' : '← Back'}</button>
+          <button className="button ghost" onClick={() => (step === 0 || (fixed && step === 1) || (collection && step === 3) ? navigate(fixed ? `/patients/${fixed.id}${collection ? '/collection' : ''}` : '/') : setStep(step - 1))}>{step === 0 || (fixed && step === 1) || (collection && step === 3) ? 'Cancel' : '← Back'}</button>
           <div className="row">
             {stepError && step > 0 && <span className="small" style={{ color: 'var(--yellow)' }}>{stepError}</span>}
             {step < 4 ? (

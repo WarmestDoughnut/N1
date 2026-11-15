@@ -42,6 +42,24 @@ export const ANALYSIS_ERRORS: Record<string, string> = {
   window_too_short: 'The collection window is too short for this look-back range.',
 }
 
+// ---------- v1.6 (to-backend #13): past + future windows ----------
+export type Delivery = 'retrospective' | 'prospective' | 'mixed'
+/** "today" for delivery (backend uses its as_of; the frontend uses the local date) */
+export const asOf = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+const plusDay = (iso: string, n: number) => { const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10) }
+/** Split a window into the part already in the past (shared on approval) and the part still to collect. */
+export function splitWindow(w: { start: string; end: string; past_end?: string | null; live_start?: string | null }, today = asOf()) {
+  const pastEnd = w.past_end !== undefined ? w.past_end : (w.start <= today ? (w.end < today ? w.end : today) : null)
+  const liveStart = w.live_start !== undefined ? w.live_start : (w.end > today ? (w.start > today ? w.start : plusDay(today, 1)) : null)
+  const delivery: Delivery = pastEnd && liveStart ? 'mixed' : pastEnd ? 'retrospective' : 'prospective'
+  return { delivery, past: pastEnd ? { start: w.start, end: pastEnd } : null, live: liveStart ? { start: liveStart, end: w.end } : null }
+}
+/** A plan's delivery: the server's `delivery` (v1.6) when present, else computed from its window. */
+export function deliveryOf(p: Plan): Delivery {
+  const d = (p as unknown as { delivery?: Delivery }).delivery
+  return d ?? splitWindow(p.window).delivery
+}
+
 /** Read v1.5 fields from any plan object (the live 1.4 API simply won't have them yet). */
 export const v15Plan = (p: Plan) => p as unknown as PlanV15
 

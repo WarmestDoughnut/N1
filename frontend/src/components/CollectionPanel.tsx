@@ -1,14 +1,11 @@
-import { useState } from 'react'
-import { api, friendlyError, ApiError } from '../api'
-import type { Direction, Patient, Plan, SignalId } from '../types'
+import { api } from '../api'
+import type { Patient, Plan, SignalId } from '../types'
 import { navigate, useAsync } from '../lib/hooks'
-import { daysBetween, formatDate, signalLabel, SIGNAL_INFO } from '../lib/util'
-import { ANALYSIS_ERRORS, isCollection, v15, v15Plan, type Analysis, type CollectionResults, type Symptom } from '../lib/v15'
+import { formatDate, signalLabel, SIGNAL_INFO } from '../lib/util'
+import { isCollection, splitWindow, v15Plan, type CollectionResults } from '../lib/v15'
 import { resultsWithRetry } from './RunProgress'
-import { ResultsView } from './ResultsView'
 import { Icon } from './Icon'
-import { StatusChip, VerdictBadge } from './Verdict'
-import { Stepper } from './TestDesign'
+import { StatusChip } from './Verdict'
 
 /* Data collection tab (overhaul fe-main #7 item 6; backend B2/B3). A collection gathers consented
  * signals with no test attached; once it has data the clinician can run a pattern test on it. */
@@ -31,20 +28,19 @@ export function CollectionPanel({ patient }: { patient: Patient }) {
           <a className="button secondary" href={`#/patients/${patient.id}/new/collection`}><Icon name="plus" /> Start one</a>
         </div>
       )}
-      {collections.map((c) => <CollectionCard key={c.id} plan={c} patient={patient} />)}
+      {collections.map((c) => <CollectionCard key={c.id} plan={c} patient={patient} tests={(plansQ.data ?? []).filter((t) => (t as unknown as { from_collection?: string }).from_collection === c.id)} />)}
     </div>
   )
 }
 
-function CollectionCard({ plan, patient }: { plan: Plan; patient: Patient }) {
+function CollectionCard({ plan, patient, tests }: { plan: Plan; patient: Patient; tests: Plan[] }) {
   const finished = plan.status === 'complete' || plan.status === 'stopped'
+  const split = splitWindow(plan.window)
+  // v1.6: past data is shared at approval, so tests can be requested right away for retro / mixed collections
+  const pastShared = finished || ((plan.status === 'active' || plan.status === 'paused') && !!split.past)
   const resQ = useAsync<CollectionResults | null>(() => (finished ? resultsWithRetry(plan.id) as Promise<CollectionResults | null> : Promise.resolve(null)), [plan.id, finished])
-  const [tick, setTick] = useState(0)
-  const anQ = useAsync<Analysis[]>(() => (finished ? v15.analyses(plan.id) : Promise.resolve([])), [plan.id, finished, tick])
-  const [designing, setDesigning] = useState(false)
-  const [openId, setOpenId] = useState<string | null>(null)
   const instructions = v15Plan(plan).instructions
-  const sensors = plan.signals.filter((s) => s !== 'episode')
+  const shared = plan.history.find((h) => h.event.startsWith('shared') || h.event.startsWith('approve'))?.at
   return (
     <article className="card">
       <div className="row-between" style={{ alignItems: 'flex-start' }}>
@@ -59,44 +55,37 @@ function CollectionCard({ plan, patient }: { plan: Plan; patient: Patient }) {
         </span>
       </div>
 
-      {!finished && (
+      {!pastShared && (
         <p className="muted small" style={{ marginBottom: 0 }}>
-          {plan.status === 'pending_approval' ? 'Waiting for the patient to approve.' : plan.status === 'declined' ? 'The patient declined.' : 'Collecting. You can run tests once data is in.'}
+          {plan.status === 'pending_approval' ? 'Waiting for the patient to approve.' : plan.status === 'declined' ? 'The patient declined.' : 'Collecting. You can request tests once data is in.'}
         </p>
       )}
+      {pastShared && !finished && shared && split.live && (
+        <p className="muted small" style={{ marginBottom: 0 }}>Past data shared on {formatDate(shared)} · collecting new data until {formatDate(split.live.end)}.</p>
+      )}
+      {finished && <div className="mt"><CollectionCoverage results={resQ.data ?? null} loading={resQ.loading} error={resQ.error} /></div>}
 
-      {finished && (
+      {pastShared && (
         <>
-          <div className="mt"><CollectionCoverage results={resQ.data ?? null} loading={resQ.loading} error={resQ.error} /></div>
           <div className="row-between mt">
-            <strong style={{ fontSize: 15 }}>Tests run on this data</strong>
-            {!designing && <button className="button primary sm" onClick={() => setDesigning(true)}><Icon name="flask" size={14} /> Run a test on this data</button>}
+            <strong style={{ fontSize: 15 }}>Tests on this data</strong>
+            <button className="button primary sm" onClick={() => navigate(`/patients/${patient.id}/new/test?collection=${encodeURIComponent(plan.id)}`)}>
+              <Icon name="flask" size={14} /> Run a test on this data
+            </button>
           </div>
-          {designing && (
-            <AnalysisForm plan={plan} patient={patient} sensors={sensors} onCancel={() => setDesigning(false)}
-              onDone={(a) => { setDesigning(false); setTick((t) => t + 1); setOpenId(a.id) }} />
-          )}
-          {anQ.data && anQ.data.length === 0 && !designing && <div className="muted small" style={{ marginTop: 6 }}>None yet.</div>}
-          {(anQ.data ?? []).slice().reverse().map((a) => (
-            <div key={a.id} style={{ borderTop: '1px solid var(--border-2)', marginTop: 10, paddingTop: 10 }}>
-              <button type="button" className="row-between" onClick={() => setOpenId(openId === a.id ? null : a.id)}
-                style={{ width: '100%', background: 'none', border: 0, padding: 0, textAlign: 'left', cursor: 'pointer' }}>
-                <span><strong style={{ fontSize: 14.5 }}>{analysisTitle(a)}</strong><span className="muted small"> · run {formatDate(a.created_at)}</span></span>
-                <span className="row" style={{ gap: 8 }}>{a.verdict && <VerdictBadge verdict={a.verdict} small />}<Icon name="chevron" size={14} /></span>
-              </button>
-              {openId === a.id && <div className="mt"><ResultsView results={a} plan={{ ...plan, type: a.type, observational: a.type === 'observational' ? planObs(a) : null } as Plan} audience="clinician" /></div>}
-            </div>
+          <p className="muted small" style={{ margin: '4px 0 0' }}>Each test is its own request: the patient approves it before it runs.</p>
+          {tests.length === 0 && <div className="muted small" style={{ marginTop: 6 }}>None yet.</div>}
+          {tests.map((t) => (
+            <button key={t.id} type="button" className="row-between" onClick={() => navigate(`/patients/${patient.id}/tests/${t.id}`)}
+              style={{ width: '100%', background: 'none', border: 0, borderTop: '1px solid var(--border-2)', marginTop: 10, padding: '10px 0 0', textAlign: 'left', cursor: 'pointer' }}>
+              <span><strong style={{ fontSize: 14.5 }}>{t.title}</strong><span className="muted small"> · {formatDate(t.created_at)}</span></span>
+              <span className="row" style={{ gap: 8 }}><StatusChip status={t.status} /><Icon name="chevron" size={14} /></span>
+            </button>
           ))}
         </>
       )}
     </article>
   )
-}
-
-const planObs = (a: Analysis) => (a.config?.observational ?? null) as Plan['observational']
-function analysisTitle(a: Analysis) {
-  const o = planObs(a)
-  return o ? `${signalLabel(o.signal)} ${o.direction}, ${o.min_lag_days ?? 1}–${o.max_lag_days} days before` : a.type === 'observational' ? 'Pattern test' : 'A/B test'
 }
 
 /** Per-signal coverage of a finished collection (B2 `results.collection`). */
@@ -129,77 +118,6 @@ export function CollectionCoverage({ results, loading, error }: { results: Colle
           })}
         </tbody>
       </table>
-    </div>
-  )
-}
-
-/** Pattern test on collected data: symptom + signal + direction + look-back. */
-function AnalysisForm({ plan, patient, sensors, onCancel, onDone }: {
-  plan: Plan; patient: Patient; sensors: SignalId[]; onCancel: () => void; onDone: (a: Analysis) => void
-}) {
-  const symQ = useAsync<Symptom[]>(() => v15.symptoms(patient.id), [patient.id])
-  const healthQ = useAsync(() => api.health(), [])
-  const lagMax = parseFloat(healthQ.data?.contract_version ?? '1.4') >= 1.5 ? 30 : 14
-  const loggable = (symQ.data ?? []).filter((x) => x.kind !== 'condition')
-  const [symptomId, setSymptomId] = useState<string | null>(null)
-  const [signal, setSignal] = useState<SignalId | null>(null)
-  const [direction, setDirection] = useState<Direction | null>(null)
-  const [minLag, setMinLag] = useState<number | null>(null)
-  const [maxLag, setMaxLag] = useState<number | null>(null)
-  const [busy, setBusy] = useState(false)
-  const [err, setErr] = useState<string | null>(null)
-  // The chance check shifts episode dates by 7..n-7 days, so it needs a window of at least 15 days
-  // (the backend currently 500s below that; reported as to-backend). Say so instead of calling it.
-  const windowDays = daysBetween(plan.window.start, plan.window.end) + 1
-  const tooShort = windowDays < 15
-  const ready = !tooShort && !!symptomId && !!signal && !!direction && minLag != null && maxLag != null
-  const run = async () => {
-    if (!ready) return
-    setBusy(true); setErr(null)
-    try {
-      const a = await v15.runAnalysis(plan.id, { observational: { signal: signal!, direction: direction!, min_lag_days: minLag!, max_lag_days: maxLag!, symptom_id: symptomId } })
-      onDone(a)
-    } catch (e) {
-      setErr(e instanceof ApiError && ANALYSIS_ERRORS[e.code] ? ANALYSIS_ERRORS[e.code] : friendlyError(e))
-      setBusy(false)
-    }
-  }
-  const chip = (on: boolean) => `td-chip ${on ? 'on' : ''}`
-  return (
-    <div className="td-editor mt">
-      <div className="td-editor-head"><strong>Pattern test on this data</strong><button type="button" className="button ghost sm" onClick={onCancel}>Cancel</button></div>
-      <div>
-        <span className="td-slot-label">1 · What you want to explain</span>
-        <div className="td-tray-row" style={{ marginTop: 6 }}>
-          {loggable.map((x) => <button key={x.id} type="button" className={chip(symptomId === x.id)} onClick={() => setSymptomId(x.id)}><strong>{x.name}</strong></button>)}
-          {symQ.data && loggable.length === 0 && <span className="muted small">No symptoms logged for this patient yet.</span>}
-        </div>
-      </div>
-      <div>
-        <span className="td-slot-label">2 · What might come first</span>
-        <div className="td-tray-row" style={{ marginTop: 6 }}>
-          {sensors.map((s) => <button key={s} type="button" className={chip(signal === s)} onClick={() => setSignal(s)}><strong>{SIGNAL_INFO[s]?.label ?? s}</strong></button>)}
-        </div>
-        <div className="td-inline" style={{ marginTop: 8 }}>
-          <span>Before episodes it is</span>
-          <div className="seg">{(['lower', 'higher'] as Direction[]).map((d) => <button key={d} type="button" className={direction === d ? 'active' : ''} onClick={() => setDirection(d)}>{d}</button>)}</div>
-          <span>than usual</span>
-        </div>
-      </div>
-      <div>
-        <span className="td-slot-label">3 · How far back</span>
-        <div className="td-inline" style={{ marginTop: 6 }}>
-          <span>Look back between</span>
-          <Stepper label="Shortest look-back" value={minLag} min={1} max={maxLag ?? lagMax} onChange={(n) => { setMinLag(n); if (maxLag != null && maxLag < n) setMaxLag(n) }} />
-          <span>and</span>
-          <Stepper label="Longest look-back" value={maxLag} min={minLag ?? 1} max={lagMax} onChange={(n) => { setMaxLag(n); if (minLag != null && minLag > n) setMinLag(n) }} />
-          <span>days</span>
-        </div>
-      </div>
-      <p className="td-note">Uses only this collection’s data ({formatDate(plan.window.start)} – {formatDate(plan.window.end)}). A/B tests need a schedule the patient follows, so start those from New.</p>
-      {tooShort && <div className="alert alert-warn" role="alert"><Icon name="info" />{ANALYSIS_ERRORS.window_too_short} ({windowDays} days; at least 15 are needed.)</div>}
-      {err && <div className="alert alert-warn" role="alert"><Icon name="info" />{err}</div>}
-      <div className="td-inline"><button type="button" className="button primary" disabled={!ready || busy} onClick={run}>{busy ? 'Running…' : 'Run test'}</button></div>
     </div>
   )
 }
