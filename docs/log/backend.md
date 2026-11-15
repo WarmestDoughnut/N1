@@ -234,3 +234,22 @@ Format:
 - Verified: pytest 12/12; full JSON-mode smoke pass (symptoms CRUD, episode+symptom, instructions, collection
   summary, analyses incl. 422s, notes, comment/review, manual A/B alert, series symptom column, lag-30).
 - Next: push → redeploy → reset Supabase; replied to #11 earlier with locked names; FYI #11 posted.
+
+### 15:55 — v1.6 retrospective & mixed windows (FE to-backend #13/#14)
+- Done: windows may reach into the past; `delivery` + `window.past_end`/`live_start` derived on every plan;
+  approve shares past data immediately (retrospective → straight to `complete` with a `shared` event; mixed →
+  past shared, stays active); observational past tests + collection analyses run on approval; retro A/B blocked
+  unless recorded/seeded; `window_before_data` guard; consent copy names the shared past window;
+  REAL-P07 display_name → "Jordan, 34".
+- Files: backend/app/main.py (`_as_of`/`_delivery`/`_apply_delivery`, `_window_df(until=)`,
+  `_compute_results(until=)`, create_plan guards, approve rewrite, create_analysis guards, get/list_plans stamp,
+  CONTRACT_VERSION 1.6), backend/app/store.py (`_retro_sentence` + summary wording),
+  backend/app/data_loader.py (REAL display name), docs/CONTRACT.md (v1.6 §10 + changelog),
+  shared/fixtures/{plan_collection_retrospective,results_collection_retrospective,plan_mixed}.json.
+- Contract impact: implemented v1.6 (additive).
+- How to try it: create a collection/observational plan with window 2026-06-01..2026-09-28 → approve →
+  it returns status `complete` with results; `curl /api/plans/{id}` shows `delivery:"retrospective"`.
+- Verified: 12 ground-truth tests pass; live smoke of retro collection+analysis, retro observational
+  (DEMO-P01-MARIA → likely_real lag 2), retro-A/B block, window_before_data guard.
+- Next: none — handed back to FE.
+- Blockers / needs from other side: none. (Did NOT touch the assistant endpoint/assistant.py — parent owns it.)

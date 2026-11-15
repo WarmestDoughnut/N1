@@ -48,7 +48,7 @@ def _synth_real_meta(pid, df):
     """Metadata for a REAL-* participant that has no patients.json entry."""
     return {
         "id": pid,
-        "display_name": "PMData participant",
+        "display_name": "Jordan, 34",
         "condition": "Low-readiness days (self-reported)",
         "story": "Real Fitbit Versa 2 data from the PMData study. Episodes are this person's "
                  "lowest-readiness days (bottom 15% of their own scores). The verdict is unknown "

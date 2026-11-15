@@ -1,0 +1,24 @@
+{
+  "plan_id": "DEMO-COLLECT-RETRO-MARIA",
+  "type": "collection",
+  "complete": true,
+  "verdict": null,
+  "headline": "Collected 120 days of data across 1 signal(s).",
+  "patient_headline": "Your data was collected. Your clinician can review it.",
+  "collection": {
+    "n_days": 120,
+    "per_signal": {
+      "sleep_min": {
+        "days_with_data": 120,
+        "missing_pct": 0.0
+      }
+    }
+  },
+  "observational": null,
+  "intervention": null,
+  "warnings": [],
+  "null_distribution": [],
+  "series": [],
+  "model": null,
+  "collected_until": null
+}

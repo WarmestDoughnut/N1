@@ -1,4 +1,4 @@
-# API & Data Contract — v1.1
+# API & Data Contract — v1.6
 
 Source of truth for both instances. Change only via the protocol in CLAUDE.md §7.
 Bump the version above on every change and note it in the changelog at the bottom.
@@ -236,7 +236,7 @@ v1.4 added `quality` (`strong|moderate|weak`), `beats_chance` (bool), `plain` (s
 `coefficients[].label` (plain label) so the UI needn't show raw AUC / feature names.
 
 ## 6. Health
-`GET /api/health` → `{"ok": true, "contract_version": "1.5", "store": "json"|"postgres"}`
+`GET /api/health` → `{"ok": true, "contract_version": "1.6", "store": "json"|"postgres"}`
 
 ## 7. Schedule preview — `GET /api/schedule/preview`
 `?n_periods=12&period_days=6&washout_days=2&seed=42&start=2026-06-01`
@@ -316,7 +316,58 @@ isn't a controlled, randomized result. Randomized path unchanged.
 **Series (B4)**: `GET /api/patients/{id}/series?plan_id=…` is window-clipped to the plan/collection scope and
 adds symptom logs as columns keyed `symptom:<sid>` (0/1) for symptoms the plan references.
 
+## 10. Retrospective & mixed windows (v1.6 — additive)
+
+A request's window may reach into the **past** (as far back as the patient has data), the **future**, or
+both. On approval, past data is shared immediately; a purely-past request has no collection period.
+
+**Window may start in the past** (collections *and* test plans):
+- `window.start` may be any date ≥ the patient's first day of data (`patient.date_range[0]`). Starting
+  earlier → `POST /api/plans` returns `422 {"error":"window_before_data"}`.
+- Server defines "today" (`as_of`, the real date). **All demo data is historical (Jun–Sep 2026), so every
+  demo window is fully retrospective.**
+- Every plan/collection now carries derived, read-only fields (returned on create, `GET /api/plans`,
+  `GET /api/plans/{id}`):
+  - `delivery: "retrospective" | "prospective" | "mixed"`
+  - `window.past_end` = `min(end, as_of)` when the window has a past part, else `null`
+  - `window.live_start` = first future day (`max(start, as_of+1d)`) when the window has a future part, else `null`
+
+**Approval behavior** (`POST /api/plans/{id}/approve`):
+- **retrospective:** past data is shared at once → status goes **straight to `complete`** (history gains a
+  `"shared"` event before `complete`), and results are computed immediately (collection summary, or the
+  observational verdict). The patient never sees an `active`/collecting state.
+- **mixed:** the past part is shared at once (history `"shared"`, results computed on the past portion,
+  clipped at `past_end`); the plan stays `active` for the live part until `complete`/`simulate-complete`.
+- **prospective:** unchanged (today's flow).
+
+**Tests / analyses on past data — observational + predictive modeling only (NOT A/B):**
+- Observational test plans with past windows run on approval as above — no waiting. The engine and the
+  **predictive risk model** (`result.model`) run over the **entire past window** (never clipped short).
+- `POST /api/plans/{collection_id}/analyses` works once the collection is approved (any status in
+  `{active, paused, stopped, complete}`); on a pending/declined collection it returns `409 {"error":"not_in_scope"}`.
+  An **observational** analysis on a past collection surfaces the predictive `model` (indicators) alongside the verdict.
+- **A/B (intervention) requires a FUTURE window** — you cannot randomize arms over data that already happened.
+  Intervention is valid only when `delivery` is `prospective` or `mixed`; a purely-past (`retrospective`)
+  request is rejected: `POST /api/plans` and `/analyses` return `422 {"error":"intervention_requires_future"}`.
+  Seeded `DEMO-*` A/B plans were recorded prospectively, so they approve/complete normally (they're seeded,
+  not created via `POST /api/plans`).
+
+**Wizard pre-check**: `GET /api/delivery/preview?start=&end=&patient_id=` →
+`{delivery, past_end, live_start, as_of, intervention_allowed, window_before_data, first_data_day}` — lets the
+wizard classify a window before a plan exists and grey the A/B option when `intervention_allowed` is false.
+
+**Consent wording**: `patient_summary` states explicitly when past data is included
+(*"This includes your past data from … to …, which will be shared as soon as you approve."*; mixed adds the
+live-collection range).
+
 ## Changelog
+- v1.6 — additive: retrospective & mixed windows. `window.start` may reach into the past (≥ first data day;
+  else `422 window_before_data`); derived `delivery` + `window.past_end`/`live_start` on every plan; approve
+  shares past data immediately (retrospective → straight to `complete` with a `"shared"` history event; mixed
+  → past shared, stays active); analyses require an approved collection (`409 not_in_scope` otherwise);
+  A/B requires a future window (`422 intervention_requires_future` on past-only — observational + predictive
+  modeling are the only past-data analyses); `GET /api/delivery/preview` wizard pre-check; consent summary
+  names the shared past window. REAL-P07 `display_name` now reads like a person.
 - v1.5 — additive overhaul: symptoms/conditions (+ `observational.symptom_id`, `episodes.symptom_id`),
   `type:"collection"` plans + per-signal summary, `/analyses` on collections, plan `notes`,
   results `clinician_comment`/`reviewed_at`, `plan.instructions`, manual A/B (`assignment` +
