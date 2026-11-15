@@ -60,17 +60,16 @@ export function PatientPlan({ planId, data }: { planId: string; data: PatientDat
             {plan.intervention && (
               <>
                 <h3 style={{ fontSize: 18 }}>Your schedule</h3>
-                <p className="muted" style={{ marginTop: 4 }}>You'll switch between <strong>A: {plan.intervention.arm_a}</strong> and <strong>B: {plan.intervention.arm_b}</strong> in a random order, with short breaks in between.</p>
                 <PlanSchedule plan={plan} />
               </>
             )}
             <div className="big-actions">
-              <button className="button success lg" disabled={busy} onClick={() => doAction('approve', 'Approved. Thank you! You can pause or stop any time.')}><Icon name="check" /> Approve</button>
+              <button className="button success lg" disabled={busy} onClick={() => doAction('approve', 'Approved')}><Icon name="check" /> Approve</button>
               <button className="button danger lg" disabled={busy} onClick={() => setConfirm('decline')}><Icon name="x" /> Decline</button>
             </div>
           </article>
           <aside className="card">
-            <div className="card-title"><div><h3 style={{ fontSize: 18 }}>Exactly what will be shared</h3><p style={{ fontSize: 14 }}>Nothing more, and only if you approve</p></div></div>
+            <div className="card-title"><div><h3 style={{ fontSize: 18 }}>Exactly what will be shared</h3></div></div>
             <ul className="shared-list">
               {plan.signals.map((s) => (
                 <li key={s}>
@@ -81,9 +80,7 @@ export function PatientPlan({ planId, data }: { planId: string; data: PatientDat
                 </li>
               ))}
               <li><span className="ic tone-yellow"><Icon name="calendar" size={17} /></span><span>Only <strong>{formatDate(plan.window.start)}</strong> to <strong>{formatDate(plan.window.end)}</strong></span></li>
-              <li><span className="ic tone-gray"><Icon name="x" size={17} /></span><span>No location, messages, or other health data</span></li>
             </ul>
-            <div className="insight mt"><span><Icon name="shield" size={17} /></span><p><strong>You stay in control</strong>Pause or stop at any time. If you stop, data already collected for this test is kept and results are marked incomplete.</p></div>
           </aside>
         </section>
       )}
@@ -116,7 +113,7 @@ export function PatientPlan({ planId, data }: { planId: string; data: PatientDat
             </div>
           </article>
           <aside className="card">
-            <div className="card-title"><div><h3 style={{ fontSize: 18 }}>Sharing right now</h3><p style={{ fontSize: 14 }}>{plan.status === 'paused' ? 'Paused, nothing is being collected' : 'Only for this test'}</p></div></div>
+            <div className="card-title"><div><h3 style={{ fontSize: 18 }}>Sharing right now</h3></div></div>
             <ul className="shared-list">
               {plan.signals.map((s) => (
                 <li key={s}><span className={`ic ${plan.status === 'paused' ? 'tone-gray' : 'tone-purple'}`}><Icon name={SIGNAL_ICON[s] ?? 'activity'} size={17} /></span>{SIGNAL_INFO[s]?.label ?? s}</li>
@@ -125,10 +122,6 @@ export function PatientPlan({ planId, data }: { planId: string; data: PatientDat
                 <li key={d} className="muted small"><span className="ic tone-gray"><Icon name={DEVICE_ICON[d] ?? 'watch'} size={17} /></span>{(devicesQ.data ?? []).find((x) => x.id === d)?.name ?? d}</li>
               ))}
             </ul>
-            <div className="insight warn mt">
-              <span><Icon name="fastForward" size={17} /></span>
-              <p><strong>Demo mode</strong>The data is historical, so this whole test can run instantly.</p>
-            </div>
             <button className="button demo mt" style={{ width: '100%' }} disabled={busy} onClick={() => act(() => api.simulateComplete(planId), 'Test complete. Here are your results.')}>
               <Icon name="fastForward" /> Simulate complete (demo)
             </button>

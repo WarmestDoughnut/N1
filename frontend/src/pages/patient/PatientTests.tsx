@@ -5,11 +5,11 @@ import type { PatientData } from './PatientApp'
 
 export function PatientTests({ data }: { data: PatientData }) {
   const plans = [...data.plans].sort((a, b) => b.created_at.localeCompare(a.created_at))
-  const groups: { title: string; hint: string; items: Plan[] }[] = [
-    { title: 'Needs your review', hint: 'Nothing is shared unless you approve.', items: plans.filter((p) => p.status === 'pending_approval') },
-    { title: 'In progress', hint: 'You can pause or stop these at any time.', items: plans.filter((p) => p.status === 'active' || p.status === 'paused') },
-    { title: 'Finished', hint: 'See what each test found.', items: plans.filter((p) => p.status === 'complete' || p.status === 'stopped') },
-    { title: 'Declined', hint: 'Nothing was shared.', items: plans.filter((p) => p.status === 'declined') },
+  const groups: { title: string; items: Plan[] }[] = [
+    { title: 'Needs your review', items: plans.filter((p) => p.status === 'pending_approval') },
+    { title: 'In progress', items: plans.filter((p) => p.status === 'active' || p.status === 'paused') },
+    { title: 'Finished', items: plans.filter((p) => p.status === 'complete' || p.status === 'stopped') },
+    { title: 'Declined', items: plans.filter((p) => p.status === 'declined') },
   ]
   return (
     <>
@@ -29,7 +29,7 @@ export function PatientTests({ data }: { data: PatientData }) {
       )}
       {groups.filter((g) => g.items.length).map((g) => (
         <section key={g.title}>
-          <div className="section-title"><h2>{g.title}</h2><span>{g.hint}</span></div>
+          <div className="section-title"><h2>{g.title}</h2><span>{g.items.length}</span></div>
           <div className="stack">{g.items.map((p) => <TestTile key={p.id} plan={p} />)}</div>
         </section>
       ))}

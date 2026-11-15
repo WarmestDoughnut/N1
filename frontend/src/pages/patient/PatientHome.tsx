@@ -29,31 +29,15 @@ export function PatientHome({ session, data }: { session: Session; data: Patient
       {data.error && <div className="alert alert-error mb">{data.error}</div>}
 
       <section className="summary-grid" aria-label="Summary">
-        <Tile icon="bell" tone="tone-yellow" k="Needs your review" v={pending.length} s={pending.length ? 'Tap to review' : 'Nothing to review'} onClick={() => navigate(pending[0] ? `/plans/${pending[0].id}` : '/tests')} />
+        <Tile icon="bell" tone="tone-yellow" k="Needs your review" v={pending.length} s={pending.length ? 'In My tests' : 'Nothing to review'} onClick={() => navigate('/tests')} />
         <Tile icon="activity" tone="tone-purple" k="In progress" v={running.length} s={running.some((p) => p.status === 'paused') ? 'Some paused' : 'Collecting data'} onClick={() => navigate(running[0] ? `/plans/${running[0].id}` : '/tests')} />
-        <Tile icon="sparkles" tone="tone-green" k="Results ready" v={finished.length} s={finished.length ? 'See what we found' : 'None yet'} onClick={() => navigate(latest ? `/plans/${latest.id}` : '/tests')} />
+        <Tile icon="sparkles" tone="tone-green" k="Results ready" v={finished.length} s={finished.length ? 'Open latest' : 'None yet'} onClick={() => navigate(latest ? `/plans/${latest.id}` : '/tests')} />
       </section>
-
-      {pending.map((p) => (
-        <article key={p.id} className="card mb" style={{ borderColor: '#f0dcae', background: 'linear-gradient(150deg, #fffdf8, #fffaf0)' }}>
-          <div className="row-between">
-            <div className="row" style={{ gap: 14 }}>
-              <span className="summary-icon tone-yellow" style={{ margin: 0 }}><Icon name="bell" /></span>
-              <div>
-                <p className="eyebrow" style={{ color: 'var(--yellow)', margin: 0 }}>{p.clinician_name} is asking</p>
-                <h2 style={{ fontSize: 21 }}>{p.title}</h2>
-              </div>
-            </div>
-            <button className="button primary lg" onClick={() => navigate(`/plans/${p.id}`)}>Review request <Icon name="chevron" size={16} /></button>
-          </div>
-          <p className="muted" style={{ margin: '12px 0 0' }}>Nothing is shared unless you approve. It would use only: {p.signals.map((s) => SIGNAL_INFO[s]?.plain ?? s).join(', ')}, from {formatDate(p.window.start)} to {formatDate(p.window.end)}.</p>
-        </article>
-      ))}
 
       <section className="bottom-grid">
         <article className="card">
           <div className="card-title">
-            <div><h3 style={{ fontSize: 18 }}>Latest result</h3><p style={{ fontSize: 14 }}>{latest ? latest.title : 'Results appear here when a test finishes.'}</p></div>
+            <div><h3 style={{ fontSize: 18 }}>Latest result</h3>{latest && <p style={{ fontSize: 14 }}>{latest.title}</p>}</div>
             {lr && <VerdictBadge verdict={lr.verdict} patient small />}
           </div>
           {latest && lr ? (
@@ -71,23 +55,20 @@ export function PatientHome({ session, data }: { session: Session; data: Patient
         </article>
 
         <aside className="card">
-          <div className="card-title"><div><h3 style={{ fontSize: 18 }}>What you're sharing</h3><p style={{ fontSize: 14 }}>Only with tests you approved</p></div></div>
+          <div className="card-title"><div><h3 style={{ fontSize: 18 }}>What you're sharing</h3></div></div>
           {sharing.length === 0 ? (
-            <div className="insight"><span><Icon name="shield" size={17} /></span><p><strong>Nothing right now</strong>No active test is collecting your data.</p></div>
+            <p className="muted" style={{ margin: 0 }}>Nothing right now.</p>
           ) : (
-            <>
-              <ul className="shared-list">
-                {sharing.map((s) => (
-                  <li key={s}><span className="ic tone-purple"><Icon name={SIGNAL_ICON[s] ?? 'activity'} size={17} /></span>{SIGNAL_INFO[s]?.label ?? s}</li>
-                ))}
-              </ul>
-              <p className="muted small mt">You can pause or stop any test from its page.</p>
-            </>
+            <ul className="shared-list">
+              {sharing.map((s) => (
+                <li key={s}><span className="ic tone-purple"><Icon name={SIGNAL_ICON[s] ?? 'activity'} size={17} /></span>{SIGNAL_INFO[s]?.label ?? s}</li>
+              ))}
+            </ul>
           )}
           {latest && lr && (
             <div className="donut-row" style={{ borderTop: '1px solid var(--border-2)', marginTop: 14 }}>
               <ChanceDonut p={lr.p_value} />
-              <p style={{ margin: 0, fontSize: 14.5, color: '#5d5e6b' }}>How your latest result compares with random chance. Higher means less likely to be luck.</p>
+              <p style={{ margin: 0, fontSize: 14.5, color: '#5d5e6b' }}>Chance check</p>
             </div>
           )}
         </aside>
@@ -95,17 +76,6 @@ export function PatientHome({ session, data }: { session: Session; data: Patient
 
       <CareTeamStrip data={data} />
 
-      <div className="section-title"><h2>My tests</h2><span>{plans.length} total</span></div>
-      {data.loading && <div className="spinner">Loading your tests…</div>}
-      {!data.loading && plans.length === 0 && (
-        <div className="card empty">
-          <div className="summary-icon tone-purple"><Icon name="clipboard" /></div>
-          <p style={{ fontSize: 17, color: '#4c4c58' }}>You don't have any tests yet.</p>
-          <p>When your clinician sends one, it will appear here for you to review.</p>
-        </div>
-      )}
-      <div className="stack">{plans.slice(0, 4).map((p) => <TestTile key={p.id} plan={p} />)}</div>
-      {plans.length > 4 && <div className="row mt"><a className="button secondary" href="#/tests">See all tests</a></div>}
     </>
   )
 }

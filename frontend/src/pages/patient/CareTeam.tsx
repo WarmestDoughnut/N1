@@ -40,13 +40,12 @@ export function CareTeam({ connections, loading }: { connections: Connection[]; 
         <div>
           <p className="eyebrow">Care team</p>
           <h1>My clinicians</h1>
-          <span className="sub">Only clinicians you add can send you test plans. You can remove anyone, any time.</span>
         </div>
       </section>
 
       <section className="bottom-grid">
         <article className="card">
-          <div className="card-title"><div><h3 style={{ fontSize: 18 }}>Connected</h3><p style={{ fontSize: 14 }}>These clinicians can ask you to run a test</p></div></div>
+          <div className="card-title"><div><h3 style={{ fontSize: 18 }}>Connected</h3></div></div>
           {loading && !connections.length && <div className="spinner">Loading…</div>}
           {!loading && active.length === 0 && <div className="muted" style={{ padding: '8px 0' }}>No clinicians yet. Add one with their code.</div>}
           {active.map((c) => (
@@ -77,7 +76,7 @@ export function CareTeam({ connections, loading }: { connections: Connection[]; 
         </article>
 
         <aside className="card">
-          <div className="card-title"><div><h3 style={{ fontSize: 18 }}>Add a clinician</h3><p style={{ fontSize: 14 }}>Ask their office for their N1 Hub code</p></div></div>
+          <div className="card-title"><div><h3 style={{ fontSize: 18 }}>Add a clinician</h3></div></div>
           <form onSubmit={add}>
             <div className="field">
               <label htmlFor="code">Clinician code</label>
@@ -88,7 +87,6 @@ export function CareTeam({ connections, loading }: { connections: Connection[]; 
             {err && <div className="alert alert-error mb" role="alert"><Icon name="info" />{err}</div>}
             <button className="button primary lg" style={{ width: '100%' }} disabled={busy}><Icon name="plus" /> {busy ? 'Sending…' : 'Send request'}</button>
           </form>
-          <div className="insight mt"><span><Icon name="shield" size={17} /></span><p><strong>Adding a clinician shares nothing yet</strong>They can only see data from a test plan you approve, and only for that plan.</p></div>
         </aside>
       </section>
     </>
