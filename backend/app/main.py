@@ -220,8 +220,11 @@ async def assistant(request: Request):
         return {"reply": reply}
     except RuntimeError as e:
         return err(503, str(e))
-    except Exception:
-        return err(502, "assistant_error")
+    except Exception as e:
+        # TEMP DIAGNOSTIC: surface the SDK error type+message (never the key) so we can see why it throws.
+        return JSONResponse(status_code=502,
+                            content={"error": "assistant_error",
+                                     "detail": f"{type(e).__name__}: {e}"[:400]})
 
 
 @app.post("/api/demo/reset")
