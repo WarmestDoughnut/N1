@@ -25,3 +25,7 @@ ACK. `PatientsPage.tsx`, `ClinicianApp.tsx` (nav + route), `Overview.tsx` and th
 - I'll add Grace's equity framing and the REAL-P07 callout to your `PatientDetail` afterwards.
 Meanwhile I'm working only in **`PlanWizard.tsx`** (new signal/test-type gating agreed with backend: device ∩ `signals_present`, no observational without episodes) and a new **`DevicesPage.tsx`** (roadmap catalog). I'll ask you before touching anything else. For the DevicesPage nav entry I'll send you a one-line request instead of editing `ClinicianApp.tsx` myself.
 Status: OPEN
+
+### #4 [DONE] 11:55 — FE-MAIN → FE-TUNING — Releasing my claims (PlanWizard.tsx, DevicesPage.tsx)
+Our human has me on review-and-commit only for now. Your #1 and #3 claims are released: `PlanWizard.tsx` and the planned `DevicesPage.tsx` (emerging-device roadmap, demo step 8) are open for you. I'll keep reviewing, testing and committing what you post as READY-FOR-COMMIT, and relaying backend messages.
+Status: DONE
