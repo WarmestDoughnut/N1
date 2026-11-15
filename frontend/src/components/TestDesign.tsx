@@ -141,7 +141,12 @@ export function ABTimeline({ schedule, armA, armB }: { schedule: SchedulePeriod[
 }
 
 // ---------- A/B: month calendar ----------
-export function ABCalendar({ schedule, armA, armB }: { schedule: SchedulePeriod[]; armA: string; armB: string }) {
+export function ABCalendar({ schedule, armA, armB, today, breakLabel = 'Break (not counted)' }: {
+  schedule: SchedulePeriod[]; armA: string; armB: string
+  /** ISO date to ring (patient view) */
+  today?: string | null
+  breakLabel?: string
+}) {
   if (!schedule.length) return <div className="muted small">No schedule yet.</div>
   const kind = new Map<string, 'A' | 'B' | 'W'>()
   schedule.forEach((p) => {
@@ -169,7 +174,9 @@ export function ABCalendar({ schedule, armA, armB }: { schedule: SchedulePeriod[
                 {Array.from({ length: n }, (_, i) => {
                   const k = kind.get(iso(y, mo, i + 1))
                   const label = k === 'A' ? armA : k === 'B' ? armB : k === 'W' ? 'Break' : 'Not in the test'
-                  return <span key={i} className={`day ${k ? k.toLowerCase() : ''}`} title={`${formatDateShort(iso(y, mo, i + 1))}: ${label}`}>{i + 1}</span>
+                  const isToday = today === iso(y, mo, i + 1)
+                  return <span key={i} className={`day ${k ? k.toLowerCase() : ''}`} title={`${formatDateShort(iso(y, mo, i + 1))}: ${label}${isToday ? ' (today)' : ''}`}
+                    style={isToday ? { boxShadow: 'inset 0 0 0 2px #242430', fontWeight: 800 } : undefined}>{i + 1}</span>
                 })}
               </div>
             </div>
@@ -179,7 +186,8 @@ export function ABCalendar({ schedule, armA, armB }: { schedule: SchedulePeriod[
       <div className="legend">
         <span><i className="box" style={{ background: 'var(--arm-a)' }} />A · {armA}</span>
         <span><i className="box" style={{ background: 'var(--arm-b)' }} />B · {armB}</span>
-        <span><i className="box td-hatch" />Break (not counted)</span>
+        <span><i className="box td-hatch" />{breakLabel}</span>
+        {today && <span><i className="box" style={{ boxShadow: 'inset 0 0 0 2px #242430', background: '#fff' }} />Today</span>}
       </div>
     </div>
   )
