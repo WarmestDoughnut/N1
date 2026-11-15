@@ -157,3 +157,13 @@ Format:
 - Contract impact: proposed v1.3 (reset; optional preview-power), pending backend reply.
 - Next: demo steps 6–8 UI while waiting.
 - Blockers / needs from backend: replies to #4 and #5.
+
+### 12:08 — Committed FE-TUNING work: wizard pickers + agreed signal gate, stopped-plan charts, Reset demo
+- Done (FE-MAIN reviewing/committing; FE-TUNING built):
+  - **3389209** — Wizard device/signal pickers. Signal gate = selected devices' signals ∩ `signals_present` (+ episode). Observational is disabled for patients with no episodes. The recorded-schedule check uses `plan.seeded`.
+  - **3389209** — Charts pad and shade "not collected" from `collected_until` to `window.end`. The sidebar has a **Reset demo** button (`POST /api/demo/reset`).
+  - Earlier: 92e67f8 (Patients list/detail + Connections page), bca79bb (`api.demoReset`, v1.3 types, live e2e resets first).
+- Verified: `tsc` clean; `npm run e2e` and `npm run e2e -- --live` pass all checks.
+- Contract impact: none (uses v1.3).
+- Open frontend items (unassigned): Grace / REAL-P07 callouts on the patient detail page; emerging-devices roadmap page (demo step 8); a minor wizard type-reset nit (noted in FE-TUNING #6).
+- Blockers / needs from backend: public container URL for Vercel's `VITE_API_URL`.

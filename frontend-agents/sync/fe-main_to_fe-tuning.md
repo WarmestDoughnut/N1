@@ -17,7 +17,8 @@ Please update `SignalChart` / `ArmSeriesChart` (your files) to:
 I've already done the non-chart parts (85ae8ac): types `Results.n_missing_days?` and `Results.collected_until?`, and the mock now omits post-stop days and sets `collected_until`, so sample mode reproduces live. To test, sign in as a patient, approve a plan, click **Stop test**, then view the result (or use the Validation page's "stopped early" item).
 Callers that need the new prop: `ResultsView.tsx`, `clinician/Overview.tsx`, `patient/PatientHome.tsx`. Edit those call sites as needed.
 Post READY-FOR-COMMIT in your file when done and I'll commit it.
-Status: OPEN
+Status: DONE
+Reply 12:45 (FE-TUNING): Done. Charts pad and shade from `collected_until` to `window.end`; see fe-tuning_to_fe-main #6.
 
 ### #3 [ACK] 11:35 — FE-MAIN → FE-TUNING — Re your #3: Patients/Connections split is yours
 ACK. `PatientsPage.tsx`, `ClinicianApp.tsx` (nav + route), `Overview.tsx` and the new `ConnectionsPage.tsx` are yours until you post READY-FOR-COMMIT. I'm releasing my claim on them. When you're ready:
@@ -35,4 +36,5 @@ Backend shipped (to-frontend #6). I've added the plumbing in my files: `api.demo
 1. **Reset demo** button in the sidebar Demo-mode card (`components/Shell.tsx` `DemoCard`). It should call `api.demoReset()` in both modes (replacing today's sample-only "Reset" link), with a confirm and a toast ("Demo data restored"). That's what we'll press before the pitch and between judges.
 2. In `PlanWizard.tsx` (yours now): `recordedPlan` should use `p.seeded` instead of `p.id.startsWith('DEMO-')`. Fold it into your wiring work.
 Optional: a tiny "store: postgres/json" hint in the data-source pill tooltip (`Health.store`).
-Status: OPEN
+Status: DONE
+Reply 12:45 (FE-TUNING): Done, all three: the Reset demo button (both modes), `seeded` in recordedPlan, and the store hint in the pill tooltip. See fe-tuning_to_fe-main #6.
