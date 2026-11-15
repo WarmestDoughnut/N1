@@ -231,7 +231,7 @@ git add frontend/src/pages/clinician/ClinicianApp.tsx frontend/src/pages/clinici
 git commit -m "[frontend] Patient-first clinician app: patients home with per-patient counts, per-patient workspace (Overview/Tests/Data collection/Data & graphs/New), nav reduced to Patients + Connections; remove synthetic/real labels and sign-in citation line (FE-3 #9)" && \
 git pull --rebase && git push
 ```
-Status: OPEN (not committed yet, see below)
+Status: DONE (superseded by #10)
 Reply 14:25 (FE-MAIN): **Couldn't commit #9 as listed:** the committed HEAD failed to build:
 `PatientWorkspace.tsx(11,28): Cannot find module '../../components/NotesPanel'` and `(12,27) … '../../components/ReviewBox'`.
 `PatientWorkspace.tsx` on disk already imports your S3 components, which are still untracked/in progress. My pre-push gate (clean-worktree build of the committed HEAD + e2e against that build) caught it, so **nothing broken was pushed**. I backed out my local commit; your files on disk are untouched.
@@ -273,4 +273,5 @@ git add frontend/src/pages/clinician/ClinicianApp.tsx frontend/src/pages/clinici
 git commit -m "[frontend] Patient-first clinician app: patients home, per-patient workspace with tabs, notes + review box on each test; patient Latest results list and My symptoms; nav reduced to Patients + Connections; remove synthetic/real labels (FE-3 #10)" && \
 git pull --rebase && git push
 ```
-Status: OPEN
+Status: DONE
+Reply 14:39 (FE-MAIN): Committed **0bf4ceb** (your 10 files; styles.css went into 96019ab together with FE-TUNING's block, since both were final). Gate: a clean build of the committed HEAD ✓ + sample e2e against that build ✓; live e2e ✓ (incl. P08-SAM). Thanks for folding S3 in; that's exactly what unblocked it.

@@ -697,4 +697,62 @@ Asked our human directly. Decision: **the clinician assigns A/B by hand by defau
 - Not used, or any period re-assigned by hand afterwards → `assignment: "manual"`, and the result must carry `not_randomized` (backend B8; please cap at `suggestive` as proposed). The design step shows a neutral note: "Order set by hand: results will be marked as not randomized."
 - Breaks are optional and placeable (`washout_end` = the end of a break placed right after a period, else `= end`).
 - Until B8 ships, the sample-mode mock mirrors this (warning `not_randomized` + cap at `suggestive` for manual), so the UI can be shown honestly. Live 1.4 ignores `assignment`.
-Status: OPEN
+Status: DONE
+Reply 14:39 (FE-MAIN): Relayed to the backend as to-backend #12 (manual default + optional "Randomize for me"; what `assignment` means). On the cap: the backend's locked B8 is **alert, no cap** (our human's call on their side), and your #25 follows that, good. If our human wants the `suggestive` cap after all, it's a one-line backend change.
+
+### #25 [READY-FOR-COMMIT] 19:10 — FE-TUNING → FE-MAIN — Overhaul slice 5: calendar overhaul, manual A/B + optional randomize, not_randomized banner
+Per fe-main #7 item 5, our human's decision (#24) and backend B8 as locked (fe-main #8: no verdict cap, amber banner).
+- **`components/StintCalendar.tsx` (rewritten):**
+  - A **Paint** toolbar with **A · arm_a**, **B · arm_b** and **Break**. Drag across days, or click the first day then the last; a single click repeats the last length.
+  - Drag to move, drag the ends to resize, and click to **Make A / Make B / Make break / Delete**.
+  - **Unpainted days are normal days** (plain white; legend: "Normal day (usual routine, not in the test)"). A/B are solid colors and breaks are hatched, so normal vs. test days read at a glance.
+  - Breaks are optional and placeable: `washout_end` = the end of a break placed right after a period, otherwise `= end`.
+  - **"Repeat this pattern [for N weeks | until date] [back to back | spread out (normal days in between)]"** copies everything painted so far.
+  - Exports: `stintsToSchedule`, `scheduleToStints` (recorded schedules load with their breaks), `randomizeStints`, `stintStats` (`nA`, `nB`, `nBreaks`, `pairedAB`, …), and types `Stint`, `Assignment`.
+- **`pages/clinician/PlanWizard.tsx`:**
+  - Slot 3 is now "N periods painted · nA A · nB B · breaks". Slot 4 is now **Order**: "Set by hand" (default) or "Randomized". Its editor explains the trade-off and has **Randomize for me** / Flip again (one coin per consecutive pair); a later hand edit of the order switches back to manual.
+  - A neutral note under the calendar while manual: "Order set by hand: results will be marked as not randomized."
+  - Sends `intervention.assignment`. Step errors: ≥10 periods, and each arm ≥2.
+  - The recorded schedule loads as `assignment: "randomized"` (the seeds were block-randomized). Moving any period drops the recorded state, as before.
+- **`components/ResultsView.tsx`** (only the not_randomized bit, as FE-MAIN assigned): a prominent amber banner when `warnings` includes `not_randomized`, on both the clinician and patient views. FE-3: I didn't touch the model tab.
+- **`lib/util.ts`:** warning labels `not_randomized` ("Order set by hand, not randomized") and `windows_cover_most_days`.
+- **`lib/mockServer.ts`:** mirrors B8 for sample mode (`assignment: "manual"` → warning + a caveat leading both headlines; no cap).
+
+**Verified:** `npm run build` ✓.
+- Sample run, Aisha: paint A + break + B + break → "2 periods (1 A · 1 B) · 2 breaks" → Repeat for 12 weeks → "10 periods (5 A · 5 B)", Next enabled, note shown.
+  - Sent manual → the patient sees "…isn't a randomized result" and the clinician sees the amber banner + "Order set by hand, not randomized" chip.
+  - Same with "Randomize for me" → no banner, Likely real.
+- **e2e with the patch below:** sample passes every check; **live** passes every check (recorded schedule, Maria, James, Aisha Likely real, P08-SAM). No page errors.
+
+**e2e patch (required: "Fill to 12" and "Randomize A/B" are gone):**
+```diff
+--- e2e/demo.mjs
++++ e2e/demo.mjs
+@@ -91,8 +91,13 @@
+       const day0 = await page.evaluate(() => document.querySelector('.sc-day[data-date]').dataset.date)
+       const plus = (n) => new Date(Date.parse(day0 + 'T00:00:00Z') + n * 864e5).toISOString().slice(0, 10)
+       const clickDay = async (d) => { const el = await page.$(`[data-date="${d}"]`); await el.scrollIntoView(); const bb = await el.boundingBox(); await page.mouse.click(bb.x + bb.width / 2, bb.y + bb.height / 2); await sleep(250) }
+-      await clickDay(day0); await clickDay(plus(5)); await clickDay(plus(8))
+-      await click('Fill to 12 periods'); await click('Randomize A/B'); await sleep(400)
++      // Paint A (drag 6 days), then B one click later (same length), repeat that pattern for 12 weeks,
++      // and let the coin decide A/B per pair (optional, gives the full-strength result).
++      const dragDays = async (a, z) => { const box = async (d) => { const el = await page.$(`[data-date="${d}"]`); await el.scrollIntoView(); const bb = await el.boundingBox(); return [bb.x + bb.width / 2, bb.y + bb.height / 2] }; const [x1, y1] = await box(a); const [x2, y2] = await box(z); await page.mouse.move(x1, y1); await page.mouse.down(); await page.mouse.move(x2, y2, { steps: 6 }); await page.mouse.up(); await sleep(250) }
++      await click('A · ', '.sc-toolbar button'); await dragDays(day0, plus(5))
++      await click('B · ', '.sc-toolbar button'); await clickDay(plus(8))
++      await page.type('[aria-label="Weeks"]', '12'); await click('Repeat', '.sc-fill button')
++      await click('Randomize for me'); await sleep(400)
+     }
+   } else {
+     // Pattern test: nothing is pre-filled. Pick the signal and the direction (slot 2 opens by itself).
+```
+**Commit**
+```bash
+cd frontend && npm run build && cd .. && \
+git add frontend/src/components/StintCalendar.tsx frontend/src/pages/clinician/PlanWizard.tsx frontend/src/components/ResultsView.tsx \
+        frontend/src/lib/util.ts frontend/src/lib/mockServer.ts frontend/e2e/demo.mjs frontend-agents/sync/fe-tuning_to_fe-main.md && \
+git commit -m "[frontend] A/B calendar: paint A/B/break, normal days, repeat pattern, manual order + optional randomize; not_randomized banner (FE-TUNING #25)" && \
+git pull --rebase && git push
+```
+**Next:** slices 1–4: the wizard as `components/PlanWizard.tsx` with the `patient`, `kind` and `onDone` props, no patient step, symptom outcome (slot 1 dropdown + add, `observational.symptom_id`), look-back up to 30 (B9), and instructions; plus FE-3's two notes. Then 6 (collections) and 7 (DataExplorer).
+Status: DONE
+Reply 14:39 (FE-MAIN): Committed **96019ab** (+ **20234e5** for your e2e patch). Gate ✓ (clean build + sample e2e on the committed build); live e2e ✓ (recorded schedule, Maria/James/Aisha, P08-SAM).
