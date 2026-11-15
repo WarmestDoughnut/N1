@@ -2,21 +2,23 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { SchedulePeriod } from '../types'
 import { addDays, daysBetween, formatDateShort } from '../lib/util'
 import { Icon } from './Icon'
-import { StrengthMeter, strengthFor } from './TestDesign'
 
-/* A/B schedule editor: the clinician PLACES each period on a calendar (when); a coin flip per
- * consecutive pair decides which option each period gets (which). Keeping the order random is what
- * makes the block-permutation chance check valid (CLAUDE.md §3), so arms are never hand-assigned. */
+/* A/B schedule editor (overhaul fe-main #7 item 5). The clinician paints the calendar with a brush:
+ * A, B or Break. Days that aren't painted are NORMAL days (usual routine, not part of the test).
+ * Order is set by hand by default; "Randomize for me" re-flips each consecutive A/B pair with a coin,
+ * which is the only way the result keeps full randomized-trial strength (human's decision, #24). */
 
-export interface Stint { id: string; start: string; end: string; arm: 'A' | 'B' | null }
+export type StintKind = 'A' | 'B' | 'W'
+export interface Stint { id: string; start: string; end: string; arm: StintKind }
+export type Assignment = 'manual' | 'randomized'
 
 let nextId = 1
 export const newStintId = () => `st${nextId++}`
 const len = (s: { start: string; end: string }) => daysBetween(s.start, s.end) + 1
 const sortStints = (xs: Stint[]) => [...xs].sort((a, b) => a.start.localeCompare(b.start))
 const overlaps = (a: { start: string; end: string }, b: { start: string; end: string }) => a.start <= b.end && b.start <= a.end
+const periodsOf = (xs: Stint[]) => sortStints(xs).filter((x) => x.arm !== 'W')
 
-/** Most common value (ties → smallest); null for an empty list. */
 function mode(xs: number[]): number | null {
   if (!xs.length) return null
   const c = new Map<number, number>()
@@ -24,88 +26,106 @@ function mode(xs: number[]): number | null {
   return [...c.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0][0]
 }
 
-/** Shape the clinician's periods for the summary + the plan. Gaps between periods are breaks (washout). */
+/** The break placed directly after a period (adjacent), if any. */
+function breakAfter(all: Stint[], p: Stint) {
+  return all.find((x) => x.arm === 'W' && x.start === addDays(p.end, 1)) ?? null
+}
+
 export function stintStats(stints: Stint[]) {
-  const s = sortStints(stints)
-  const lengths = s.map(len)
-  const gaps = s.slice(1).map((x, i) => daysBetween(s[i].end, x.start) - 1)
-  const pairs = Math.floor(s.length / 2)
-  const randomized = s.length > 0 && s.length % 2 === 0 && s.every((x) => x.arm)
+  const all = sortStints(stints)
+  const ps = periodsOf(all)
+  const lengths = ps.map(len)
+  const breaks = all.filter((x) => x.arm === 'W')
+  const first = all[0]?.start, last = all.reduce((a, x) => (x.end > a ? x.end : a), all[0]?.end ?? '')
   return {
-    count: s.length, pairs, lengths, gaps,
-    periodDays: mode(lengths), breakDays: mode(gaps),
+    count: ps.length,
+    nA: ps.filter((x) => x.arm === 'A').length,
+    nB: ps.filter((x) => x.arm === 'B').length,
+    nBreaks: breaks.length,
+    periodDays: mode(lengths), breakDays: mode(breaks.map(len)),
     countedDays: lengths.reduce((a, b) => a + b, 0),
-    span: s.length ? daysBetween(s[0].start, s[s.length - 1].end) + 1 : 0,
-    unequalPairs: Array.from({ length: pairs }, (_, k) => k).filter((k) => lengths[2 * k] !== lengths[2 * k + 1]).map((k) => k + 1),
-    randomized,
+    span: first ? daysBetween(first, last) + 1 : 0,
+    first, last,
+    /** consecutive periods form AB/BA pairs (required for a randomized result) */
+    pairedAB: ps.length >= 2 && ps.length % 2 === 0 && Array.from({ length: ps.length / 2 }, (_, k) => ps[2 * k].arm !== ps[2 * k + 1].arm).every(Boolean),
   }
 }
 
-/** Placed + randomized periods → the contract's schedule. A period's break runs until the next period starts. */
+/** Placed periods (+ optional adjacent breaks) → the contract's schedule. */
 export function stintsToSchedule(stints: Stint[]): SchedulePeriod[] {
-  const s = sortStints(stints)
-  const lastGap = mode(s.slice(1).map((x, i) => daysBetween(s[i].end, x.start) - 1)) ?? 0
-  return s.map((x, i) => ({
-    period: i + 1, arm: x.arm as 'A' | 'B', start: x.start, end: x.end,
-    washout_end: i < s.length - 1 ? addDays(s[i + 1].start, -1) : addDays(x.end, lastGap),
+  const all = sortStints(stints)
+  return periodsOf(all).map((p, i) => ({
+    period: i + 1, arm: p.arm as 'A' | 'B', start: p.start, end: p.end,
+    washout_end: breakAfter(all, p)?.end ?? p.end,
   }))
 }
 
 export function scheduleToStints(schedule: SchedulePeriod[]): Stint[] {
-  return schedule.map((p) => ({ id: newStintId(), start: p.start, end: p.end, arm: p.arm }))
+  return schedule.flatMap((p) => {
+    const s: Stint[] = [{ id: newStintId(), start: p.start, end: p.end, arm: p.arm }]
+    if (p.washout_end > p.end) s.push({ id: newStintId(), start: addDays(p.end, 1), end: p.washout_end, arm: 'W' })
+    return s
+  })
 }
 
-/** A fresh coin flip per consecutive pair (crypto RNG when available). */
+/** Coin flip per consecutive pair of periods (crypto RNG). Breaks are untouched. */
 export function randomizeStints(stints: Stint[]): Stint[] {
-  const s = sortStints(stints)
-  const flips = new Uint8Array(Math.ceil(s.length / 2))
+  const ps = periodsOf(stints)
+  const flips = new Uint8Array(Math.ceil(ps.length / 2))
   if (globalThis.crypto?.getRandomValues) globalThis.crypto.getRandomValues(flips)
   else flips.forEach((_, i) => { flips[i] = Math.floor(Math.random() * 256) })
-  return s.map((x, i) => {
+  const armOf = new Map(ps.map((x, i) => {
     const bFirst = (flips[Math.floor(i / 2)] & 1) === 1
-    return { ...x, arm: (i % 2 === 0) === bFirst ? 'B' : 'A' }
-  })
+    return [x.id, ((i % 2 === 0) === bFirst ? 'B' : 'A') as StintKind]
+  }))
+  return sortStints(stints).map((x) => (armOf.has(x.id) ? { ...x, arm: armOf.get(x.id)! } : x))
 }
 
 type Drag =
   | { mode: 'create'; origin: string; current: string; moved: boolean }
   | { mode: 'move' | 'resize-start' | 'resize-end'; id: string; origin: string; current: string; moved: boolean }
 
-const FILLS = [10, 12, 16]
+const COLORS: Record<StintKind, { bg: string; fg: string }> = {
+  A: { bg: 'var(--arm-a)', fg: '#fff' },
+  B: { bg: 'var(--arm-b)', fg: '#2b1503' },
+  W: { bg: 'repeating-linear-gradient(45deg, #c9c9d6, #c9c9d6 3px, #ececf2 3px, #ececf2 6px)', fg: '#3c3c47' },
+}
 
-export function StintCalendar({ range, stints, onChange, armA, armB }: {
-  /** the patient's data range: periods can only be placed inside it */
+export function StintCalendar({ range, stints, onChange, armA, armB, assignment, onAssignment }: {
   range: { start: string; end: string }
   stints: Stint[]; onChange: (s: Stint[]) => void; armA: string; armB: string
+  assignment: Assignment; onAssignment: (a: Assignment) => void
 }) {
   const sorted = useMemo(() => sortStints(stints), [stints])
+  const [brush, setBrush] = useState<StintKind>('A')
   const [drag, setDrag] = useState<Drag | null>(null)
   const [pending, setPending] = useState<string | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
+  const [repMode, setRepMode] = useState<'until' | 'weeks'>('weeks')
+  const [repWeeks, setRepWeeks] = useState('')
+  const [repUntil, setRepUntil] = useState('')
+  const [rhythm, setRhythm] = useState<'back' | 'spread'>('back')
   const gridRef = useRef<HTMLDivElement>(null)
   const st = stintStats(sorted)
+  const name = (k: StintKind) => (k === 'A' ? `A · ${armA}` : k === 'B' ? `B · ${armB}` : 'Break')
 
-  /** A pair keeps its coin flip only while both its periods keep their positions; other pairs need randomizing again. */
-  const commit = (next: Stint[]) => {
-    const n = sortStints(next)
-    let p = 0
-    while (p < n.length && p < sorted.length && n[p].id === sorted[p].id) p++
-    const keep = Math.floor(p / 2) * 2
-    onChange(n.map((x, i) => (i < keep ? x : { ...x, arm: null })))
+  /** content changes (add/remove/re-assign) make the order hand-set; moves/resizes don't */
+  const commit = (next: Stint[], orderChanged: boolean) => {
+    onChange(sortStints(next))
+    if (orderChanged && assignment === 'randomized') onAssignment('manual')
     setNote(null)
   }
-
   const valid = (cand: { start: string; end: string }, exceptId?: string) =>
     cand.start >= range.start && cand.end <= range.end && cand.start <= cand.end &&
     sorted.every((x) => x.id === exceptId || !overlaps(x, cand))
 
-  /** Length to use for a single click: the pair partner's length, else the last period's. */
-  const defaultLen = (day: string) => {
-    if (!sorted.length) return null
-    const before = sorted.filter((x) => x.end < day)
-    if (before.length % 2 === 1) return len(before[before.length - 1])
-    return len(sorted[sorted.length - 1])
+  /** single-click length: the last stint of the same brush, else the last period */
+  const defaultLen = () => {
+    const same = [...sorted].reverse().find((x) => x.arm === brush)
+    if (same) return len(same)
+    const p = [...sorted].reverse().find((x) => x.arm !== 'W')
+    return brush === 'W' ? null : p ? len(p) : null
   }
 
   const candidate = (d: Drag): { start: string; end: string; id?: string } | null => {
@@ -117,8 +137,11 @@ export function StintCalendar({ range, stints, onChange, armA, armB }: {
     if (d.mode === 'resize-start') return { id: s.id, start: d.current <= s.end ? d.current : s.end, end: s.end }
     return { id: s.id, start: s.start, end: d.current >= s.start ? d.current : s.start }
   }
-
   const dateAt = (x: number, y: number) => (document.elementFromPoint(x, y) as HTMLElement | null)?.closest<HTMLElement>('[data-date]')?.dataset.date ?? null
+  const add = (c: { start: string; end: string }) => {
+    if (valid(c)) commit([...sorted, { id: newStintId(), ...c, arm: brush }], brush !== 'W')
+    else setNote('Days can’t overlap another period or go past the patient’s data.')
+  }
 
   const onPointerDown = (e: React.PointerEvent) => {
     const date = (e.target as HTMLElement).closest<HTMLElement>('[data-date]')?.dataset.date
@@ -141,102 +164,116 @@ export function StintCalendar({ range, stints, onChange, armA, armB }: {
     setDrag(null)
     if (!d) return
     if (d.mode === 'create') {
-      if (d.moved) {
-        const c = candidate(d)!
-        if (valid(c)) { commit([...sorted, { id: newStintId(), ...c, arm: null }]); setPending(null) } else setNote('Periods can’t overlap or go past the patient’s data.')
-        return
-      }
-      // a click on an empty day
+      if (d.moved) { add(candidate(d)!); setPending(null); return }
       if (pending) {
         const c = pending <= d.origin ? { start: pending, end: d.origin } : { start: d.origin, end: pending }
-        setPending(null)
-        if (valid(c)) commit([...sorted, { id: newStintId(), ...c, arm: null }]); else setNote('Periods can’t overlap or go past the patient’s data.')
-        return
+        setPending(null); add(c); return
       }
-      const L = defaultLen(d.origin)
-      if (L == null) { setPending(d.origin); setNote('Now click the last day of this period (or drag across the days).'); return }
+      const L = defaultLen()
+      if (L == null) { setPending(d.origin); setNote('Now click the last day (or drag across the days).'); return }
       const c = { start: d.origin, end: addDays(d.origin, L - 1) }
-      if (valid(c)) commit([...sorted, { id: newStintId(), ...c, arm: null }])
-      else { setPending(d.origin); setNote('A full-length period doesn’t fit here. Click its last day.') }
+      if (valid(c)) add(c)
+      else { setPending(d.origin); setNote('That length doesn’t fit here. Click the last day.') }
       return
     }
     if (!d.moved) { setSelected(selected === d.id ? null : d.id); return }
     const c = candidate(d)!
-    if (valid(c, d.id)) commit(sorted.map((x) => (x.id === d.id ? { ...x, start: c.start, end: c.end } : x)))
-    else setNote('Periods can’t overlap or go past the patient’s data.')
+    if (valid(c, d.id)) commit(sorted.map((x) => (x.id === d.id ? { ...x, start: c.start, end: c.end } : x)), false)
+    else setNote('Days can’t overlap another period or go past the patient’s data.')
   }
 
-  const remove = (id: string) => { commit(sorted.filter((x) => x.id !== id)); setSelected(null) }
+  const remove = (id: string) => { commit(sorted.filter((x) => x.id !== id), true); setSelected(null) }
+  const reassign = (id: string, arm: StintKind) => commit(sorted.map((x) => (x.id === id ? { ...x, arm } : x)), true)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!selected || !(e.key === 'Delete' || e.key === 'Backspace')) return
       const t = e.target as HTMLElement | null
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return
       remove(selected)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   })
 
-  /** "Repeat this rhythm": continue the first pair's lengths and break until `target` periods. */
-  const fillTo = (target: number) => {
-    if (sorted.length < 2) return
-    const L = [len(sorted[0]), len(sorted[1])]
-    const gap = Math.max(0, daysBetween(sorted[0].end, sorted[1].start) - 1)
+  /** Repeat everything placed so far (the pattern) until a date / for N weeks. */
+  const repeat = () => {
+    if (!sorted.length) return
+    const pStart = sorted[0].start
+    const pEnd = sorted.reduce((a, x) => (x.end > a ? x.end : a), sorted[0].end)
+    const span = daysBetween(pStart, pEnd) + 1
+    const step = rhythm === 'back' ? span : span * 2 // spread out: one pattern-length of normal days between repeats
+    const limit = repMode === 'until' ? repUntil : repWeeks ? addDays(pStart, Number(repWeeks) * 7 - 1) : ''
+    if (!limit) { setNote(repMode === 'until' ? 'Pick an end date.' : 'Enter the number of weeks.'); return }
+    const end = limit < range.end ? limit : range.end
+    const base = sorted
     const out = [...sorted]
-    while (out.length < target) {
-      const last = out[out.length - 1]
-      const start = addDays(last.end, gap + 1)
-      const end = addDays(start, L[out.length % 2] - 1)
-      if (end > range.end) break
-      out.push({ id: newStintId(), start, end, arm: null })
+    for (let k = 1; ; k++) {
+      const shift = step * k
+      const copy = base.map((x) => ({ id: newStintId(), start: addDays(x.start, shift), end: addDays(x.end, shift), arm: x.arm }))
+      if (copy.some((x) => x.end > end)) break
+      if (copy.some((c) => out.some((x) => overlaps(x, c)))) break
+      out.push(...copy)
     }
-    commit(out)
-    if (out.length < target) setNote(`Only ${out.length} periods fit before the patient’s data ends (${formatDateShort(range.end)}).`)
+    if (out.length === sorted.length) { setNote('The pattern doesn’t fit again before that date.'); return }
+    commit(out, true)
+    if (limit > range.end) setNote(`Stopped at the end of the patient’s data (${formatDateShort(range.end)}).`)
   }
 
   // ----- render -----
   const preview = drag && drag.moved ? candidate(drag) : null
   const previewOk = preview ? valid(preview, 'id' in preview ? preview.id : undefined) : true
-  const stintOf = new Map<string, { s: Stint; i: number }>()
-  sorted.forEach((s, i) => { for (let d = s.start; d <= s.end; d = addDays(d, 1)) stintOf.set(d, { s, i }) })
-  const first = sorted[0]?.start, last = sorted[sorted.length - 1]?.end
+  const stintOf = new Map<string, { s: Stint; n: number }>()
+  const ps = periodsOf(sorted)
+  sorted.forEach((s) => { const n = ps.indexOf(s); for (let d = s.start; d <= s.end; d = addDays(d, 1)) stintOf.set(d, { s, n }) })
   const months: Date[] = []
   const r0 = new Date(range.start + 'T00:00:00'), r1 = new Date(range.end + 'T00:00:00')
   for (let m = new Date(r0.getFullYear(), r0.getMonth(), 1); m <= r1; m = new Date(m.getFullYear(), m.getMonth() + 1, 1)) months.push(m)
   const iso = (y: number, mo: number, d: number) => `${y}-${String(mo + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
   const sel = sorted.find((x) => x.id === selected)
-  const selIdx = sel ? sorted.indexOf(sel) : -1
 
   return (
     <div className="sc">
       <div className="sc-toolbar">
-        <span className="muted small">
-          {st.count === 0
-            ? 'Drag across days to place a period (or click its first day, then its last). Gaps between periods become breaks.'
-            : `${st.count} period${st.count === 1 ? '' : 's'} placed · ${st.pairs} complete pair${st.pairs === 1 ? '' : 's'}${st.count % 2 ? ' · add one more to finish the last pair' : ''}`}
-        </span>
-        {st.count > 0 && <button type="button" className="link-btn" onClick={() => { commit([]); setSelected(null); setPending(null) }}>Clear all</button>}
+        <div className="row" style={{ gap: 6 }} role="radiogroup" aria-label="Paint">
+          <span className="td-slot-label" style={{ marginRight: 4 }}>Paint</span>
+          {(['A', 'B', 'W'] as StintKind[]).map((k) => (
+            <button key={k} type="button" role="radio" aria-checked={brush === k} onClick={() => { setBrush(k); setPending(null) }}
+              className="button sm" style={{
+                background: brush === k ? COLORS[k].bg : '#fff', color: brush === k ? COLORS[k].fg : '#3c3c47',
+                border: `2px solid ${brush === k ? '#242430' : 'var(--border)'}`, fontWeight: 700, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>{name(k)}</button>
+          ))}
+        </div>
+        {sorted.length > 0 && <button type="button" className="link-btn" onClick={() => { commit([], true); setSelected(null); setPending(null) }}>Clear all</button>}
       </div>
+      <span className="muted small">
+        {sorted.length === 0
+          ? 'Pick A, B or Break, then drag across days (or click the first day, then the last). Unpainted days are normal days.'
+          : `${st.count} period${st.count === 1 ? '' : 's'} (${st.nA} A · ${st.nB} B)${st.nBreaks ? ` · ${st.nBreaks} break${st.nBreaks > 1 ? 's' : ''}` : ''} · click a period to change or delete it`}
+      </span>
 
-      {st.count >= 2 && (
+      {sorted.length > 0 && (
         <div className="sc-fill">
-          <span className="td-slot-label">Repeat the first pair’s rhythm ({len(sorted[0])}-day periods{daysBetween(sorted[0].end, sorted[1].start) - 1 > 0 ? `, ${daysBetween(sorted[0].end, sorted[1].start) - 1}-day breaks` : ''})</span>
-          <div className="row" style={{ gap: 8 }}>
-            {FILLS.map((n) => {
-              const s = strengthFor(n)
-              return (
-                <button key={n} type="button" className="button secondary sm sc-fill-btn" disabled={st.count >= n} onClick={() => fillTo(n)}>
-                  Fill to {n} periods <StrengthMeter bars={s.bars} />
-                </button>
-              )
-            })}
+          <span className="td-slot-label">Repeat this pattern</span>
+          <div className="td-inline" style={{ fontSize: 14, fontWeight: 600 }}>
+            <select aria-label="Repeat until or for" value={repMode} onChange={(e) => setRepMode(e.target.value as 'until' | 'weeks')} style={{ width: 'auto' }}>
+              <option value="weeks">for</option>
+              <option value="until">until</option>
+            </select>
+            {repMode === 'weeks'
+              ? <><input aria-label="Weeks" type="number" min={1} max={52} value={repWeeks} placeholder="–" onChange={(e) => setRepWeeks(e.target.value)} style={{ width: 80 }} /><span>weeks in total</span></>
+              : <input aria-label="Repeat until" type="date" value={repUntil} min={st.last} max={range.end} onChange={(e) => setRepUntil(e.target.value)} style={{ width: 'auto' }} />}
+            <select aria-label="Rhythm" value={rhythm} onChange={(e) => setRhythm(e.target.value as 'back' | 'spread')} style={{ width: 'auto' }}>
+              <option value="back">back to back</option>
+              <option value="spread">spread out (normal days in between)</option>
+            </select>
+            <button type="button" className="button secondary sm" onClick={repeat}><Icon name="calendar" size={14} /> Repeat</button>
           </div>
         </div>
       )}
 
       <div ref={gridRef} className={`sc-months ${drag ? 'dragging' : ''}`} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}
-        onPointerCancel={() => setDrag(null)} role="grid" aria-label="Place A/B periods">
+        onPointerCancel={() => setDrag(null)} role="grid" aria-label="Paint A/B periods">
         {months.map((m) => {
           const y = m.getFullYear(), mo = m.getMonth()
           const n = new Date(y, mo + 1, 0).getDate()
@@ -252,22 +289,16 @@ export function StintCalendar({ range, stints, onChange, armA, armB }: {
                   const hit = stintOf.get(d)
                   const moving = drag && drag.mode !== 'create' && drag.moved && hit?.s.id === drag.id
                   const inPrev = preview && d >= preview.start && d <= preview.end
-                  const gap = !hit && first && last && d > first && d < last
-                  const cls = [
-                    'day sc-day',
-                    out && 'out',
-                    hit && !moving && (hit.s.arm ? hit.s.arm.toLowerCase() : 'p'),
-                    hit && !moving && d === hit.s.start && 'first',
-                    hit && !moving && d === hit.s.end && 'last',
-                    hit && hit.s.id === selected && 'sel',
-                    gap && !inPrev && 'w',
-                    inPrev && (previewOk ? 'prev' : 'bad'),
-                    pending === d && 'pending',
-                  ].filter(Boolean).join(' ')
+                  const k = hit && !moving ? hit.s.arm : null
+                  const style: React.CSSProperties = inPrev
+                    ? { background: previewOk ? COLORS[drag?.mode === 'create' ? brush : (hit?.s.arm ?? brush)].bg : '#fde4e5', opacity: 0.6, color: '#242430' }
+                    : k ? { background: COLORS[k].bg, color: COLORS[k].fg, fontWeight: 700 } : {}
+                  const cls = ['day sc-day', out && 'out', k && 'p', k && d === hit!.s.start && 'first', k && d === hit!.s.end && 'last',
+                    hit && hit.s.id === selected && 'sel', pending === d && 'pending', !k && !out && !inPrev && 'normal'].filter(Boolean).join(' ')
                   return (
-                    <span key={d} data-date={out ? undefined : d} className={cls}
-                      title={hit ? `Period ${hit.i + 1} (pair ${Math.floor(hit.i / 2) + 1})${hit.s.arm ? `: ${hit.s.arm === 'A' ? armA : armB}` : ''} · ${formatDateShort(hit.s.start)}–${formatDateShort(hit.s.end)}` : out ? 'Outside the patient’s data' : formatDateShort(d)}>
-                      {hit && !moving && d === hit.s.start ? <b>{hit.i + 1}</b> : i + 1}
+                    <span key={d} data-date={out ? undefined : d} className={cls} style={style}
+                      title={hit ? `${hit.s.arm === 'W' ? 'Break' : `Period ${hit.n + 1}: ${name(hit.s.arm)}`} · ${formatDateShort(hit.s.start)}–${formatDateShort(hit.s.end)}` : out ? 'Outside the patient’s data' : `${formatDateShort(d)} · normal day`}>
+                      {k && k !== 'W' && d === hit!.s.start ? <b>{hit!.n + 1}</b> : i + 1}
                     </span>
                   )
                 })}
@@ -280,21 +311,20 @@ export function StintCalendar({ range, stints, onChange, armA, armB }: {
       {note && <div className="small" style={{ color: 'var(--yellow)' }}>{note}</div>}
       {sel && (
         <div className="sc-selected">
-          <span><strong>Period {selIdx + 1}</strong> (pair {Math.floor(selIdx / 2) + 1}) · {formatDateShort(sel.start)} – {formatDateShort(sel.end)} · {len(sel)} day{len(sel) > 1 ? 's' : ''}{sel.arm ? ` · ${sel.arm === 'A' ? armA : armB}` : ''}</span>
-          <span className="muted small">Drag it to move, drag its first or last day to resize.</span>
-          <button type="button" className="button ghost sm" onClick={() => remove(sel.id)}><Icon name="x" size={14} /> Delete</button>
-        </div>
-      )}
-      {st.unequalPairs.length > 0 && (
-        <div className="small" style={{ color: 'var(--yellow)' }}>
-          Pair{st.unequalPairs.length > 1 ? 's' : ''} {st.unequalPairs.join(', ')} {st.unequalPairs.length > 1 ? 'have' : 'has'} periods of different lengths. Equal lengths within a pair compare like with like.
+          <span><strong>{sel.arm === 'W' ? 'Break' : `Period ${ps.indexOf(sel) + 1}`}</strong> · {formatDateShort(sel.start)} – {formatDateShort(sel.end)} · {len(sel)} day{len(sel) > 1 ? 's' : ''}</span>
+          <span className="row" style={{ gap: 6 }}>
+            {(['A', 'B', 'W'] as StintKind[]).filter((k) => k !== sel.arm).map((k) => (
+              <button key={k} type="button" className="button secondary sm" onClick={() => reassign(sel.id, k)}>Make {k === 'W' ? 'break' : k}</button>
+            ))}
+            <button type="button" className="button ghost sm" onClick={() => remove(sel.id)}><Icon name="x" size={14} /> Delete</button>
+          </span>
         </div>
       )}
       <div className="legend">
-        <span><i className="box" style={{ background: '#cfcfda' }} />Placed (not randomized)</span>
-        <span><i className="box" style={{ background: 'var(--arm-a)' }} />A · {armA}</span>
-        <span><i className="box" style={{ background: 'var(--arm-b)' }} />B · {armB}</span>
-        <span><i className="box td-hatch" />Break (not counted)</span>
+        <span><i className="box" style={{ background: COLORS.A.bg }} />A · {armA}</span>
+        <span><i className="box" style={{ background: COLORS.B.bg }} />B · {armB}</span>
+        <span><i className="box" style={{ background: COLORS.W.bg }} />Break (not counted)</span>
+        <span><i className="box" style={{ background: '#fff', border: '1px solid #d6d6de' }} />Normal day (usual routine, not in the test)</span>
       </div>
     </div>
   )

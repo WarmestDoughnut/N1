@@ -114,6 +114,8 @@ export const WARNING_INFO: Record<string, string> = {
   few_episodes: 'Few episodes recorded',
   multiple_lags_tested: 'Several lags tested (p-value corrected)',
   too_few_periods: 'Too few A/B blocks (need at least 5)',
+  not_randomized: 'Order set by hand, not randomized',
+  windows_cover_most_days: 'Look-back windows cover most days',
 }
 
 export function warningLabel(w: Warning): string {

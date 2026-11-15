@@ -64,6 +64,11 @@ function ClinicianResults({ results, plan, aside }: { results: Results; plan?: P
           <p className="headline">{results.headline}</p>
         </div>
         <p className="muted small" style={{ margin: '12px 0 0' }}>{VERDICT_INFO[results.verdict]?.blurb}</p>
+        {results.warnings.includes('not_randomized') && (
+          <div className="alert alert-warn mt" role="note" style={{ borderWidth: 2, fontWeight: 600 }}>
+            <Icon name="info" /><span>Not a randomized result. The A/B order was set by hand, so other changes in the patient's life could explain the difference. Treat it as a lead to discuss, not as a controlled-trial result.</span>
+          </div>
+        )}
         {!results.complete && (
           <div className="alert alert-warn mt"><Icon name="info" /><span>This plan was stopped early. Results use only the data collected before it stopped, so they are incomplete.</span></div>
         )}
@@ -282,6 +287,11 @@ function PatientResults({ results, plan }: { results: Results; plan?: Plan | nul
           <VerdictBadge verdict={results.verdict} patient />
         </div>
         <p className="headline" style={{ marginTop: 14, fontSize: 21, lineHeight: 1.45 }}>{results.patient_headline}</p>
+        {results.warnings.includes('not_randomized') && (
+          <div className="alert alert-warn mt" role="note" style={{ borderWidth: 2, fontWeight: 600 }}>
+            <Icon name="info" /><span>Your clinician chose which days were A and which were B, so this isn't a randomized result. Other things going on could explain the difference.</span>
+          </div>
+        )}
         {!results.complete && <div className="alert alert-warn mt"><Icon name="info" /><span>You stopped this test early, so these results are incomplete.</span></div>}
       </div>
 

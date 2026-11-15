@@ -344,23 +344,29 @@ function computeIntervention(plan: Plan, incomplete: boolean): Results {
   const p = N_PERM ? nulls.filter((x) => sign * x >= sign * eff - 1e-9).length / N_PERM : 1
   const enoughBlocks = k >= 5
   const enough = a.length >= 2 && b.length >= 2 && enoughBlocks && missing / Math.max(1, total) <= 0.4
+  // v1.5 B8 (mirrored until the backend ships it): a hand-picked A/B order isn't a randomized trial.
+  // No verdict cap (human: "allow both + alert"); warning + a caveat leading the headlines.
+  const manual = (cfg as { assignment?: string }).assignment === 'manual'
   const verdict = verdictFor(p, eff, sign * eff > 0, enough)
   const warnings: string[] = []
+  if (manual) warnings.push('not_randomized')
   if (incomplete) warnings.push('incomplete_plan')
   if (!enoughBlocks) warnings.push('too_few_periods')
   if (total && missing / total >= 0.05) warnings.push('missing_data')
   const sig = SIGNAL_INFO[cfg.outcome_signal]
-  const headline = enough
+  const caveat = manual ? 'Order set by hand, not randomized. ' : ''
+  const headline = caveat + (enough
     ? `${sig.label} was ${Math.abs(eff).toFixed(0)}% ${eff >= 0 ? 'higher' : 'lower'} on "${cfg.arm_b}" than on "${cfg.arm_a}".`
-    : `Only ${k} A/B block${k === 1 ? '' : 's'} — at least 5 are needed to judge.`
+    : `Only ${k} A/B block${k === 1 ? '' : 's'} — at least 5 are needed to judge.`)
   const patient_headline = {
     likely_real: `Your ${sig.plain} was ${eff >= 0 ? 'better' : 'worse'} during "${cfg.arm_b}" periods. Worth discussing with your clinician.`,
     suggestive: `"${cfg.arm_b}" may have made a difference to your ${sig.plain}, but it isn't clear yet. Worth discussing with your clinician.`,
     probably_chance: `Your ${sig.plain} was about the same with and without "${cfg.arm_b}". Worth discussing with your clinician.`,
     not_enough_data: `There isn't enough data yet to tell. Worth discussing with your clinician.`,
   }[verdict]
+  const patientHeadline = manual ? `Your clinician chose the order of these periods, so this isn't a randomized result. ${patient_headline}` : patient_headline
   return {
-    plan_id: plan.id, type: 'intervention', complete: !incomplete, verdict, headline, patient_headline,
+    plan_id: plan.id, type: 'intervention', complete: !incomplete, verdict, headline, patient_headline: patientHeadline,
     effect_pct: round1(eff), p_value: round3(p), n_permutations: N_PERM, n_episodes: null, n_days: cut.length, warnings,
     n_missing_days: missing, collected_until: incomplete ? cut[cut.length - 1]?.date ?? null : null,
     observational: null,
