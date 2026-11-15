@@ -252,7 +252,7 @@ function computeObservational(plan: Plan, incomplete: boolean): Results {
   const missingFrac = vals.slice(0, collected).filter((v) => v == null).length / Math.max(1, collected)
   const warnings: string[] = []
   if (incomplete) warnings.push('incomplete_plan')
-  if (missingFrac > 0.05) warnings.push('missing_data')
+  if (missingFrac >= 0.05) warnings.push('missing_data') // backend rule: warn at ≥5% (to-frontend #4)
   if (epIdx.length < 8) warnings.push('few_episodes')
   if (lags.length > 1) warnings.push('multiple_lags_tested')
   const enough = epIdx.length >= 5 && missingFrac <= 0.4
@@ -270,12 +270,15 @@ function computeObservational(plan: Plan, incomplete: boolean): Results {
     not_enough_data: `There isn't enough data yet to tell. Worth discussing with your clinician.`,
   }[verdict]
 
-  const series: ResultSeriesPoint[] = rows.map((r, i) => ({
+  // Like live: a stopped plan's series ends at collected_until (later days omitted, not null).
+  const series: ResultSeriesPoint[] = rows.slice(0, collected).map((r, i) => ({
     date: r.date, value: vals[i], episode: eps[i], arm: null, in_window: bestObs.inWin[i] && !eps[i],
   }))
+  const n_missing_days = vals.slice(0, collected).filter((v) => v == null).length
+  const collected_until = incomplete ? rows[collected - 1]?.date ?? null : null
   return {
     plan_id: plan.id, type: 'observational', complete: !incomplete, verdict, headline, patient_headline,
-    effect_pct: best.effect_pct, p_value: best.p_value, n_permutations: N_PERM, n_episodes: epIdx.length, n_days: n, warnings,
+    effect_pct: best.effect_pct, p_value: best.p_value, n_permutations: N_PERM, n_episodes: epIdx.length, n_days: n, warnings, n_missing_days, collected_until,
     observational: { best_lag_days: best.lag_days, lag_scan, pre_episode_mean: round1(bestObs.m1), baseline_mean: round1(bestObs.m0) },
     intervention: null, null_distribution: nullMax.slice(0, 500).map(round1), series, model: mockModel(plan, verdict),
   }
@@ -307,8 +310,12 @@ function computeIntervention(plan: Plan, incomplete: boolean): Results {
       const r = byDate.get(d)
       series.push({ date: d, value: used && r ? ((r[cfg.outcome_signal] ?? null) as number | null) : null, episode: r?.episode ?? 0, arm: 'washout', in_window: false })
     }
-    if (used && vs.length) period_means.push({ period: p.period, arm: p.arm, mean: round1(mean(vs)) })
+    // backend rule: a period needs ≥50% of its days with readings, else its mean counts as missing
+    if (used && vs.length >= 0.5 * cfg.period_days) period_means.push({ period: p.period, arm: p.arm, mean: round1(mean(vs)) })
   }
+  // Like live: a stopped plan's series ends after the last collected period (later days omitted).
+  const lastUsed = periods[periods.length - 1]
+  const cut = incomplete && lastUsed ? series.filter((pt) => pt.date <= lastUsed.washout_end) : series
   const a = period_means.filter((x) => x.arm === 'A').map((x) => x.mean)
   const b = period_means.filter((x) => x.arm === 'B').map((x) => x.mean)
   const mean_a = mean(a), mean_b = mean(b)
@@ -339,6 +346,7 @@ function computeIntervention(plan: Plan, incomplete: boolean): Results {
   const warnings: string[] = []
   if (incomplete) warnings.push('incomplete_plan')
   if (!enoughBlocks) warnings.push('too_few_periods')
+  if (total && missing / total >= 0.05) warnings.push('missing_data')
   const sig = SIGNAL_INFO[cfg.outcome_signal]
   const headline = enough
     ? `${sig.label} was ${Math.abs(eff).toFixed(0)}% ${eff >= 0 ? 'higher' : 'lower'} on "${cfg.arm_b}" than on "${cfg.arm_a}".`
@@ -351,10 +359,11 @@ function computeIntervention(plan: Plan, incomplete: boolean): Results {
   }[verdict]
   return {
     plan_id: plan.id, type: 'intervention', complete: !incomplete, verdict, headline, patient_headline,
-    effect_pct: round1(eff), p_value: round3(p), n_permutations: N_PERM, n_episodes: null, n_days: series.length, warnings,
+    effect_pct: round1(eff), p_value: round3(p), n_permutations: N_PERM, n_episodes: null, n_days: cut.length, warnings,
+    n_missing_days: missing, collected_until: incomplete ? cut[cut.length - 1]?.date ?? null : null,
     observational: null,
     intervention: { mean_a: round1(mean_a), mean_b: round1(mean_b), effect_pct: round1(eff), n_periods_a: a.length, n_periods_b: b.length, period_means },
-    null_distribution: nulls.slice(0, 500).map(round1), series, model: null,
+    null_distribution: nulls.slice(0, 500).map(round1), series: cut, model: null,
   }
 }
 

@@ -198,6 +198,10 @@ export interface Results {
   n_episodes: number | null
   n_days: number
   warnings: Warning[]
+  /** v1.2: days with no reading (observational: window days; intervention: scheduled non-washout days) */
+  n_missing_days?: number
+  /** v1.2: stopped-early plans are cut here; later days are omitted from `series`. null when complete. */
+  collected_until?: string | null
   observational: ObservationalResult | null
   intervention: InterventionResult | null
   null_distribution: number[]
