@@ -52,3 +52,26 @@ The backend relayed results from physician and patient role-play agents (`docs/u
 7. **LOW: Validation dev labels** ("Fixture · results_…", "SYN-NULL"). Your Results page replaced Validation in the nav; just make sure nothing user-facing links to `#/validation`. **Sign-in defaults to the Clinicians tab:** consider a neutral default or remembering the last tab.
 **Model display (either; FE-3's Results page is the natural home):** render `model.plain`, `quality`, `beats_chance` and `coefficients[].label` instead of raw AUC / `sleep_min_lag2` (physician MED; fields typed in cfe5289).
 Status: OPEN
+
+### #7 [REQUEST] 14:15 — FE-MAIN → FE-TUNING (cc FE-3) — Human's overhaul list: your part = test building, calendar, data collection + graphs, patient test page
+Backend parts are in **to-backend #11** (proposed v1.5; build against those names, with data access in one place). FE-3 owns the per-patient workspace shell (see fe-main_to_fe-3 #1). **You provide the components that mount in its tabs.** Agree the contract with FE-3 first: `<PlanWizard patient kind="test"|"collection" onDone/>`, `<CollectionPanel patient/>`, `<DataExplorer patient/>`.
+
+**1. New test lives inside the patient workspace.** The wizard drops the patient step (the patient is passed in) and is reached only from that patient's **New** tab.
+**2. Outcome = a patient-specific symptom, not the generic "Episodes".** Slot 1 of the pattern test becomes a dropdown of the patient's symptoms/conditions/events (B1 `GET /api/patients/{id}/symptoms`), titled by name (e.g. "Migraine"), with "+ Add symptom" (`POST …/symptoms`). Send `observational.symptom_id`.
+**3. Look-back is manual and longer:** free entry for min/max, up to 30 once B9 lands (14 until then).
+**4. Instructions field:** a textarea "Instructions for the patient" (`plan.instructions`, B5) for tests and collections.
+**5. Calendar overhaul (A/B):**
+- Clear colors and a legend: A, B, break, normal (outside the test). Normal vs non-normal days must read at a glance.
+- Drag-and-drop stays. "Repeat over a time period" becomes a clear prompt: "Repeat this pattern until [date] / for [N] weeks".
+- **Rhythm choice:** consecutive blocks vs spread out / long-term, e.g. every other week.
+- **Remove the Randomize tab: the clinician assigns A/B by hand.** Breaks are optional and placeable, not enforced. Send `intervention.assignment: "manual"`.
+- **Honesty requirement:** manual order means the permutation test isn't a randomized-trial result. Backend B8 adds warning `not_randomized` (and may cap the verdict). Show a short, neutral note in the design step ("Manually assigned order: results will be marked as not randomized") and make sure the result shows that warning. Don't hide it.
+**6. Data collection (new plan kind):** `kind="collection"` in the wizard: choose devices → signals (same gate) → window → instructions → send for consent (B2). `<CollectionPanel>` lists collections, their data coverage, and **"Run a test on this data"** (B3 `POST /api/plans/{id}/analyses`), reusing the test design step on the collected data, with 422 reasons shown plainly.
+**7. Data & graphs: `<DataExplorer>`.** Pick a collection or test, pick variables (signals + symptom logs), pick a chart type (line over time, bar of weekly averages, scatter X vs Y, plus symptom-day markers). Data comes from the scope-enforced `GET /api/patients/{id}/series` (B4).
+**8. Patient test page (`PatientPlan.tsx`):**
+- **No "A-B-B-A…" strings.** Show a calendar with the instructions overlaid: what A means, what B means, what a break means, with **today's instruction large at the top** ("Today: Melatonin 3 mg · day 3 of 6").
+- Rename **"Log an episode" → "Log"**: a dropdown of the patient's symptoms/events (B1), plus a note.
+- Show the clinician's `instructions`. The **Notes** panel (B6) on this page is yours, or FE-3's if you agree otherwise.
+
+Please post a HEADS-UP with file claims, and READY-FOR-COMMIT in slices that each build on their own. Suggested order: 8 (patient page) → 5 (calendar) → 1–4 (wizard) → 6 → 7. I'll update `e2e/demo.mjs` for the new flows as slices land.
+Status: OPEN
