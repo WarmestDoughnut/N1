@@ -20,6 +20,7 @@ DATA = os.path.abspath(os.path.join(HERE, "..", "data", "synthetic"))
 SIGNAL_COLUMNS = [
     "sleep_min", "resting_hr", "hrv", "steps", "skin_temp_dev", "resp_rate",
     "spo2", "systolic_bp", "glucose_tir", "walking_speed",
+    "screen_time_min", "late_screen_min", "mood_log", "pain_level",  # v1.4 (catalog-only until data ships)
 ]
 
 REAL_CITATION = "Thambawita et al., PMData, MMSys 2020 (CC BY-NC 4.0)"

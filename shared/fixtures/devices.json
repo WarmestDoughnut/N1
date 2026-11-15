@@ -10,11 +10,14 @@
       "walking_speed",
       "walking_steadiness",
       "time_in_bed",
+      "screen_time_min",
+      "late_screen_min",
       "episode",
       "medication_log",
-      "mood_log"
+      "mood_log",
+      "pain_level"
     ],
-    "notes": "Every patient has one. Walking metrics + symptom/medication/mood logs with no extra hardware."
+    "notes": "Every patient has one. Walking metrics, Screen Time, and symptom/medication/mood/pain check-ins with no extra hardware."
   },
   {
     "id": "android_phone",
@@ -24,10 +27,14 @@
     "access": "Health Connect",
     "signals": [
       "steps",
+      "screen_time_min",
+      "late_screen_min",
       "episode",
-      "medication_log"
+      "medication_log",
+      "mood_log",
+      "pain_level"
     ],
-    "notes": "Equity: lower-cost phones; Health Connect aggregates Samsung, Fitbit, Oura and others."
+    "notes": "Equity: lower-cost phones; Health Connect + Digital Wellbeing (screen time) aggregate Samsung, Fitbit, Oura and others."
   },
   {
     "id": "apple_watch",

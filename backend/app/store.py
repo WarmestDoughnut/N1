@@ -27,6 +27,8 @@ _SIGNAL_LABEL = {
     "steps": "steps", "walking_speed": "walking speed", "systolic_bp": "blood pressure",
     "glucose_tir": "glucose time-in-range", "skin_temp_dev": "skin temperature",
     "resp_rate": "breathing rate", "spo2": "blood oxygen",
+    "screen_time_min": "screen time", "late_screen_min": "late-night screen time",
+    "mood_log": "mood", "pain_level": "pain level",
 }
 
 

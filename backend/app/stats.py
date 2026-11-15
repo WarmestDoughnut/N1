@@ -49,28 +49,37 @@ def _pre_mask(ep, lag):
     return pre & ~ep.astype(bool)
 
 
-def observational(df, signal, direction, max_lag, rng):
+def observational(df, signal, direction, max_lag, rng, min_lag=1):
+    """Scan look-back windows of size L for L in [min_lag, max_lag] (v1.4: min_lag defaults to 1,
+    max_lag may go up to 14). Each lag L = the L days immediately before each episode vs baseline.
+    With min_lag=1, max_lag<=3 this is byte-identical to the original (demo verdicts unchanged)."""
     sig = df[signal].to_numpy(float)
     ep = df["episode"].to_numpy(int)
     n_ep = int(ep.sum())
     sign = -1 if direction == "lower" else 1
-    lags = list(range(1, max_lag + 1))
+    lags = list(range(min_lag, max_lag + 1))
     obs = np.array([obs_effect(sig, ep, L) for L in lags])
+
+    all_nan = bool(np.all(np.isnan(obs)))
+    oriented = obs * sign
+    best = 0 if all_nan else int(np.nanargmax(oriented))
 
     # max-statistic null via circular shifts of the episode series (keeps autocorrelation)
     shifts = rng.integers(7, len(ep) - 7, N_PERM)
     null_max = np.empty(N_PERM)
     null_best_raw = np.empty(N_PERM)          # raw (signed) null at the best lag, for the histogram
-    oriented = obs * sign
-    best = int(np.nanargmax(oriented))
     for i, s in enumerate(shifts):
         e2 = np.roll(ep, s)
         vals = np.array([obs_effect(sig, e2, L) for L in lags]) * sign
-        null_max[i] = np.nanmax(vals)
+        null_max[i] = np.nanmax(vals) if not np.all(np.isnan(vals)) else np.nan
         null_best_raw[i] = obs_effect(sig, e2, lags[best])
 
-    p_best = (1 + np.sum(null_max >= oriented[best])) / (N_PERM + 1)
-    per_lag_p = [(1 + np.sum(null_max >= o)) / (N_PERM + 1) for o in oriented]
+    best_oriented = oriented[best]
+    if all_nan or np.isnan(best_oriented):
+        p_best = 1.0
+    else:
+        p_best = (1 + np.nansum(null_max >= best_oriented)) / (N_PERM + 1)
+    per_lag_p = [1.0 if np.isnan(o) else (1 + np.nansum(null_max >= o)) / (N_PERM + 1) for o in oriented]
     n_missing_days = int(np.isnan(sig).sum())
     missing = float(np.isnan(sig).mean())
 
@@ -78,6 +87,10 @@ def observational(df, signal, direction, max_lag, rng):
     base = ~pre & ~ep.astype(bool)
     pre_mean = float(np.nanmean(sig[pre])) if pre.any() else None
     base_mean = float(np.nanmean(sig[base])) if base.any() else None
+    # fraction of analyzable (non-episode) days swallowed by the best-lag window; large windows
+    # over few episodes leave too little baseline to trust (CHANGE-REQUEST #6 caveat).
+    analyzable = int((pre | base).sum())
+    coverage = float(pre.sum() / analyzable) if analyzable else 1.0
 
     return {
         "kind": "observational",
@@ -85,17 +98,18 @@ def observational(df, signal, direction, max_lag, rng):
         "direction": direction,
         "n_episodes": n_ep,
         "best_lag": lags[best],
-        "effect_pct": round(float(obs[best]), 1),
+        "effect_pct": 0.0 if np.isnan(obs[best]) else round(float(obs[best]), 1),
         "p": round(float(p_best), 4),
-        "lag_scan": [round(float(x), 1) for x in obs],
+        "lag_scan": [None if np.isnan(x) else round(float(x), 1) for x in obs],
         "lag_p": [round(float(x), 3) for x in per_lag_p],
         "lags": lags,
         "missing": round(missing, 2),
         "n_missing_days": n_missing_days,
-        "enough": n_ep >= 5 and missing <= 0.4,
-        "direction_ok": bool(oriented[best] > 0),
+        "enough": n_ep >= 5 and missing <= 0.4 and not all_nan,
+        "direction_ok": bool(best_oriented > 0) if not np.isnan(best_oriented) else False,
         "pre_episode_mean": None if pre_mean is None else round(pre_mean, 1),
         "baseline_mean": None if base_mean is None else round(base_mean, 1),
+        "windows_cover_most": coverage > 0.5,
         "null_raw_best": null_best_raw,
         "best_lag_mask": pre,
     }
@@ -227,6 +241,8 @@ def _signal_label(sig):
         "steps": "Steps", "walking_speed": "Walking speed", "systolic_bp": "Blood pressure",
         "glucose_tir": "Glucose time-in-range", "skin_temp_dev": "Skin temperature",
         "resp_rate": "Respiratory rate", "spo2": "Blood oxygen",
+        "screen_time_min": "Screen time", "late_screen_min": "Late-night screen time",
+        "mood_log": "Mood", "pain_level": "Pain level",
     }.get(sig, sig)
 
 
@@ -327,7 +343,8 @@ def run_plan(plan, daily):
 
     if plan["type"] == "observational":
         o = plan["observational"]
-        r = observational(daily, o["signal"], o["direction"], o["max_lag_days"], rng)
+        r = observational(daily, o["signal"], o["direction"], o["max_lag_days"], rng,
+                          min_lag=o.get("min_lag_days", 1))
         v = verdict(r)
         headline, patient_headline = _obs_headlines(r, v)
         if r["missing"] >= 0.05:            # >= 5% of days missing (40% still -> not_enough_data)
@@ -336,6 +353,8 @@ def run_plan(plan, daily):
             warnings.append("few_episodes")
         if len(r["lags"]) > 1:
             warnings.append("multiple_lags_tested")
+        if r.get("windows_cover_most"):     # v1.4: wide look-back leaves too little baseline
+            warnings.append("windows_cover_most_days")
         obs_block = {
             "best_lag_days": r["best_lag"],
             "lag_scan": [

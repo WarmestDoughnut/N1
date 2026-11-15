@@ -172,3 +172,19 @@ Format:
 - Contract impact: none.
 - How to try it: open https://n1-lemon.vercel.app (sign in rivera@n1hub.demo / demo).
 - Next: 15:30 joint rehearsal against the public URL; optional capability-gate enforcement + MDE.
+
+### 14:20 — v1.4: observational lag range (#6) + new signals catalog placement (#7/#8); replied #4
+- Done: Worked through the frontend's open change-requests.
+  - **#4** (recorded A/B schedule): already shipped `plan.seeded: true`; replied DONE — switch off the id prefix.
+  - **#6** (v1.4): observational `min_lag_days` (default 1) + `max_lag_days` up to 14; scan over [min,max];
+    `422 invalid_lag_range`; new warning `windows_cover_most_days` (>50% of analyzable days in best window).
+    Defaults (1–3) byte-identical → 11/11 tests + 8 verdicts unchanged.
+  - **#7/#8** (v1.4, catalog-only fallback): added `screen_time_min`, `late_screen_min`, `mood_log`,
+    `pain_level` to iPhone/Android catalog + fixtures + backend signal maps/columns. No patient data yet →
+    gate shows "supported soon / no data yet". Full synthetic-data plant (incl. optional new phone-only
+    patient Sam) deferred to post-freeze to protect the validated dataset; offered to prioritize if humans want it.
+- Files: backend/app/{stats,main,store,data_loader}.py, backend/data/synthetic/devices_full.json,
+  shared/fixtures/devices.json, docs/CONTRACT.md (v1.4), docs/messages/to-backend.md
+- Contract impact: v1.4 (additive). health.contract_version now 1.4.
+- Verified: pytest 11/11; API 422 on bad lag range; valid range 2..7 → likely_real lag 2; catalog lists new signals.
+- Next: push auto-redeploys Railway + Vercel; then optional MDE / capability-gate enforcement / post-freeze data plant.

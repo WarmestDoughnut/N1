@@ -20,6 +20,10 @@ Dates are `YYYY-MM-DD`. Times are ISO 8601. IDs are strings.
 | `systolic_bp` | mmHg | systolic blood pressure (v1.1) |
 | `glucose_tir` | % | glucose time-in-range 70–180 mg/dL (v1.1) |
 | `walking_speed` | m/s | walking speed (v1.1) |
+| `screen_time_min` | minutes | total phone screen-on minutes that day (v1.4) |
+| `late_screen_min` | minutes | screen-on minutes 22:00–02:00, assigned to the next morning (v1.4) |
+| `mood_log` | 1–5 | self-reported daily mood check-in (v1.4) |
+| `pain_level` | 0–10 | self-reported daily pain check-in (v1.4) |
 | `episode` | 0/1 | patient-logged or derived episode that day (not a sensor; from logs) |
 
 Daily table: one row per patient per day: `patient_id, date, sleep_min, resting_hr, hrv, steps,
@@ -97,6 +101,11 @@ Scope-enforced: returns ONLY signals in the given plan's scope, and only if the 
 ```
 
 `type`: `observational | intervention`. `direction`: `lower | higher`.
+
+Observational look-back (v1.4): `observational.min_lag_days` (optional, default 1) and
+`observational.max_lag_days` (1–14) define the scan range; the engine scans each lag L in
+`[min_lag_days, max_lag_days]` (lag L = the L days immediately before each episode), max-statistic
+corrected across that set. `1 ≤ min ≤ max ≤ 14` or `POST /api/plans` returns `422 {"error":"invalid_lag_range"}`.
 
 Intervention block (when `type == "intervention"`, `observational` is null):
 ```json
@@ -207,7 +216,9 @@ window was collected. For a plan stopped early, analysis + `series` are cut at t
 only data already collected); the frontend can shade `(collected_until, window.end]` as "not collected".
 
 `warnings[]` possible values: `incomplete_plan`, `missing_data`, `few_episodes`,
-`multiple_lags_tested` (p-values corrected via max-statistic permutation), `too_few_periods` (v1.1).
+`multiple_lags_tested` (p-values corrected via max-statistic permutation), `too_few_periods` (v1.1),
+`windows_cover_most_days` (v1.4: the best look-back window covers > 50% of analyzable days, leaving
+little baseline — interpret with caution).
 
 `model` (optional, added later, null until then):
 ```json
@@ -262,6 +273,11 @@ one patient account per patient (`maria@`, `james@`, … , `real-p07@n1hub.demo`
 Active: Rivera ↔ P01,P02,P03,P04,P07,REAL-P07 · Okafor ↔ P01,P05,P06. Pending (by patient): P06-LEO → Rivera.
 
 ## Changelog
+- v1.4 (14:20) — additive: observational look-back range `observational.min_lag_days` (default 1) +
+  `max_lag_days` up to 14, `422 invalid_lag_range`, warning `windows_cover_most_days`; new daily signals
+  `screen_time_min`, `late_screen_min`, `mood_log`, `pain_level` (added to iPhone/Android catalog;
+  not yet in any patient's `signals_present` → shown "supported soon / no data yet" by the gate).
+- v1.3 — additive: `POST /api/demo/reset`, `plan.seeded: true` on demo plans, `health.store`.
 - v1.2 (12:05) — additive demo auth: accounts, `/api/auth/login|me`, `/api/connections` (+accept,
   delete), `/api/accounts/demo`; Bearer-token scoping on `/api/patients`, `/api/plans`, `POST /api/plans`
   (`not_connected`). Existing endpoints unchanged without a token. Data-honesty (12:40): results add

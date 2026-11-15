@@ -39,7 +39,7 @@ from app.model import fit_risk_model
 from app.schedule import generate_schedule, smallest_possible_p
 from app.store import Store, build_patient_summary
 
-CONTRACT_VERSION = "1.2"
+CONTRACT_VERSION = "1.4"
 
 app = FastAPI(title="N1 Hub API", version=CONTRACT_VERSION)
 # Local dev by default; ALLOWED_ORIGINS (comma-separated) overrides. Any *.vercel.app deploy
@@ -253,6 +253,12 @@ async def create_plan(request: Request):
             return err(403, "not_connected")
     plan = {k: v for k, v in body.items()
             if k not in ("id", "status", "created_at", "history", "patient_summary")}
+    # v1.4: validate the observational look-back range (1 <= min <= max <= 14)
+    if plan.get("type") == "observational" and plan.get("observational"):
+        o = plan["observational"]
+        lo, hi = o.get("min_lag_days", 1), o.get("max_lag_days", 3)
+        if not (isinstance(lo, int) and isinstance(hi, int) and 1 <= lo <= hi <= 14):
+            return err(422, "invalid_lag_range")
     plan["id"] = STORE.next_id()
     plan["status"] = "pending_approval"
     from app.store import _now

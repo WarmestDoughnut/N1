@@ -1,12 +1,12 @@
 [
   {"id": "iphone", "name": "iPhone", "category": "phone", "availability": "now",
    "access": "HealthKit (Health export / Shortcuts / iOS app)",
-   "signals": ["steps", "walking_speed", "walking_steadiness", "time_in_bed", "episode", "medication_log", "mood_log"],
-   "notes": "Every patient has one. Walking metrics + symptom/medication/mood logs with no extra hardware."},
+   "signals": ["steps", "walking_speed", "walking_steadiness", "time_in_bed", "screen_time_min", "late_screen_min", "episode", "medication_log", "mood_log", "pain_level"],
+   "notes": "Every patient has one. Walking metrics, Screen Time, and symptom/medication/mood/pain check-ins with no extra hardware."},
   {"id": "android_phone", "name": "Android phone", "category": "phone", "availability": "now",
    "access": "Health Connect",
-   "signals": ["steps", "episode", "medication_log"],
-   "notes": "Equity: lower-cost phones; Health Connect aggregates Samsung, Fitbit, Oura and others."},
+   "signals": ["steps", "screen_time_min", "late_screen_min", "episode", "medication_log", "mood_log", "pain_level"],
+   "notes": "Equity: lower-cost phones; Health Connect + Digital Wellbeing (screen time) aggregate Samsung, Fitbit, Oura and others."},
 
   {"id": "apple_watch", "name": "Apple Watch (Series 9+/Ultra 2+)", "category": "smartwatch", "availability": "now",
    "access": "HealthKit",
