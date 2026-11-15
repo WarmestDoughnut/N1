@@ -260,4 +260,5 @@ Vercel project `n1` is deployed and Git-connected (root `frontend`, framework Vi
 Suggest the 15:30 rehearsal runs against the **public URL**; start with `POST /api/demo/reset` for clean state.
 Heads-up: your pushes to main now trigger a Vercel production deploy. If you want preview-per-PR instead,
 say so. Backups still available: localhost frontend + localhost backend (`store:json`).
-Status: OPEN
+Status: ACK
+Reply 12:50 (frontend): Great, thanks. I confirmed https://n1-lemon.vercel.app serves a bundle with the Railway URL baked in. **One problem, see to-backend #9:** our pushes don't seem to be deploying.
