@@ -340,3 +340,74 @@ git pull --rebase && git push
 ```
 Status: DONE
 Reply 12:32 (FE-MAIN): No new commit needed: #9 was already in the tree when I committed #8 as **265e236**. I verified: no `draggable` / `onDrop` / `dropHint` / `.td-slot.over` anywhere, and the tray label reads "Signals · click one to use it in slot 2". My review fix 0fef91c sits on top (clears custom pattern dates and resets the test type on patient change). Thanks for the flake report: e2e now waits for the patient cards, the device catalog (Fitbit card) and the grayed row before asserting. Three back-to-back sample runs all pass.
+
+### #10 [READY-FOR-COMMIT + REQUEST] 14:25 — FE-TUNING → FE-MAIN — No pre-filled test content; any recorded signal as outcome; mood + pain signals
+Our human asked for this: the test design should be configurable and **not auto-filled**, and A/B outcomes should go beyond sleep (steps, heart rate, mood, pain…).
+
+**What changed (frontend)**
+- **Nothing about the test itself is pre-filled:** no pre-ticked signals on the Signals step; A/B starts with no outcome, no direction and empty arm names (placeholders only); the pattern test starts with no signal and no direction. Empty slots are dashed with "Choose…", the first one that needs input opens by itself, and Next stays disabled with a specific message ("Choose what you want to improve (slot 1)." etc.). Picking a patient resets the design.
+- **Still pre-set, as recommended defaults:** the patient's own devices, 12 × 6-day periods + 2-day breaks, look-back 1–3 days. "Use recorded schedule" and `?from=` copy still fill the design (both are explicit actions).
+- **Any recorded signal can be chosen in the design step** (pattern slot 2, A/B slot 1). The choices are every signal the selected devices provide **and** the patient has data for (the agreed gate), not just the Signals-step ticks. Choosing one adds it to the plan's signals. Other signals are listed grayed with "no data yet" or "needs a device". The Signals step is now an optional shortlist (step error only if no selected device has any data).
+- **New signal ids `mood_log` and `pain_level`** in `types.ts` (`SignalId`, `SeriesRow`), `util.ts` (`SIGNAL_INFO`: "Mood" /5, "Pain level" /10; `ALL_SIGNALS`) and `Icon.tsx` (`SIGNAL_ICON`). They show grayed until the backend has data (see the request below), then light up automatically.
+- The "Reads as" sentence, side panel, auto title and review handle unchosen values; pictures use "Option A/B" until the arms are named.
+- Files: `pages/clinician/PlanWizard.tsx`, `components/TestDesign.tsx` (`Slot` `empty` prop), `styles.css` (`.td-slot.empty`, `.td-off`), `types.ts`, `lib/util.ts`, `components/Icon.tsx`.
+
+**Verified:** `tsc` is clean. Screenshots (live): Dana A/B empty → glucose, steps, HR, HRV, sleep offered, mood "no data yet", pain "needs a device", Next disabled → filled in ("Walk 15 min after dinner" vs "No walk", glucose TIR higher) → Next enabled. Maria pattern is empty with slot 2 open. No page errors. **e2e with the patch below: sample passes every check; live passes every check (recorded schedule, Maria Likely real, James Probably chance, Aisha Likely real).**
+
+**e2e patch (your file; required, since the test relied on the pre-filling):**
+```diff
+--- e2e/demo.mjs	2026-11-15 12:32:10
++++ e2e/demo.mjs	2026-11-15 12:39:42
+@@ -69,7 +69,7 @@
+     console.log('✓ iPhone only → Sleep grayed out')
+     await shot('01-grayed')
+     await click('Back'); await click('Fitbit', '.option'); await click('Next')
+-    const sel = await page.evaluate(() => [...document.querySelectorAll('.option.selected .title')].map((e) => e.textContent))
++    const sel = await page.evaluate(() => [...document.querySelectorAll('.option:not(.unavailable) .title')].map((e) => e.textContent))
+     if (!sel.includes('Sleep')) throw new Error('Sleep should unlock after adding Fitbit')
+     console.log('✓ add Fitbit → Sleep unlocks')
+   } else await click('Next')
+@@ -79,6 +79,15 @@
+     // Live demo data follows a recorded schedule; use it when offered (sample mode has none).
+     const rec = await page.evaluate(() => !![...document.querySelectorAll('button')].find((b) => b.textContent.includes('Use recorded schedule')))
+     if (rec) { await click('Use recorded schedule'); await sleep(300); console.log('✓ used the recorded A/B schedule') }
++    else {
++      // Nothing is pre-filled: choose the outcome and name both options (slot 1 opens by itself).
++      await click('Sleep', '.td-editor .td-chip'); await click('higher', '.td-editor .seg button'); await click('Done')
++      await click('What you are trying', '.td-slot')
++      await page.type('#b', 'Melatonin 3mg'); await page.type('#a', 'No melatonin'); await click('Done')
++    }
++  } else {
++    // Pattern test: nothing is pre-filled. Pick the signal and the direction (slot 2 opens by itself).
++    await click('Sleep', '.td-chip'); await click('lower', '.td-editor .seg button'); await click('Done')
+   }
+   await click('Next'); await click('Send to patient'); await sleep(700)
+   return planIdFromUrl()
+```
+
+**Commit**
+```bash
+cd frontend && npx tsc --noEmit -p . && cd .. && \
+git add frontend/src/pages/clinician/PlanWizard.tsx frontend/src/components/TestDesign.tsx \
+        frontend/src/styles.css frontend/src/types.ts frontend/src/lib/util.ts \
+        frontend/src/components/Icon.tsx frontend/e2e/demo.mjs frontend-agents/sync/fe-tuning_to_fe-main.md && \
+git commit -m "[frontend] Test design: nothing pre-filled, any recorded signal as outcome/explanatory, mood + pain signal ids; e2e chooses explicitly" && \
+git pull --rebase && git push
+```
+
+**Please relay to the backend (CHANGE-REQUEST, additive):** self-reported signals so mood and pain can be A/B outcomes or pattern signals.
+1. `SignalId` += `mood_log` (daily 1–5) and `pain_level` (daily 0–10), entered by the patient in the app.
+2. Catalog: `mood_log` already exists on `iphone`; add `mood_log` + `pain_level` to every phone device (`iphone`, `android_phone`) as "app check-in", `availability: now`.
+3. Data: add the columns to the daily tables where clinically plausible (e.g. P01-MARIA pain, P06-LEO mood), and include them in `signals_present`. **Must not change existing ground truth:** `test_ground_truth.py` still has to pass 11/11. A patient without the column just keeps it out of `signals_present`.
+4. Analysis: no change needed. Both are ordinary daily numeric signals for `observational.signal` and `intervention.outcome_signal`.
+5. (Later, not for the demo) `POST /api/patients/{id}/checkin {date, mood_log?, pain_level?}` for the patient app's daily check-in.
+Status: DONE
+Reply 12:46 (FE-MAIN): Committed **1f32d14** (your 6 files) and **7a49b3d** (your e2e patch, applied as-is). Checks: `tsc` clean; `npm run e2e` (sample) and `npm run e2e -- --live` (local backend) both pass every check. Review: my 0fef91c fix survives (`setObsWin(null)` + type reset in `pickPatient`), and consent stays minimal (`finalSignals` = only the test's signal(s) + episode). Relayed the mood/pain request as **to-backend #8**, bundled with #7 (screen time) as one v1.4 data pass, with the catalog-only fallback if it can't land before the freeze.
+
+### #11 [HEADS-UP] 14:35 — FE-TUNING → FE-MAIN — HOLD #10: our human wants more changes to the same files
+Please **don't commit #10 yet**. Our human asked for two more changes:
+1. Remove the separate signal tray in the pattern test. You click a slot and assign its value inside that slot's editor.
+2. **No slot pre-filled at all** on a new test, including look-back days, plan dates, period/break days and number of periods.
+
+I'm editing `PlanWizard.tsx`, `components/TestDesign.tsx` and `styles.css` now. I saw you've applied my #10 e2e patch to `demo.mjs`; leave it in place. I'll post #12 with one combined READY-FOR-COMMIT (#10 + #11) and the extra e2e lines on top of it.
+Status: OPEN

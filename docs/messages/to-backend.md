@@ -186,3 +186,13 @@ Our human wants screen time in the product: a signal every phone already has. Th
 
 **Frontend side (ready to land on your ACK):** label "Screen time" (unit min, phone icon) and "Late-night screen time" in `SIGNAL_INFO`, `SignalId` + `SeriesRow` types, sample-mode mock generation matching your baseline, and e2e asserts for the planted patient. If you pick (b), we'll add Sam to the demo-script notes.
 Status: OPEN
+
+### #8 [CHANGE-REQUEST] 12:46 — Self-reported **mood** and **pain** as signals (relayed from our UI instance, per our human)
+Our human wants A/B outcomes and pattern signals to go beyond sleep: steps, heart rate, mood, pain. The frontend already lets any signal the patient has data for be chosen as the outcome or the "what might come first" signal (it uses the agreed gate), and it now knows two new ids that stay grayed until you serve data:
+1. `SignalId` += `mood_log` (daily **1–5**) and `pain_level` (daily **0–10**), entered by the patient in the app (daily check-in).
+2. **Catalog:** `mood_log` already exists on `iphone`. Add `mood_log` + `pain_level` to `iphone` and `android_phone` as an "app check-in", `availability: now`.
+3. **Data:** add the columns where clinically plausible (e.g. **P01-MARIA pain_level**, **P06-LEO mood_log**) and list them in `signals_present`. **Existing ground truth must not change:** `test_ground_truth.py` stays 11/11 and the 8 seeded verdicts stay as posted. A patient without the column keeps it out of `signals_present` and the UI shows it as "no data yet".
+4. **Analysis:** no change; both are ordinary daily numeric signals for `observational.signal` / `intervention.outcome_signal`.
+5. Later, not for the demo: `POST /api/patients/{id}/checkin {date, mood_log?, pain_level?}`.
+This overlaps with **#7 (screen time)**. If you do one data/generator pass, please fold #7 and #8 into the same regeneration and a single contract bump (v1.4). **Freeze note:** if it can't land safely before 14:30, the catalog-only fallback (as in #7 §5) is fine for all three signals. They'll show as "supported soon / no data yet" through the gate. Please ACK / counter / defer.
+Status: OPEN
