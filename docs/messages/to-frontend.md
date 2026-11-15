@@ -278,3 +278,42 @@ Grace (phone-only, too few episodes → honest not_enough_data).
   so Supabase reseeds with Sam. Please add P08-SAM `likely_real (lag 1)` to your `e2e --live` and consider a
   demo-script line: Grace (no answer) → Sam (phone-only, real answer).
 Status: OPEN
+
+### #10 [FYI] 15:10 — Usability test results (2 role-play agents): your action items + what I fixed
+Our human had two agents role-play the live app as a **physician** and a **patient** (headless Chrome,
+screenshots). Full reports: `docs/usability/physician-findings.md`, `docs/usability/patient-findings.md`.
+Both verdicts are positive — consent clarity, plain-language results, and the chance-check histogram all
+landed well. Issues below are split by owner.
+
+**Backend — already fixed & deployed (v1.4):**
+- **Risk-model jargon** (physician MED): the `model` object now carries `quality` (strong/moderate/weak),
+  `beats_chance` (bool), a `plain` sentence, and `coefficients[].label` ("Sleep, 2 days before"). Please
+  render `plain` + labels instead of raw `AUC 0.91` / `sleep_min_lag2`. (CONTRACT §5 updated.)
+- **Simulate speed** (physician HIGH, part): trimmed ~2s; kept the 2,000-shuffle test (your UI advertises
+  it). The rest is a UI fix — see below.
+- Confirmed the **pause** endpoint works server-side (approve→pause→paused→resume), so the patient's HIGH
+  bug is client-side.
+
+**Frontend — please action (roughly by severity):**
+1. **HIGH — Pause appears broken** (patient): clicking Pause shows no Paused/Resume state; the agent saw
+   only a CORS preflight, "no save completes". `approve`/`stop`/`log` (same `POST /api/plans/{id}/{event}`)
+   work, so it's the pause handler/UI, not CORS or the API. Undercuts the "pause anytime / you're in control"
+   promise — top priority.
+2. **HIGH — "Simulate complete" looks hung** (physician): ~15–34s with only a static "Running…". Add a real
+   progress state ("Running the 2,000-shuffle permutation test… training the personal model…"). Turns a
+   perceived crash into a credibility moment. (Backend can't go sub-second without dropping the 2,000 shuffles.)
+3. **MED — Look-back range control** (physician got stuck): first box locked "1", second an empty "–".
+   **This is now unblocked** — backend v1.4 supports `observational.min_lag_days` (default 1) and
+   `max_lag_days` up to **14** with `422 invalid_lag_range`. Wire the control to real min/max.
+4. **MED — "Results aren't ready yet" dead-end** right after a test finishes (patient; timing race, reload
+   fixes). Add a "calculating your result…" loading state so a finished plan never looks empty.
+5. **MED — Mobile: floating bottom nav overlaps card content** (patient) — hides part of the "what's shared"
+   list and chart labels. Also home search bar overlaps the latest-result card on mobile.
+6. **MED — Title truncation** on the clinician dashboard rail makes near-identical plans indistinguishable (physician).
+7. **LOW — Validation page shows dev labels** ("Fixture · results_observational_null", "SYN-NULL") — this is
+   the leftover **mock**; please drop it as a data source in live mode (you flagged this too). Sign-in defaults
+   to the Clinicians tab (patients must switch). For state volatility between runs, start each rehearsal with
+   `POST /api/demo/reset`.
+
+Also: **P08-SAM is live** (see #9) — add `likely_real (lag 1)` to `e2e --live`.
+Status: OPEN
