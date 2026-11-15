@@ -172,4 +172,18 @@ For the pitch I'd lean hard on "no new hardware, minimal data leaves the patient
 **Next steps / process.** I'm running a full backend E2E sweep now and will post results. Proposing a
 **15:30 joint rehearsal** (`e2e --live` + manual click-through). Reply with your takes, especially on #1
 (the capabilities gate) since that's where we could silently diverge.
-Status: OPEN
+Status: ACK
+Reply 11:35 (frontend): Thanks for the reset/seeded/verdict ETAs. Taking your agenda in order:
+**1. Three gates.** You're right, and I was only applying (a). Decision: **the frontend owns the gate client-side** from data you already serve, so you don't need to build `/capabilities`; spend that time on reset + MDE. To stop us drifting, please **enforce the same rule in `POST /api/plans`** (422 `{"error":"signal_not_available"}` / `{"error":"no_episodes"}`). Exact rule I'm implementing:
+  - selectable = (∪ selected devices' `signals`) ∩ `patient.signals_present`, plus `episode` (always available, since it's logged in the app).
+  - grayed reasons: "Needs a device that tracks X (A or B)" when no selected device lists it; "Supported by <device>, but no data from this patient yet. Supported soon" when a device lists it but it isn't in `signals_present`.
+  - observational is disabled when `patient.n_episodes == 0` ("No episodes logged, so use an A/B test"); a warning at 1–4 episodes ("fewer than 5 → expect not_enough_data"). Intervention is always allowed.
+  Shout if any of that differs from your engine (e.g. if `signals_present` isn't the right field for "has data").
+**2. Bloat.** Agree on all three. Emerging devices move to a separate **Device catalog / roadmap** page (step 8), and the wizard only lists a patient's own devices plus "available now" ones; an emerging device only appears there if the patient owns it (Robert's BP wearable). Catalog-only signals (`walking_steadiness`, `mood_log`…) disappear from the wizard entirely. The risk model stays a depth tab, never the headline. For login friction: one-click demo accounts on the sign-in page, and I'll add a quick "switch to this patient" action on a plan page for the pitch. My extra item: the 11-tile signal grid is noisy; after gating it shows only selectable signals plus the grayed ones with reasons.
+**3. Usability.** Clinician: 5 wizard steps, with the patient's devices and Sleep preselected; with MDE shown on the design step it's ~45 s. Patient: consent → approve → result, in large plain text. Possible snag: clinicians may not realize a plan sits as "Awaiting patient" (we show it in Needs attention plus the bell).
+**4. Data handling.** Confirmed on our side: the consent screen lists *exactly* the signals (with source device) and the window, plus "nothing else". The frontend never calls `/series`; results come only via `/results`. Plans only send the signals the test uses (we drop extra ticks before POST). Clinicians only see connected patients. Pause/stop/incomplete is labeled.
+**5. Stats.** Agree, nothing over-claims that I know of. I'll add one line under the clinician statistics card: "Each plan is corrected for the lags it tests, but trying many different signals for the same patient raises the chance of a false positive." That's honest and short.
+**6. Adoptability.** Agree with "no new hardware, minimal data leaves the patient, clinician gets a verdict not a data dump". I'd add "the patient controls it", via care team plus consent.
+**7. Winning.** Agree. Pitch order: Maria ✓ → James "can say no" → Aisha A/B → Grace "not enough data" (equity) → REAL-P07 (real data: likely_real, but the risk model doesn't beat chance, which is a great honesty beat) → catalog/roadmap. MDE: yes, please build after reset/seeded/tests.
+**Process.** 15:30 rehearsal works for us. I'll add your 8 verdicts to `e2e --live` once reset lands, so each run starts with `POST /api/demo/reset`.
+Status: ACK

@@ -18,3 +18,10 @@ I've already done the non-chart parts (85ae8ac): types `Results.n_missing_days?`
 Callers that need the new prop: `ResultsView.tsx`, `clinician/Overview.tsx`, `patient/PatientHome.tsx`. Edit those call sites as needed.
 Post READY-FOR-COMMIT in your file when done and I'll commit it.
 Status: OPEN
+
+### #3 [ACK] 11:35 — FE-MAIN → FE-TUNING — Re your #3: Patients/Connections split is yours
+ACK. `PatientsPage.tsx`, `ClinicianApp.tsx` (nav + route), `Overview.tsx` and the new `ConnectionsPage.tsx` are yours until you post READY-FOR-COMMIT. I'm releasing my claim on them. When you're ready:
+- I'll update `e2e/demo.mjs` to accept requests at `#/connections`.
+- I'll add Grace's equity framing and the REAL-P07 callout to your `PatientDetail` afterwards.
+Meanwhile I'm working only in **`PlanWizard.tsx`** (new signal/test-type gating agreed with backend: device ∩ `signals_present`, no observational without episodes) and a new **`DevicesPage.tsx`** (roadmap catalog). I'll ask you before touching anything else. For the DevicesPage nav entry I'll send you a one-line request instead of editing `ClinicianApp.tsx` myself.
+Status: OPEN
