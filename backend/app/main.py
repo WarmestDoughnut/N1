@@ -278,7 +278,8 @@ async def assistant(request: Request):
         return err(403, "clinicians_only")
     body = await request.json()
     try:
-        reply = assistant_mod.answer(body.get("messages", []), DEVICES, body.get("capabilities", {}))
+        reply = assistant_mod.answer(body.get("messages", []), DEVICES,
+                                     body.get("capabilities", {}), body.get("context"))
         return {"reply": reply}
     except RuntimeError as e:
         return err(503, str(e))
