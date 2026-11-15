@@ -8,6 +8,8 @@ import { ResultsView } from '../../components/ResultsView'
 import { History, PlanFacts, PlanSchedule } from '../../components/PlanSummary'
 import { useToast } from '../../components/Shell'
 import { RunProgress, resultsWithRetry } from '../../components/RunProgress'
+import { CollectionCoverage } from '../../components/CollectionPanel'
+import { isCollection, type CollectionResults } from '../../lib/v15'
 import type { ClinicianData } from './ClinicianApp'
 
 export function PlanDetail({ planId, data }: { planId: string; data: ClinicianData }) {
@@ -49,7 +51,7 @@ export function PlanDetail({ planId, data }: { planId: string; data: ClinicianDa
     <div className="stack">
       <section className="page-heading" style={{ marginBottom: 0 }}>
         <div>
-          <p className="eyebrow"><a href="#/plans">Test plans</a> / {plan.id}</p>
+          <p className="eyebrow"><a href={`#/patients/${plan.patient_id}/tests`}>{patient?.display_name ?? plan.patient_id} · Tests</a> / {plan.id}</p>
           {!hasResults && <h1>{plan.title}</h1>}
           <span className="sub">{patient?.display_name ?? plan.patient_id} · {plan.type === 'observational' ? 'Observational test' : 'A/B n-of-1 trial'}</span>
         </div>
@@ -74,6 +76,7 @@ export function PlanDetail({ planId, data }: { planId: string; data: ClinicianDa
       {hasResults ? (
         resultsQ.loading && !resultsQ.data ? <div className="spinner">Calculating the result…</div>
           : resultsQ.error ? <div className="alert alert-error">{resultsQ.error}</div>
+            : resultsQ.data && isCollection(plan) ? <div className="card"><h2 style={{ marginTop: 0 }}>{plan.title}</h2><CollectionCoverage results={resultsQ.data as unknown as CollectionResults} /><p className="muted small mt">Run pattern tests on this data from the patient’s Data collection tab.</p></div>
             : resultsQ.data ? <ResultsView results={resultsQ.data} plan={plan} audience="clinician" aside={facts} />
               : <div className="alert alert-info" style={{ justifyContent: 'space-between' }}>The result is still being calculated.<button className="button secondary sm" onClick={resultsQ.reload}>Check again</button></div>
       ) : (

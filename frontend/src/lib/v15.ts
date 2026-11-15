@@ -23,6 +23,25 @@ export interface ResultsV15Fields { clinician_comment?: { text: string; at: stri
 export type ResultsV15 = Results & ResultsV15Fields
 export interface CollectionSummary { n_days: number; per_signal: Partial<Record<SignalId, { days_with_data: number; missing_pct: number }>> }
 
+/** B3: a test run on a collection's data = normal Results + id/created_at */
+export interface AnalysisConfig { observational?: (Plan['observational'] & { symptom_id?: string | null }) | null; intervention?: Plan['intervention'] | null }
+/** `config` = what was tested (requested from the backend; until it ships, remembered in this browser) */
+export type Analysis = ResultsV15 & { id: string; created_at: string; config?: AnalysisConfig }
+const CFG_KEY = 'n1.analysisConfig'
+const cfgStore = (): Record<string, AnalysisConfig> => { try { return JSON.parse(localStorage.getItem(CFG_KEY) ?? '{}') } catch { return {} } }
+const rememberCfg = (id: string, c: AnalysisConfig) => { try { localStorage.setItem(CFG_KEY, JSON.stringify({ ...cfgStore(), [id]: c })) } catch { /* ignore */ } }
+const withCfg = (a: Analysis): Analysis => ({ ...a, config: a.config ?? cfgStore()[a.id] })
+/** B2: a finished collection's results */
+export type CollectionResults = Omit<Results, 'verdict'> & { verdict: null; collection: CollectionSummary }
+export const isCollection = (p: Plan) => (p.type as string) === 'collection'
+/** B3 422 reasons, in plain words */
+export const ANALYSIS_ERRORS: Record<string, string> = {
+  signal_not_in_collection: 'That signal wasn’t part of this collection, so it can’t be tested on this data.',
+  not_enough_data: 'There isn’t enough data yet (or too few logged symptoms) to run this test. At least 5 logs are needed.',
+  too_few_periods: 'A/B tests need at least 5 A/B blocks (10 periods) inside the collection window.',
+  window_too_short: 'The collection window is too short for this look-back range.',
+}
+
 /** Read v1.5 fields from any plan object (the live 1.4 API simply won't have them yet). */
 export const v15Plan = (p: Plan) => p as unknown as PlanV15
 
@@ -97,6 +116,18 @@ export const v15 = {
       store.notes[planId] = [...(store.notes[planId] ?? []), n]; save()
       return structuredClone(n)
     }, true),
+
+  // B2/B3 collections: run a test on a collection's data
+  analyses: (collectionId: string) =>
+    call<Analysis[]>('GET', `/api/plans/${enc(collectionId)}/analyses`, undefined, async () => {
+      const { mock } = await import('./mockServer')
+      return mock.analyses(collectionId) as unknown as Analysis[]
+    }, true).then((xs) => xs.map(withCfg)),
+  runAnalysis: (collectionId: string, body: { observational?: Plan['observational'] & { symptom_id?: string | null }; intervention?: Plan['intervention'] }) =>
+    call<Analysis>('POST', `/api/plans/${enc(collectionId)}/analyses`, body, async () => {
+      const { mock } = await import('./mockServer')
+      return mock.runAnalysis(collectionId, body) as unknown as Analysis
+    }).then((a) => { rememberCfg(a.id, body); return withCfg(a) }),
 
   // B7 clinician comment + review (mock: no-op until the backend ships; the UI reads results.clinician_comment)
   comment: (planId: string, text: string) =>

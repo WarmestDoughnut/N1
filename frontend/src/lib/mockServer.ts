@@ -422,8 +422,28 @@ function getPlanOr404(id: string): Plan {
 }
 
 function computeResults(plan: Plan, incomplete: boolean) {
-  results[plan.id] = plan.type === 'observational' ? computeObservational(plan, incomplete) : computeIntervention(plan, incomplete)
+  const t = plan.type as string
+  results[plan.id] = t === 'collection' ? collectionResult(plan, incomplete)
+    : plan.type === 'observational' ? computeObservational(plan, incomplete) : computeIntervention(plan, incomplete)
 }
+
+/** v1.5 B2 (sample mode): a collection's "result" is a data-coverage summary, no verdict. */
+function collectionResult(plan: Plan, incomplete: boolean): Results {
+  const rows = seriesWithLogs(plan.patient_id).filter((r) => r.date >= plan.window.start && r.date <= plan.window.end)
+  const per_signal: Record<string, { days_with_data: number; missing_pct: number }> = {}
+  plan.signals.filter((s) => s !== 'episode').forEach((s) => {
+    const have = rows.filter((r) => r[s] != null).length
+    per_signal[s] = { days_with_data: have, missing_pct: round1(100 * (1 - have / Math.max(1, rows.length))) }
+  })
+  return {
+    plan_id: plan.id, type: 'collection', complete: !incomplete, verdict: null,
+    headline: `Collected ${rows.length} days of data.`, patient_headline: `We collected ${rows.length} days of your data.`,
+    warnings: incomplete ? ['incomplete_plan'] : [], series: [], collection: { n_days: rows.length, per_signal },
+  } as unknown as Results
+}
+
+// v1.5 B3 (sample mode): tests run on a finished collection's data
+const analyses: Record<string, (Results & { id: string; created_at: string })[]> = {}
 
 // ---------- endpoint handlers ----------
 export const mock = {
@@ -480,6 +500,18 @@ export const mock = {
     return structuredClone(p)
   },
   schedulePreview: async (q: SchedulePreviewParams) => ({ schedule: makeSchedule(q) }),
+  analyses: async (cid: string) => structuredClone(analyses[cid] ?? []),
+  runAnalysis: async (cid: string, body: { observational?: Plan['observational']; intervention?: Plan['intervention'] }) => {
+    const c = getPlanOr404(cid)
+    if (!['complete', 'stopped'].includes(c.status)) throw new MockHttpError(422, { error: 'not_enough_data' })
+    if (body.observational && !c.signals.includes(body.observational.signal)) throw new MockHttpError(422, { error: 'signal_not_in_collection' })
+    if (body.intervention && !c.signals.includes(body.intervention.outcome_signal)) throw new MockHttpError(422, { error: 'signal_not_in_collection' })
+    const pseudo = { ...c, type: body.observational ? 'observational' : 'intervention', observational: body.observational ?? null, intervention: body.intervention ?? null } as Plan
+    const r = body.observational ? computeObservational(pseudo, false) : computeIntervention(pseudo, false)
+    const a = { ...r, plan_id: cid, id: `AN-${(analyses[cid]?.length ?? 0) + 1}`, created_at: nowIso() }
+    analyses[cid] = [...(analyses[cid] ?? []), a]
+    return structuredClone(a)
+  },
   results: async (id: string): Promise<Results> => {
     getPlanOr404(id)
     const r = results[id]

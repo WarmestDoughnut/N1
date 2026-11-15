@@ -6,6 +6,7 @@ import { ScheduleTimeline } from '../../components/ScheduleTimeline'
 import { Icon } from '../../components/Icon'
 import { DevicePicker, SignalPicker } from '../../components/SourcePicker'
 import { ABTimeline, Fact, PatientDayPreview, PatternStrip, Slot, SlotEditor, Stepper, StrengthMeter, strengthFor } from '../../components/TestDesign'
+import { v15, type Symptom } from '../../lib/v15'
 import { randomizeStints, scheduleToStints, StintCalendar, stintsToSchedule, stintStats, type Assignment, type Stint } from '../../components/StintCalendar'
 import { useToast } from '../../components/Shell'
 import { getSession, initials } from '../../lib/session'
@@ -13,15 +14,16 @@ import { ALL_SIGNALS, daysBetween, formatDate, formatDateShort, SIGNAL_INFO, sig
 
 const STEPS = ['Patient', 'Devices', 'Signals', 'Test design', 'Review & send']
 /** v1.4 lag scan: look-back windows of min_lag_days..max_lag_days (1 ≤ min ≤ max ≤ 14); window L = the L days before each episode. */
-const LAG_MAX = 14
+const LAG_MAX_V14 = 14
+const LAG_MAX_V15 = 30
 const SENSOR_SIGNALS: SignalId[] = ALL_SIGNALS.filter((s) => s !== 'episode')
 
 /** "3 days" or "2–7 days" */
 const lagRange = (a: number, b: number) => (a === b ? `${a} day${a > 1 ? 's' : ''}` : `${a}–${b} days`)
-interface ObsForm { signal: SignalId | null; direction: Direction | null; min_lag_days: number | null; max_lag_days: number | null }
+interface ObsForm { symptom_id: string | null; signal: SignalId | null; direction: Direction | null; min_lag_days: number | null; max_lag_days: number | null }
 interface IvForm { arm_a: string; arm_b: string; outcome_signal: SignalId | null; better: Direction | null; period_days: number | null; washout_days: number | null; n_periods: number | null; seed: number }
 /** Nothing pre-filled: every slot of the test design is the clinician's choice (only the randomization seed is internal). */
-const EMPTY_OBS: ObsForm = { signal: null, direction: null, min_lag_days: null, max_lag_days: null }
+const EMPTY_OBS: ObsForm = { symptom_id: null, signal: null, direction: null, min_lag_days: null, max_lag_days: null }
 const EMPTY_IV: IvForm = { arm_a: '', arm_b: '', outcome_signal: null, better: null, period_days: null, washout_days: null, n_periods: null, seed: 42 }
 const NO_WIN = { start: '', end: '' }
 
@@ -32,7 +34,21 @@ function readParam(name: string): string | null {
   return q ? new URLSearchParams(q).get(name) : null
 }
 
-export function PlanWizard({ patients }: { patients: Patient[] }) {
+/**
+ * New test (or, later, data collection) for one patient.
+ * Workspace use (fe-main #7): `<PlanWizard patient={p} kind="test" onDone={(id) => …} />`: no patient step.
+ * Legacy `#/new`: `<PlanWizard patients={list} />` keeps the patient step.
+ */
+export function PlanWizard({ patients, patient: fixed, kind = 'test', onDone }: {
+  patients?: Patient[]; patient?: Patient; kind?: 'test' | 'collection'; onDone?: (planId: string) => void
+}) {
+  /** v1.5 B2: a data collection = consented signals over a window, no test attached */
+  const isCollection = kind === 'collection'
+  const steps = isCollection ? ['Patient', 'Devices', 'Signals', 'Dates', 'Review & send'] : STEPS
+  const list = fixed ? [fixed] : (patients ?? [])
+  const healthQ = useAsync(() => api.health(), [])
+  // v1.5 (B9) allows look-back up to 30 days; v1.4 caps it at 14 (422 invalid_lag_range above that).
+  const LAG_MAX = parseFloat(healthQ.data?.contract_version ?? '1.4') >= 1.5 ? LAG_MAX_V15 : LAG_MAX_V14
   const devicesQ = useAsync<Device[]>(() => api.devices(), [])
   const catalog = devicesQ.data ?? []
   const toast = useToast()
@@ -68,7 +84,7 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
   /** observational plan dates; '' = not chosen yet */
   const [obsWin, setObsWin] = useState<{ start: string; end: string }>(NO_WIN)
 
-  const patient = patients.find((p) => p.id === patientId)
+  const patient = list.find((p) => p.id === patientId)
 
   // ----- clone from existing plan -----
   useEffect(() => {
@@ -79,7 +95,7 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
       setType(p.type)
       setDevices(p.devices)
       setSignals(p.signals)
-      if (p.observational) setObs({ ...p.observational, min_lag_days: p.observational.min_lag_days ?? 1 })
+      if (p.observational) setObs({ ...p.observational, min_lag_days: p.observational.min_lag_days ?? 1, symptom_id: null })
       if (p.intervention) { const { schedule: _s, ...rest } = p.intervention; void _s; setIv(rest) }
       setTitle(p.title); setTitleTouched(true)
       setClinician(p.clinician_name)
@@ -121,11 +137,30 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
   const useSignal = (s: SignalId) => setSignals((cur) => (cur.includes(s) ? cur : [...cur, s]))
   const lbl = (s: SignalId | null) => (s ? SIGNAL_INFO[s].label : 'Not chosen yet')
   const obsReady = !!obs.signal && !!obs.direction
+  // v1.5 B1: what the pattern test explains = one of the patient's own symptoms / events (not standing conditions)
+  const [symTick, setSymTick] = useState(0)
+  const symptomsQ = useAsync<Symptom[]>(() => (patientId ? v15.symptoms(patientId) : Promise.resolve([])), [patientId, symTick])
+  const loggable = (symptomsQ.data ?? []).filter((x) => x.kind !== 'condition')
+  const symptom = loggable.find((x) => x.id === obs.symptom_id) ?? null
+  const [newSymptom, setNewSymptom] = useState('')
+  const addSymptom = async () => {
+    const name = newSymptom.trim()
+    if (!name || !patientId) return
+    const s = await v15.addSymptom(patientId, { name, kind: 'symptom' })
+    setNewSymptom(''); setSymTick((t) => t + 1); setObs((o) => ({ ...o, symptom_id: s.id }))
+  }
+  /** plain name for sentences, e.g. "migraine" */
+  const symName = symptom ? symptom.name.toLowerCase() : 'episode'
+  /** instructions for the patient (v1.5 B5) */
+  const [instructions, setInstructions] = useState('')
   const ivReady = !!iv.outcome_signal && !!iv.better && !!iv.arm_a.trim() && !!iv.arm_b.trim()
 
   // Auto title
-  const autoTitle = type === 'observational'
-    ? (obsReady ? `Does ${obs.direction} ${SIGNAL_INFO[obs.signal!].plain} precede episodes?` : '')
+  const autoTitle = isCollection
+    ? (signals.filter((s) => s !== 'episode').length && obsWin.start && obsWin.end
+        ? `Collect ${signals.filter((s) => s !== 'episode').map((s) => SIGNAL_INFO[s].plain).join(', ')} for ${Math.max(1, Math.round((daysBetween(obsWin.start, obsWin.end) + 1) / 7))} weeks` : '')
+    : type === 'observational'
+    ? (obsReady && symptom ? `Does ${obs.direction} ${SIGNAL_INFO[obs.signal!].plain} precede ${symName}?` : '')
     : (ivReady ? `Does ${iv.arm_b.trim()} ${iv.better === 'higher' ? 'improve' : 'lower'} ${SIGNAL_INFO[iv.outcome_signal!].plain}?` : '')
   useEffect(() => { if (!titleTouched) setTitle(autoTitle) }, [autoTitle, titleTouched])
 
@@ -137,7 +172,8 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
   useEffect(() => {
     if (step !== 3) return
     if (type === 'observational') {
-      if (!obsReady) setOpenSlot(2)
+      if (!obs.symptom_id) setOpenSlot(1)
+      else if (!obsReady) setOpenSlot(2)
       else if (obs.min_lag_days == null || obs.max_lag_days == null) setOpenSlot(3)
       else if (!obsWin.start || !obsWin.end) setOpenSlot(4)
     } else {
@@ -173,32 +209,33 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
       setDevices(p.devices)
       // Nothing pre-ticked or pre-filled: the clinician chooses what to measure and what to try.
       setSignals([])
-      setObs(EMPTY_OBS); setIv(EMPTY_IV); setStints([]); setTitleTouched(false)
+      setObs(EMPTY_OBS); setIv(EMPTY_IV); setStints([]); setTitleTouched(false); setInstructions('')
     }
   }
 
   // "#/new?patient=SYN-PATTERN" jumps straight to the device step for that patient.
   const [prefilled, setPrefilled] = useState(false)
   useEffect(() => {
-    const pid = readParam('patient')
-    const p = pid && patients.find((x) => x.id === pid)
+    const pid = fixed?.id ?? readParam('patient')
+    const p = pid && list.find((x) => x.id === pid)
     if (!prefilled && p && catalog.length) { pickPatient(p); setStep(1); setPrefilled(true) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [patients, catalog, prefilled])
+  }, [list, catalog, prefilled])
 
   const toggleDevice = (id: string) => setDevices((d) => (d.includes(id) ? d.filter((x) => x !== id) : [...d, id]))
   const toggleSignal = (s: SignalId) => setSignals((cur) => (cur.includes(s) ? cur.filter((x) => x !== s) : [...cur, s]))
 
   const window_ = useMemo(() => {
     if (!patient) return { start: '', end: '' }
+    if (isCollection) return obsWin
     if (type === 'intervention' && schedule.length) return { start: schedule[0].start, end: schedule[schedule.length - 1].washout_end }
     return obsWin
   }, [patient, type, schedule, obsWin])
 
   // Consent is minimal: share only the signals the test actually uses, from devices that provide them.
   const finalSignals: SignalId[] = useMemo(
-    () => (type === 'observational' ? [obs.signal, 'episode'] : [iv.outcome_signal]).filter(Boolean) as SignalId[],
-    [type, obs.signal, iv.outcome_signal],
+    () => (isCollection ? signals : (type === 'observational' ? [obs.signal, 'episode'] : [iv.outcome_signal]).filter(Boolean) as SignalId[]),
+    [isCollection, signals, type, obs.signal, iv.outcome_signal],
   )
   const finalDevices: string[] = useMemo(() => {
     const used = devices.filter((d) => catalog.find((c) => c.id === d)?.signals.some((s) => s !== 'episode' && finalSignals.includes(s)))
@@ -210,8 +247,14 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
     if (step === 0 && !patient) return 'Choose a patient.'
     if (step === 1 && devices.length === 0) return 'Select at least one device.'
     if (step === 2 && designSignals.length === 0) return 'None of the selected devices has data for this patient yet. Add a device that does.'
-    if (step === 3) {
+    if (isCollection && step === 2 && !signals.some((s) => s !== 'episode')) return 'Tick at least one signal to collect.'
+    if (isCollection && step === 3) {
+      if (!obsWin.start || !obsWin.end) return 'Choose the collection dates.'
+      if (obsWin.end <= obsWin.start) return 'The end date must be after the start date.'
+    }
+    if (step === 3 && !isCollection) {
       if (type === 'observational' && obsBlocked) return 'No episodes logged, so use an A/B test.'
+      if (type === 'observational' && !obs.symptom_id) return 'Choose what you want to explain (slot 1).'
       if (type === 'observational' && !obs.signal) return 'Choose what might come first (slot 2).'
       if (type === 'observational' && !obs.direction) return 'Choose lower or higher before episodes (slot 2).'
       if (type === 'observational' && (obs.min_lag_days == null || obs.max_lag_days == null)) return 'Choose how far back to look (slot 3).'
@@ -238,20 +281,21 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
       patient_id: patient.id,
       clinician_name: clinician.trim() || 'Clinician',
       title: title.trim(),
-      type,
+      type: (isCollection ? 'collection' : type) as PlanType,
       devices: finalDevices,
       signals: finalSignals,
       window: window_,
+      ...({ instructions: instructions.trim() || null } as object),
       // stepError guarantees these are chosen before Send is enabled
-      observational: type === 'observational' ? { ...obs, signal: obs.signal!, direction: obs.direction!, min_lag_days: obs.min_lag_days!, max_lag_days: obs.max_lag_days! } : null,
-      intervention: type === 'intervention'
+      observational: !isCollection && type === 'observational' ? { signal: obs.signal!, direction: obs.direction!, min_lag_days: obs.min_lag_days!, max_lag_days: obs.max_lag_days!, ...({ symptom_id: obs.symptom_id } as object) } : null,
+      intervention: !isCollection && type === 'intervention'
         ? { ...iv, arm_a: iv.arm_a.trim(), arm_b: iv.arm_b.trim(), outcome_signal: iv.outcome_signal!, better: iv.better!, period_days: ss.periodDays ?? 1, washout_days: ss.breakDays ?? 0, n_periods: ss.count, schedule, ...({ assignment } as object) }
         : null,
     }
     try {
       const plan = await api.createPlan(body)
       toast(`Sent to ${patient.display_name} for approval`)
-      navigate(`/plans/${plan.id}`)
+      if (onDone) onDone(plan.id); else navigate(`/plans/${plan.id}`)
     } catch (e) {
       setSendErr(friendlyError(e))
     } finally {
@@ -269,7 +313,7 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
         <aside className="td-aside">
           <div className="card stack">
             <h3>What this test will do</h3>
-            <Fact k="Explains">Episodes ({episodes} logged, at least 5 needed)</Fact>
+            <Fact k="Explains">{symptom ? `${symptom.name} (at least 5 logged needed)` : <span className="muted">Not chosen yet</span>}</Fact>
             <Fact k="Using">{obs.signal ? `${lbl(obs.signal)}${obs.direction ? `, expected to be ${obs.direction}` : ''}` : <span className="muted">Not chosen yet</span>}</Fact>
             <Fact k="Looks back">{obs.min_lag_days == null || obs.max_lag_days == null ? <span className="muted">Not chosen yet</span> : <>{lagRange(obs.min_lag_days, obs.max_lag_days)} before each episode{obs.max_lag_days > obs.min_lag_days ? ', each window tested and corrected for' : ''}</>}</Fact>
             <Fact k="Chance check">The same comparison on 2,000 random shifts of {firstName}'s episode dates</Fact>
@@ -322,24 +366,24 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
       {cloneOf && <div className="alert alert-info mb"><Icon name="clipboard" /><span>Copying the design of <strong>{cloneOf.title}</strong> ({cloneOf.id}). Choose a patient to run it on.</span></div>}
 
       <ol className="steps">
-        {STEPS.map((s, i) => (
+        {steps.map((s, i) => (fixed && i === 0 ? null : (
           <li key={s} className={i === step ? 'current' : i < step ? 'done' : ''}>
-            <span className="n">{i < step ? <Icon name="check" size={14} /> : i + 1}</span>{s}
+            <span className="n">{i < step ? <Icon name="check" size={14} /> : fixed ? i : i + 1}</span>{s}
           </li>
-        ))}
+        )))}
       </ol>
 
-      <div className={step === 3 ? 'td-wrap' : undefined}>
+      <div className={step === 3 && !isCollection ? 'td-wrap' : undefined}>
       <div className="card">
         {step === 0 && (
           <>
             <h2>Which patient?</h2>
             <div className="option-grid">
-              {patients.map((p) => (
+              {list.map((p) => (
                 <button key={p.id} className={`option ${patientId === p.id ? 'selected' : ''}`} onClick={() => pickPatient(p)}>
                   {patientId === p.id && <span className="check"><Icon name="check" size={14} /></span>}
                   <span className="head"><span className={`mini-avatar ${(p.source === 'real' || p.source === 'pmdata') ? 'tone-green' : 'tone-purple'}`}>{initials(p.display_name)}</span><span className="title">{p.display_name}</span></span>
-                  <span className="sub">{p.id} · {(p.source === 'real' || p.source === 'pmdata') ? 'PMData (real)' : 'Synthetic'}</span>
+                  <span className="sub">{p.id}</span>
                   <span className="sub">{p.n_days} days · {p.n_episodes} episodes logged</span>
                   <span className="sub">Owns: {p.devices.map((d) => catalog.find((c) => c.id === d)?.name ?? d).join(', ')}</span>
                 </button>
@@ -360,14 +404,30 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
 
         {step === 2 && (
           <>
-            <h2>What can this patient's devices measure?</h2>
+            <h2>{isCollection ? 'Which signals should be collected?' : "What can this patient's devices measure?"}</h2>
             <p className="muted">Nothing is pre-selected. Tick signals to shortlist them, or just pick what to measure on the next step. The patient's approval covers <strong>only</strong> the signals the test actually uses.</p>
             <SignalPicker signals={ALL_SIGNALS} available={available} noData={noData} selected={signals} onToggle={toggleSignal}
               sourcesFor={(s) => catalog.filter((d) => devices.includes(d.id) && d.signals.includes(s)).map((d) => d.name)} />
           </>
         )}
 
-        {step === 3 && patient && (() => {
+        {step === 3 && patient && isCollection && (
+          <>
+            <h2>Over what dates?</h2>
+            <div className="td-inline mt">
+              <span>From</span>
+              <input type="date" aria-label="Collection start" value={obsWin.start} min={patient.date_range[0]} max={obsWin.end || patient.date_range[1]}
+                onChange={(e) => e.target.value && setObsWin({ start: e.target.value, end: obsWin.end })} style={{ width: 'auto' }} />
+              <span>to</span>
+              <input type="date" aria-label="Collection end" value={obsWin.end} min={obsWin.start || patient.date_range[0]} max={patient.date_range[1]}
+                onChange={(e) => e.target.value && setObsWin({ start: obsWin.start, end: e.target.value })} style={{ width: 'auto' }} />
+              <button type="button" className="button secondary sm" onClick={() => setObsWin({ start: patient.date_range[0], end: patient.date_range[1] })}>Use all {patient.n_days} days</button>
+            </div>
+            <p className="td-note mt">No test is attached. Once data is in, you can run pattern tests on it from the Data collection tab.</p>
+          </>
+        )}
+
+        {step === 3 && patient && !isCollection && (() => {
           const firstName = patient?.display_name.replace(/,.*$/, '') ?? 'the patient'
           const lagText = obs.min_lag_days == null || obs.max_lag_days == null ? 'the days' : obs.max_lag_days === 1 ? 'the day' : `the ${lagRange(obs.min_lag_days, obs.max_lag_days)}`
           const winDays = window_.start && window_.end ? daysBetween(window_.start, window_.end) + 1 : 0
@@ -417,7 +477,8 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
                 {type === 'observational' ? (
                   <>
                     <div className="td-slots">
-                      <Slot n={1} label="What you want to explain" value="Episodes" sub={`${episodes} logged by ${firstName}`} open={openSlot === 1} onOpen={() => toggle(1)} />
+                      <Slot n={1} label="What you want to explain" empty={!symptom} value={symptom ? symptom.name : 'Choose a symptom'}
+                        sub={symptom ? `logged by ${firstName}` : `${firstName}'s symptoms & events`} open={openSlot === 1} onOpen={() => toggle(1)} />
                       <Slot n={2} label="What might come first" empty={!obsReady}
                         value={obs.signal ? `${lbl(obs.signal)}${obs.direction ? `, ${obs.direction}` : ''}` : 'Choose a signal'}
                         sub={!obs.signal ? `from ${firstName}'s devices` : obs.direction ? 'than on normal days' : 'lower or higher?'} open={openSlot === 2} onOpen={() => toggle(2)} />
@@ -429,7 +490,19 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
                     </div>
                     {openSlot === 1 && (
                       <SlotEditor title="Editing 1: what you want to explain" onDone={() => setOpenSlot(null)}>
-                        <p className="td-note">Logged episodes are the only outcome a pattern test can explain for now. {firstName} has logged <strong>{episodes}</strong>; at least 5 are needed.</p>
+                        <div className="td-tray-row">
+                          {loggable.map((x) => (
+                            <button key={x.id} type="button" className={`td-chip ${obs.symptom_id === x.id ? 'on' : ''}`} aria-pressed={obs.symptom_id === x.id}
+                              onClick={() => setObs({ ...obs, symptom_id: x.id })}><strong>{x.name}</strong><span>{x.kind}</span></button>
+                          ))}
+                          {symptomsQ.loading && !symptomsQ.data && <span className="muted small">Loading…</span>}
+                        </div>
+                        <div className="td-inline">
+                          <input aria-label="New symptom" placeholder="Add a symptom or event, e.g. Dizziness" value={newSymptom} onChange={(e) => setNewSymptom(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addSymptom() } }} style={{ maxWidth: 320 }} />
+                          <button type="button" className="button secondary sm" disabled={!newSymptom.trim()} onClick={addSymptom}><Icon name="plus" size={14} /> Add</button>
+                        </div>
+                        <p className="td-note">The test compares the days before each logged {symName} with {firstName}'s other days. At least 5 logs are needed.</p>
                       </SlotEditor>
                     )}
                     {openSlot === 2 && (
@@ -469,7 +542,7 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
                     )}
                     <p className="td-reads"><strong>Reads as:</strong>{' '}
                       {obsReady
-                        ? <>Is {SIGNAL_INFO[obs.signal!].plain} {obs.direction} than usual in {lagText} before {firstName}'s episodes?</>
+                        ? <>Is {SIGNAL_INFO[obs.signal!].plain} {obs.direction} than usual in {lagText} before each of {firstName}'s {symName === 'episode' ? 'episodes' : `${symName} logs`}?</>
                         : <span className="muted">Choose a signal and a direction in slot 2 to finish the question.</span>}
                     </p>
                   </>
@@ -527,7 +600,7 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
               {type === 'observational' ? (
                 <section className="td-section">
                   <h3 className="td-h">What gets compared, for one episode</h3>
-                  <PatternStrip min={obs.min_lag_days ?? 1} max={obs.max_lag_days ?? 3} episodeLabel="Episode day" />
+                  <PatternStrip min={obs.min_lag_days ?? 1} max={obs.max_lag_days ?? 3} episodeLabel={symptom?.name ?? 'Episode day'} />
                   {obs.max_lag_days == null && <p className="td-note">Showing 3 days as an example. Choose how far back in slot 3.</p>}
                   <p className="td-note">Illustration, not {firstName}'s data. Shaded days are compared with normal days; episode days are left out.</p>
                 </section>
@@ -585,6 +658,12 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
                   <input id="t" value={title} onChange={(e) => { setTitle(e.target.value); setTitleTouched(true) }} />
                 </div>
                 <div className="field"><label htmlFor="c">Clinician</label><input id="c" value={clinician} onChange={(e) => setClinician(e.target.value)} /></div>
+                <div className="field">
+                  <label htmlFor="ins">Instructions for the patient (optional)</label>
+                  <textarea id="ins" rows={4} value={instructions} onChange={(e) => setInstructions(e.target.value)}
+                    placeholder={type === 'intervention' ? 'e.g. On B days, walk 15 minutes after dinner. On A days, keep your usual evening.' : 'e.g. Log every migraine on the day it starts, even if it is mild.'}
+                    style={{ width: '100%', font: 'inherit', padding: '10px 12px', borderRadius: 10, border: '1px solid var(--border)', resize: 'vertical' }} />
+                </div>
                 <table className="table kv">
                   <tbody>
                     <tr><th>Patient</th><td>{patient.display_name} <span className="muted small">({patient.id})</span></td></tr>
@@ -592,7 +671,9 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
                     <tr><th>Signals shared</th><td>{finalSignals.map(signalLabel).join(', ')}
                       {droppedSignals.length > 0 && <div className="small muted">Not shared, because this test doesn't use them: {droppedSignals.map(signalLabel).join(', ')}</div>}</td></tr>
                     <tr><th>Window</th><td>{formatDate(window_.start)} → {formatDate(window_.end)}</td></tr>
-                    {type === 'observational' ? (
+                    {isCollection ? (
+                      <tr><th>Test</th><td>None yet: data collection only</td></tr>
+                    ) : type === 'observational' ? (
                       <tr><th>Test</th><td>Observational: is {lbl(obs.signal).toLowerCase()} <strong>{obs.direction}</strong> in the {lagRange(obs.min_lag_days ?? 1, obs.max_lag_days ?? 1)} before episodes?</td></tr>
                     ) : (
                       <tr><th>Test</th><td>A/B trial: {iv.n_periods} periods × {iv.period_days} days, {iv.washout_days}-day washout. Outcome: {lbl(iv.outcome_signal).toLowerCase()} ({iv.better} is better)</td></tr>
@@ -613,7 +694,7 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
         )}
 
         <div className="wizard-nav">
-          <button className="button ghost" onClick={() => (step === 0 ? navigate('/') : setStep(step - 1))}>{step === 0 ? 'Cancel' : '← Back'}</button>
+          <button className="button ghost" onClick={() => (step === 0 || (fixed && step === 1) ? navigate(fixed ? `/patients/${fixed.id}` : '/') : setStep(step - 1))}>{step === 0 || (fixed && step === 1) ? 'Cancel' : '← Back'}</button>
           <div className="row">
             {stepError && step > 0 && <span className="small" style={{ color: 'var(--yellow)' }}>{stepError}</span>}
             {step < 4 ? (
@@ -624,7 +705,7 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
           </div>
         </div>
       </div>
-      {step === 3 && patient && testDesignAside()}
+      {step === 3 && patient && !isCollection && testDesignAside()}
       </div>
     </div>
   )

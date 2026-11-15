@@ -6,7 +6,8 @@ import { DEVICE_ICON, Icon, SIGNAL_ICON } from '../../components/Icon'
 import { StatusChip } from '../../components/Verdict'
 import { ResultsView } from '../../components/ResultsView'
 import { ABCalendar } from '../../components/TestDesign'
-import { v15, v15Plan, type Symptom } from '../../lib/v15'
+import { isCollection, v15, v15Plan, type CollectionResults, type Symptom } from '../../lib/v15'
+import { CollectionCoverage } from '../../components/CollectionPanel'
 import { useToast } from '../../components/Shell'
 import { RunProgress, resultsWithRetry } from '../../components/RunProgress'
 import { addDays, daysBetween, formatDate, formatDateShort, SIGNAL_INFO } from '../../lib/util'
@@ -148,6 +149,7 @@ export function PatientPlan({ planId, data }: { planId: string; data: PatientDat
       {finished && (
         resultsQ.loading && !resultsQ.data ? <div className="spinner">Calculating your result…</div>
           : resultsQ.error ? <div className="alert alert-error">{resultsQ.error}</div>
+            : resultsQ.data && isCollection(plan) ? <div className="card"><h1>{plan.title}</h1><p>Thank you. This collection is finished. Your clinician can now look at your data.</p><CollectionCoverage results={resultsQ.data as unknown as CollectionResults} /></div>
             : resultsQ.data ? <ResultsView results={resultsQ.data} plan={plan} audience="patient" />
               : <div className="card"><h1>{plan.title}</h1><p>Your result is still being calculated.</p><button className="button secondary" onClick={resultsQ.reload}>Check again</button></div>
       )}
