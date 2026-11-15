@@ -49,13 +49,59 @@ function runs<T>(items: T[], key: (t: T) => string | null): { k: string; from: n
 const tickEvery = (n: number) => Math.max(0, Math.ceil(n / 8) - 1)
 const yFmt = (signal: string) => (v: number) => (signal === 'sleep_min' ? `${Math.round((v / 60) * 10) / 10}h` : String(Math.round(v)))
 
+// Missing readings are real (a device not worn), so solid lines stay broken across them.
+// Each pair of consecutive readings that a solid segment won't join (a missing-day gap, or a
+// change of segment such as A -> washout) gets its own faint dashed bridge, so gaps read as
+// "no reading" rather than as a rendering glitch. One dataKey per bridge keeps them from
+// joining each other.
+type BridgeSpec = { key: string; from: number; to: number; gap: boolean }
+function bridgeSpecs(values: (number | null)[], seg: (i: number) => string | null, stopAt: number): BridgeSpec[] {
+  const out: BridgeSpec[] = []
+  let prev = -1
+  for (let i = 0; i <= stopAt; i++) {
+    if (values[i] == null) continue
+    if (prev >= 0 && (i > prev + 1 || seg(i) !== seg(prev))) out.push({ key: `br${out.length}`, from: prev, to: i, gap: i > prev + 1 })
+    prev = i
+  }
+  return out
+}
+function withBridges<T extends Record<string, unknown>>(rows: T[], values: (number | null)[], specs: BridgeSpec[]) {
+  const out = rows.map((r) => ({ ...r })) as (T & Record<string, number | null>)[]
+  specs.forEach((b) => {
+    ;(out[b.from] as Record<string, unknown>)[b.key] = values[b.from]
+    ;(out[b.to] as Record<string, unknown>)[b.key] = values[b.to]
+  })
+  return out
+}
+const bridgeLine = (b: BridgeSpec) => (
+  <Line key={b.key} dataKey={b.key} type="linear" stroke="#a3a4b3" strokeWidth={1.6} strokeDasharray="2 3"
+    dot={false} activeDot={false} connectNulls isAnimationActive={false} legendType="none" tooltipType="none" />
+)
+/** Index of the last reading; when a plan was stopped early, everything after it was never collected. */
+const lastReading = (values: (number | null)[]) => {
+  for (let i = values.length - 1; i >= 0; i--) if (values[i] != null) return i
+  return -1
+}
+const notCollectedArea = (series: ResultSeriesPoint[], last: number) =>
+  last >= 0 && last < series.length - 1 ? (
+    <ReferenceArea x1={series[last + 1].date} x2={series[series.length - 1].date} fill="#f1f1f5" fillOpacity={1}
+      ifOverflow="extendDomain"
+      label={{ value: 'Not collected (plan stopped)', position: 'insideTop', fill: '#8c8d99', fontSize: 12, fontWeight: 600 }} />
+  ) : null
+
 // ---------- observational: signal over time ----------
-export function SignalChart({ series, signal, baseline, height = 280, showWindows = true, color = C.accent }: {
+export function SignalChart({ series, signal, baseline, height = 280, showWindows = true, color = C.accent, stoppedEarly = false }: {
   series: ResultSeriesPoint[]; signal: string; baseline?: number | null; height?: number; showWindows?: boolean; color?: string
+  /** results.complete === false: shade the uncollected tail instead of showing it as a gap */
+  stoppedEarly?: boolean
 }) {
+  const values = series.map((p) => p.value)
+  const last = lastReading(values)
+  const stopAt = stoppedEarly ? last : series.length - 1
+  const bridges = bridgeSpecs(values, () => 's', stopAt)
+  const data = withBridges(series as unknown as Record<string, unknown>[], values, bridges)
   // Pre-episode windows: shaded areas from the first window day to the day after the last one,
   // so even 1-day windows have width.
-  const data = series
   const windows = showWindows ? runs(series, (p) => (p.in_window ? 'w' : null)) : []
   const episodes = series.filter((p) => p.episode)
   const gid = `g-${signal}-${color.slice(1)}`
@@ -76,6 +122,7 @@ export function SignalChart({ series, signal, baseline, height = 280, showWindow
             <ReferenceArea key={w.from} x1={series[w.from].date} x2={series[Math.min(series.length - 1, w.to + 1)].date}
               fill={C.window} fillOpacity={0.9} ifOverflow="extendDomain" />
           ))}
+          {stoppedEarly && notCollectedArea(series, last)}
           {episodes.map((e) => (
             <ReferenceLine key={e.date} x={e.date} stroke={C.episode} strokeWidth={1.6} strokeDasharray="3 3" />
           ))}
@@ -84,7 +131,9 @@ export function SignalChart({ series, signal, baseline, height = 280, showWindow
             labelFormatter={(d) => formatDateShort(String(d))}
             formatter={(v: number) => [formatValue(signal, v), signalLabel(signal)]}
           />
-          <Area type="monotone" dataKey="value" stroke="none" fill={`url(#${gid})`} connectNulls isAnimationActive={false} tooltipType="none" />
+          {/* fill breaks with the line: shading under a missing day would imply a reading */}
+          <Area type="monotone" dataKey="value" stroke="none" fill={`url(#${gid})`} connectNulls={false} isAnimationActive={false} tooltipType="none" />
+          {bridges.map(bridgeLine)}
           <Line type="monotone" dataKey="value" stroke={color} strokeWidth={2.4} dot={false} connectNulls={false} isAnimationActive={false} />
         </ComposedChart>
       </ResponsiveContainer>
@@ -93,6 +142,8 @@ export function SignalChart({ series, signal, baseline, height = 280, showWindow
         <span><i style={{ background: C.episode, width: 3, height: 12 }} />Episode</span>
         {showWindows && <span><i className="box" style={{ background: C.window }} />Days before an episode</span>}
         {baseline != null && <span><i className="dashed" />Normal-day average</span>}
+        {bridges.some((b) => b.gap) && <span><i className="dotted" />No reading that day</span>}
+        {stoppedEarly && last < series.length - 1 && <span><i className="box" style={{ background: '#f1f1f5' }} />Not collected</span>}
       </div>
     </div>
   )
@@ -153,15 +204,35 @@ export function NullHistogram({ nulls, observed, sign, height = 200 }: { nulls: 
 }
 
 // ---------- intervention: outcome colored by arm ----------
-export function ArmSeriesChart({ series, signal, height = 280 }: { series: ResultSeriesPoint[]; signal: string; height?: number }) {
-  const data = series.map((p) => ({
-    date: p.date,
-    A: p.arm === 'A' ? p.value : null,
-    B: p.arm === 'B' ? p.value : null,
-    W: p.arm === 'washout' ? p.value : null,
-  }))
+export function ArmSeriesChart({ series, signal, height = 280, armA = 'A', armB = 'B', stoppedEarly = false }: {
+  series: ResultSeriesPoint[]; signal: string; height?: number; armA?: string; armB?: string
+  /** results.complete === false: shade the uncollected tail instead of showing it as a gap */
+  stoppedEarly?: boolean
+}) {
+  const values = series.map((p) => p.value)
+  // O = days outside the trial schedule (before the first / after the last period): real
+  // readings, not analyzed. Drawn in gray rather than dropped.
+  const segOf = (i: number) => series[i].arm ?? 'O'
+  const last = lastReading(values)
+  const stopAt = stoppedEarly ? last : series.length - 1
+  // Segment changes (A -> washout -> B ...) get a neutral dashed connector instead of
+  // extending either arm's color onto a day that doesn't belong to it.
+  const bridges = bridgeSpecs(values, segOf, stopAt)
+  const rows = series.map((p, i) => {
+    const k = segOf(i)
+    return {
+      date: p.date,
+      A: k === 'A' ? p.value : null,
+      B: k === 'B' ? p.value : null,
+      W: k === 'washout' ? p.value : null,
+      O: k === 'O' ? p.value : null,
+    }
+  })
+  const data = withBridges(rows, values, bridges)
+  const hasOutside = series.some((p) => p.arm == null && p.value != null)
   const bands = runs(series, (p) => p.arm)
   const fill: Record<string, string> = { A: '#eeecfc', B: '#fdeee2', washout: '#f6f6f9' }
+  const name: Record<string, string> = { A: `A · ${armA}`, B: `B · ${armB}`, W: 'Washout', O: 'Outside trial' }
   return (
     <div>
       <ResponsiveContainer width="100%" height={height}>
@@ -169,16 +240,29 @@ export function ArmSeriesChart({ series, signal, height = 280 }: { series: Resul
           <CartesianGrid stroke={C.grid} strokeDasharray="3 5" vertical={false} />
           <XAxis dataKey="date" tickFormatter={formatDateShort} interval={tickEvery(data.length)} {...axisProps} />
           <YAxis domain={['auto', 'auto']} width={52} tickFormatter={yFmt(signal)} {...axisProps} />
+          {/* bands run to the next band's first day so adjacent periods touch (no white slivers) */}
           {bands.map((b) => (
-            <ReferenceArea key={b.from} x1={series[b.from].date} x2={series[b.to].date} fill={fill[b.k] ?? '#fff'} fillOpacity={1} ifOverflow="extendDomain" />
+            <ReferenceArea key={b.from} x1={series[b.from].date} x2={series[Math.min(series.length - 1, b.to + 1)].date}
+              fill={fill[b.k] ?? '#fff'} fillOpacity={1} ifOverflow="extendDomain" />
           ))}
+          {stoppedEarly && notCollectedArea(series, last)}
           <Tooltip labelFormatter={(d) => formatDateShort(String(d))}
-            formatter={(v: number, k) => [formatValue(signal, v), k === 'W' ? 'Washout' : `Arm ${k}`]} />
+            formatter={(v: number, k) => [formatValue(signal, v), name[String(k)] ?? String(k)]} />
+          {bridges.map(bridgeLine)}
+          <Line dataKey="O" stroke={C.washout} strokeWidth={1.8} dot={false} connectNulls={false} isAnimationActive={false} />
+          <Line dataKey="W" stroke={C.washout} strokeWidth={1.5} strokeDasharray="3 3" dot={false} connectNulls={false} isAnimationActive={false} />
           <Line dataKey="A" stroke={C.a} strokeWidth={2.6} dot={false} connectNulls={false} isAnimationActive={false} />
           <Line dataKey="B" stroke={C.b} strokeWidth={2.6} dot={false} connectNulls={false} isAnimationActive={false} />
-          <Line dataKey="W" stroke={C.washout} strokeWidth={1.5} strokeDasharray="3 3" dot={false} connectNulls={false} isAnimationActive={false} />
         </ComposedChart>
       </ResponsiveContainer>
+      <div className="legend">
+        <span><i style={{ background: C.a }} />A · {armA}</span>
+        <span><i style={{ background: C.b }} />B · {armB}</span>
+        <span><i className="dashed" />Washout (not analyzed)</span>
+        {hasOutside && <span><i style={{ background: C.washout }} />Outside trial (not analyzed)</span>}
+        {bridges.some((b) => b.gap) && <span><i className="dotted" />No reading that day</span>}
+        {stoppedEarly && last < series.length - 1 && <span><i className="box" style={{ background: '#f1f1f5' }} />Not collected</span>}
+      </div>
     </div>
   )
 }

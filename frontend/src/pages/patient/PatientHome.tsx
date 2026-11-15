@@ -113,7 +113,7 @@ export function PatientHome({ session, data }: { session: Session; data: Patient
 
 function LatestChart({ plan, r }: { plan: Plan; r: Results }) {
   const { signal } = describe(r, plan)
-  if (r.type === 'observational') return <SignalChart series={r.series} signal={signal} height={210} showWindows={false} />
+  if (r.type === 'observational') return <SignalChart series={r.series} signal={signal} height={210} showWindows={false} stoppedEarly={!r.complete} />
   const iv = r.intervention
   return iv ? <ABMeansChart meanA={iv.mean_a} meanB={iv.mean_b} signal={signal} armA={plan.intervention?.arm_a ?? 'A'} armB={plan.intervention?.arm_b ?? 'B'} height={120} /> : null
 }

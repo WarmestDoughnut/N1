@@ -198,8 +198,11 @@ function verdictFor(p: number, effect: number, matches: boolean, enough: boolean
 function computeObservational(plan: Plan, incomplete: boolean): Results {
   const cfg = plan.observational!
   const rows = seriesWithLogs(plan.patient_id).filter((r) => r.date >= plan.window.start && r.date <= plan.window.end)
-  const vals = rows.map((r) => (r[cfg.signal] ?? null) as number | null)
-  const eps = rows.map((r) => (r.episode ? 1 : 0))
+  // Stopped early: only the first half of the window was collected (same stand-in as the
+  // intervention mock). Later days are never seen, so neither readings nor episodes count.
+  const collected = incomplete ? Math.ceil(rows.length / 2) : rows.length
+  const vals = rows.map((r, i) => (i < collected ? (r[cfg.signal] ?? null) : null) as number | null)
+  const eps = rows.map((r, i) => (i < collected && r.episode ? 1 : 0))
   const n = rows.length
   const sign = cfg.direction === 'lower' ? -1 : 1
   const rng = mulberry32(1234)
@@ -246,7 +249,7 @@ function computeObservational(plan: Plan, incomplete: boolean): Results {
   const bestIdx = lag_scan.reduce((bi, x, i, arr) => (sign * x.effect_pct > sign * arr[bi].effect_pct ? i : bi), 0)
   const best = lag_scan[bestIdx]
   const bestObs = observed[bestIdx]
-  const missingFrac = vals.filter((v) => v == null).length / Math.max(1, n)
+  const missingFrac = vals.slice(0, collected).filter((v) => v == null).length / Math.max(1, collected)
   const warnings: string[] = []
   if (incomplete) warnings.push('incomplete_plan')
   if (missingFrac > 0.05) warnings.push('missing_data')

@@ -104,15 +104,8 @@ function ClinicianResults({ results, plan, aside }: { results: Results; plan?: P
                   delta={results.effect_pct} good={sign * results.effect_pct > 0 && results.verdict === 'likely_real'}
                   sub={isObs ? `vs ${formatValue(signal, obs?.baseline_mean)} on normal days` : `vs ${formatValue(signal, iv?.mean_a)} on A (${armA})`} />
                 {isObs
-                  ? <SignalChart series={results.series} signal={signal} baseline={obs?.baseline_mean} color={SIGNAL_COLOR[signal]} />
-                  : <>
-                      <ArmSeriesChart series={results.series} signal={signal} />
-                      <div className="legend">
-                        <span><i style={{ background: 'var(--arm-a)' }} />A · {armA}</span>
-                        <span><i style={{ background: 'var(--arm-b)' }} />B · {armB}</span>
-                        <span><i className="dashed" />Washout (not analyzed)</span>
-                      </div>
-                    </>}
+                  ? <SignalChart series={results.series} signal={signal} baseline={obs?.baseline_mean} color={SIGNAL_COLOR[signal]} stoppedEarly={!results.complete} />
+                  : <ArmSeriesChart series={results.series} signal={signal} armA={armA} armB={armB} stoppedEarly={!results.complete} />}
               </>
             )}
             {tab === 'lag' && obs && (
@@ -300,7 +293,7 @@ function PatientResults({ results, plan }: { results: Results; plan?: Plan | nul
             </div>
           </div>
           {results.type === 'observational'
-            ? <SignalChart series={results.series} signal={signal} height={260} showWindows={false} color={SIGNAL_COLOR[signal]} />
+            ? <SignalChart series={results.series} signal={signal} height={260} showWindows={false} color={SIGNAL_COLOR[signal]} stoppedEarly={!results.complete} />
             : iv && <ABMeansChart meanA={iv.mean_a} meanB={iv.mean_b} signal={signal} armA={cfg?.arm_a ?? 'A'} armB={cfg?.arm_b ?? 'B'} height={140} />}
         </article>
         <aside className="card">

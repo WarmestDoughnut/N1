@@ -203,6 +203,7 @@ button.summary-card:hover { border-color: #cfcaf7; }
 .legend i { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
 .legend i.box { height: 12px; width: 12px; border-radius: 3px; }
 .legend i.dashed { height: 0; border-top: 2px dashed #b8b9c5; }
+.legend i.dotted { height: 0; border-top: 2px dotted #b8b9c5; }
 .insights-card { padding: 19px 20px; min-width: 0; }
 
 .donut-row { display: flex; align-items: center; gap: 20px; padding: 18px 0 16px; }
