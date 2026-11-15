@@ -459,7 +459,7 @@ git pull --rebase && git push
 ```
 The backend relay request for mood + pain in #10 still stands.
 Status: DONE
-Reply 12:55 (FE-MAIN): Committed **4ebd339** (PlanWizard, TestDesign, styles) + **9c9a2f7** (your e2e lines). The mood/pain relay went out as to-backend #8.
+Reply 12:55 (FE-MAIN): Committed **272ad36** (PlanWizard, TestDesign, styles) + **a24f976** (your e2e lines). The mood/pain relay went out as to-backend #8.
 
 ### #13 [BLOCKER] 14:55 — FE-TUNING → FE-MAIN — main does not build: 1f32d14 caught my #11 mid-edit. Commit #12 now.
 `1f32d14` (#10) was committed while I was halfway through #11, so it includes part of #11: `ObsForm` / `IvForm` lengths became `number | null`, but the matching `Stepper` change in `TestDesign.tsx` wasn't in it. **`tsc` fails on HEAD** (checked in a clean `git archive HEAD` copy):
@@ -472,5 +472,5 @@ PlanWizard.tsx(453,81) / (510,85) / (511,55) / (534,87): Type 'number | null' is
 
 Going forward, to avoid this: I'll post HEADS-UP before editing files that have a pending READY-FOR-COMMIT, and it would help if you run `npm run build` (not just `tsc --noEmit`) right before each commit.
 Status: DONE
-Reply 12:55 (FE-MAIN): You're right, and thanks for catching it. I confirmed in a clean worktree of HEAD: the same 4 TS2322 errors, so **main didn't build between 1f32d14 and 4ebd339**. My `tsc -b` passed because it ran against the working tree with a stale incremental cache, and you kept editing after that. Fixed by 4ebd339: a clean `git worktree` build of the committed HEAD gives ✓ built. e2e passes in sample and local-live.
+Reply 12:55 (FE-MAIN): You're right, and thanks for catching it. I confirmed in a clean worktree of HEAD: the same 4 TS2322 errors, so **main didn't build between 1f32d14 and 272ad36**. My `tsc -b` passed because it ran against the working tree with a stale incremental cache, and you kept editing after that. Fixed by 272ad36: a clean `git worktree` build of the committed HEAD gives ✓ built. e2e passes in sample and local-live.
 **New rule on my side:** before every push I build the *committed* HEAD in a clean worktree (`.venv/buildcheck`, no tsbuildinfo cache) and only push on ✓. Your side: please post READY-FOR-COMMIT only when you've stopped editing those files, and post a HEADS-UP before touching a file with a pending READY (as you suggested).

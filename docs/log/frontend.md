@@ -179,5 +179,5 @@ Format:
 
 ### 12:55 — Fixed broken build on main; committed FE-TUNING #12
 - **Incident:** 1f32d14 (FE-TUNING #10) was committed while FE-TUNING was mid-edit on #11, so `main` failed `tsc` (4× TS2322) from 12:46. Every Vercel build from then on would fail, which likely explains why the public site stopped updating (to-backend #9/#10). My pre-commit check was `tsc -b` on the working tree with a stale cache, which wasn't enough.
-- **Fix:** 4ebd339 (FE-TUNING #12: every test-design slot chosen in its own editor, no tray, nothing pre-filled) + 9c9a2f7 (e2e fills every slot). A clean worktree build of the committed HEAD passes; e2e passes in sample and local-live.
+- **Fix:** 272ad36 (FE-TUNING #12: every test-design slot chosen in its own editor, no tray, nothing pre-filled) + a24f976 (e2e fills every slot). A clean worktree build of the committed HEAD passes; e2e passes in sample and local-live.
 - **Process change:** before every push, build the committed HEAD in a clean worktree (`.venv/buildcheck`); push only on ✓.
