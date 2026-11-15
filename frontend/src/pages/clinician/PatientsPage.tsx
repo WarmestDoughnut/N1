@@ -32,7 +32,6 @@ function PatientList({ data, catalog }: { data: ClinicianData; catalog: Device[]
         <div>
           <p className="eyebrow">Patients</p>
           <h1>Your patients</h1>
-          <span className="sub">Open a patient to see their devices, past tests and results, or to start a new test plan.</span>
         </div>
         <a className="button secondary" href="#/connections"><Icon name="people" /> Add a patient</a>
       </section>
@@ -118,7 +117,7 @@ function PatientDetail({ patient: sel, data, catalog }: { patient: Patient; data
 
         <article className="card">
           <div className="card-title">
-            <div><h3>Test plans</h3><p>Open a plan to see its status or results</p></div>
+            <h3>Test plans</h3>
             <a className="link-btn" href={`#/new?patient=${sel.id}`}><Icon name="plus" size={14} /> New</a>
           </div>
           {plans.length === 0

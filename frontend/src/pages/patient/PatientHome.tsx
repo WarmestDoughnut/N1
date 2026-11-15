@@ -23,7 +23,6 @@ export function PatientHome({ session, data }: { session: Session; data: Patient
         <div>
           <p className="eyebrow">My health</p>
           <h1>Hello, {firstName(session.name)}</h1>
-          <span className="sub">Your tests in one place. You decide what's shared.</span>
         </div>
       </section>
 

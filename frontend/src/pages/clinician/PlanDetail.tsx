@@ -78,7 +78,7 @@ export function PlanDetail({ planId, data }: { planId: string; data: ClinicianDa
         <section className="bottom-grid">
           {facts}
           <article className="card">
-            <div className="card-title"><div><h3>What the patient sees</h3><p>Plain-language summary they approve</p></div></div>
+            <div className="card-title"><h3>What the patient sees</h3></div>
             <div className="summary-text" style={{ fontSize: 16, margin: '0 0 16px' }}>{plan.patient_summary}</div>
             <div className="chart-title">History</div>
             <History plan={plan} />

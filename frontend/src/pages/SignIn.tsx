@@ -50,7 +50,6 @@ export function SignIn() {
         <div className="signin-panel">
           <p className="eyebrow">Welcome back</p>
           <h2>Sign in to N1 Hub</h2>
-          <p className="muted" style={{ marginTop: 6 }}>Clinicians go to their workspace. Patients go to their own health page.</p>
 
           <form onSubmit={submit} className="card" style={{ marginTop: 20 }} noValidate>
             <div className="field">

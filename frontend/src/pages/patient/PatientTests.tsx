@@ -17,7 +17,6 @@ export function PatientTests({ data }: { data: PatientData }) {
         <div>
           <p className="eyebrow">My tests</p>
           <h1>All my tests</h1>
-          <span className="sub">Every test your clinician has asked to run, and where it stands.</span>
         </div>
       </section>
       {data.error && <div className="alert alert-error mb">{data.error}</div>}

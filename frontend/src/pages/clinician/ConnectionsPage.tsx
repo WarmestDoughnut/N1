@@ -33,7 +33,7 @@ export function ConnectionsPage({ data }: { data: ClinicianData }) {
 
       <article className="card mb" style={data.requests.length ? { borderColor: '#f0dcae' } : undefined}>
         <div className="card-title">
-          <div><h3>Connection requests</h3><p>Patients who want to add you to their care team</p></div>
+          <h3>Connection requests</h3>
           {data.requests.length > 0 && <span className="pill pill-yellow">{data.requests.length} new</span>}
         </div>
         {data.requests.length === 0

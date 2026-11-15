@@ -163,10 +163,7 @@ function ClinicianResults({ results, plan, aside }: { results: Results; plan?: P
       <section className="bottom-grid">
         <article className="card">
           <div className="card-title">
-            <div>
-              <h3>Statistical analysis</h3>
-              <p>Permutation test on this patient's own data. No population assumptions.</p>
-            </div>
+            <h3>Statistical analysis</h3>
             <VerdictBadge verdict={results.verdict} small />
           </div>
           <div className="results">

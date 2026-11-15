@@ -32,7 +32,6 @@ export function PlansPage({ data }: { data: ClinicianData }) {
         <div>
           <p className="eyebrow">Test plans</p>
           <h1>All test plans</h1>
-          <span className="sub">Each plan is the patient's consent: they approve exactly these signals, for exactly this window.</span>
         </div>
         <a className="button primary" href="#/new"><Icon name="plus" /> New test plan</a>
       </section>
