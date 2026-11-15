@@ -32,6 +32,15 @@ _SIGNAL_LABEL = {
 }
 
 
+# v1.5: each episode-having demo patient gets one seeded "default" symptom mapped to the daily
+# `episode` column (so existing verdicts are unchanged). Intervention-only patients get none.
+SYMPTOM_SEED = {
+    "P01-MARIA": ("Migraine", "symptom"), "P02-JAMES": ("Headache", "symptom"),
+    "P06-LEO": ("Hypomanic episode", "event"), "P07-GRACE": ("Near-fall", "event"),
+    "P08-SAM": ("Migraine", "symptom"), "REAL-P07": ("Low-readiness day", "event"),
+}
+
+
 def _now():
     return datetime.now().replace(microsecond=0).isoformat()
 
@@ -45,6 +54,11 @@ def build_patient_summary(plan, device_names):
     devices = ", ".join(device_names) or "your device"
     win = plan.get("window", {})
     window = f"from {win.get('start')} to {win.get('end')}" if win else ""
+    if plan["type"] == "collection":
+        sigs = ", ".join(signal_label(s) for s in plan.get("signals", [])) or "the listed signals"
+        return (f"{plan['clinician_name']} would like to collect {sigs} from {devices} {window}, "
+                f"with no test run yet — just gathering your data so it can be looked at later. "
+                f"Nothing else is shared. You can pause or stop at any time.")
     if plan["type"] == "observational":
         o = plan["observational"]
         sig = signal_label(o["signal"])
@@ -66,8 +80,14 @@ class Store:
         self.episodes = []    # [{patient_id, date, note}]
         self.accounts = {}    # account_id -> account dict (v1.2)
         self.connections = {} # conn_id -> connection dict (v1.2)
+        self.symptoms = {}    # sid -> symptom dict (v1.5)
+        self.notes = {}       # nid -> note dict (v1.5)
+        self.analyses = {}    # aid -> analysis result dict (v1.5, keyed under a collection)
         self._counter = 0
         self._conn_counter = 0
+        self._sym_counter = 0
+        self._note_counter = 0
+        self._analysis_counter = 0
         # JSON file locally, Supabase Postgres when DATABASE_URL is set (see app/persistence.py)
         self._backend = persistence.get_backend(STORE_PATH)
 
@@ -79,7 +99,10 @@ class Store:
         return {
             "plans": self.plans, "results": self.results, "episodes": self.episodes,
             "accounts": self.accounts, "connections": self.connections,
+            "symptoms": self.symptoms, "notes": self.notes, "analyses": self.analyses,
             "counter": self._counter, "conn_counter": self._conn_counter,
+            "sym_counter": self._sym_counter, "note_counter": self._note_counter,
+            "analysis_counter": self._analysis_counter,
         }
 
     # ----- persistence -----
@@ -92,8 +115,14 @@ class Store:
         self.episodes = data.get("episodes", [])
         self.accounts = data.get("accounts", {})
         self.connections = data.get("connections", {})
+        self.symptoms = data.get("symptoms", {})
+        self.notes = data.get("notes", {})
+        self.analyses = data.get("analyses", {})
         self._counter = data.get("counter", 0)
         self._conn_counter = data.get("conn_counter", 0)
+        self._sym_counter = data.get("sym_counter", 0)
+        self._note_counter = data.get("note_counter", 0)
+        self._analysis_counter = data.get("analysis_counter", 0)
         return True
 
     def save(self):
@@ -107,8 +136,14 @@ class Store:
             self.episodes = []
             self.accounts = {}
             self.connections = {}
+            self.symptoms = {}
+            self.notes = {}
+            self.analyses = {}
             self._counter = 0
             self._conn_counter = 0
+            self._sym_counter = 0
+            self._note_counter = 0
+            self._analysis_counter = 0
             self.save()
 
     # ----- seeding -----
@@ -167,9 +202,10 @@ class Store:
     def get_result(self, plan_id):
         return self.results.get(plan_id)
 
-    def add_episode(self, patient_id, ep_date, note):
+    def add_episode(self, patient_id, ep_date, note, symptom_id=None):
         with self._lock:
-            self.episodes.append({"patient_id": patient_id, "date": ep_date, "note": note})
+            self.episodes.append({"patient_id": patient_id, "date": ep_date,
+                                  "note": note, "symptom_id": symptom_id})
             self.save()
 
     # ----- accounts / connections (v1.2) -------------------------------------
@@ -314,3 +350,94 @@ class Store:
             del self.connections[conn_id]
             self.save()
             return None
+
+    # ----- symptoms (v1.5) -------------------------------------------------
+    def seed_symptoms(self, patients_meta):
+        """One default symptom per episode-having demo patient, mapped to the daily `episode` column."""
+        with self._lock:
+            if self.symptoms:
+                return
+            for pid, (name, kind) in SYMPTOM_SEED.items():
+                if pid in patients_meta:
+                    sid = f"sym-{pid.lower()}-1"
+                    self.symptoms[sid] = {
+                        "id": sid, "patient_id": pid, "name": name, "kind": kind,
+                        "created_by": "clinician", "created_at": _now(),
+                        "maps_episode": True, "deleted": False,
+                    }
+            self._sym_counter = 1
+            self.save()
+
+    def list_symptoms(self, patient_id):
+        return sorted((s for s in self.symptoms.values()
+                       if s["patient_id"] == patient_id and not s.get("deleted")),
+                      key=lambda s: s["created_at"])
+
+    def get_symptom(self, sid):
+        s = self.symptoms.get(sid)
+        return s if s and not s.get("deleted") else None
+
+    def default_symptom_id(self, patient_id):
+        for s in self.symptoms.values():
+            if s["patient_id"] == patient_id and s.get("maps_episode") and not s.get("deleted"):
+                return s["id"]
+        return None
+
+    def symptom_maps_episode(self, sid):
+        s = self.symptoms.get(sid)
+        return bool(s and s.get("maps_episode"))
+
+    def add_symptom(self, patient_id, name, kind, created_by):
+        with self._lock:
+            self._sym_counter += 1
+            sid = f"sym-{patient_id.lower()}-{self._sym_counter}"
+            s = {"id": sid, "patient_id": patient_id, "name": name, "kind": kind or "symptom",
+                 "created_by": created_by, "created_at": _now(),
+                 "maps_episode": False, "deleted": False}
+            self.symptoms[sid] = s
+            self.save()
+            return s
+
+    def delete_symptom(self, sid):
+        with self._lock:
+            s = self.symptoms.get(sid)
+            if s is None or s.get("deleted"):
+                return "not_found"
+            s["deleted"] = True
+            self.save()
+            return None
+
+    # ----- notes (v1.5) ----------------------------------------------------
+    def list_notes(self, plan_id):
+        return sorted((n for n in self.notes.values() if n["plan_id"] == plan_id),
+                      key=lambda n: n["created_at"])
+
+    def add_note(self, plan_id, author_role, author_name, text):
+        with self._lock:
+            self._note_counter += 1
+            nid = f"note-{self._note_counter}"
+            n = {"id": nid, "plan_id": plan_id, "author_role": author_role,
+                 "author_name": author_name, "text": text, "created_at": _now()}
+            self.notes[nid] = n
+            self.save()
+            return n
+
+    # ----- analyses on a collection (v1.5) ---------------------------------
+    def add_analysis(self, collection_id, result):
+        with self._lock:
+            self._analysis_counter += 1
+            aid = f"analysis-{self._analysis_counter}"
+            rec = dict(result)
+            rec["id"] = aid
+            rec["collection_id"] = collection_id
+            rec["created_at"] = _now()
+            self.analyses[aid] = rec
+            self.save()
+            return rec
+
+    def list_analyses(self, collection_id):
+        return sorted((a for a in self.analyses.values() if a["collection_id"] == collection_id),
+                      key=lambda a: a["created_at"])
+
+    def get_analysis(self, aid):
+        return self.analyses.get(aid)

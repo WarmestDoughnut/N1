@@ -37,9 +37,9 @@ from fastapi.responses import JSONResponse
 from app import data_loader, stats
 from app.model import fit_risk_model
 from app.schedule import generate_schedule, smallest_possible_p
-from app.store import Store, build_patient_summary
+from app.store import Store, build_patient_summary, _now
 
-CONTRACT_VERSION = "1.4"
+CONTRACT_VERSION = "1.5"
 
 app = FastAPI(title="N1 Hub API", version=CONTRACT_VERSION)
 # Local dev by default; ALLOWED_ORIGINS (comma-separated) overrides. Any *.vercel.app deploy
@@ -70,6 +70,7 @@ STORE = Store()
 STORE.load()
 STORE.seed(SEED_PLANS)
 STORE.seed_auth(PATIENTS)
+STORE.seed_symptoms(PATIENTS)
 
 # statuses in which a plan's data may be read / results exist
 SCOPE_OK = {"active", "paused", "stopped", "complete"}
@@ -123,11 +124,50 @@ def _window_midpoint(plan):
     return (s + timedelta(days=(e - s).days // 2)).isoformat()
 
 
+def _resolve_episode_series(df, plan):
+    """For observational plans on a NON-default symptom, rebuild the `episode` column from that
+    symptom's logged episodes. Default/omitted symptom keeps the daily `episode` column (so demo
+    verdicts are unchanged). Returns a df safe to pass to run_plan."""
+    if df is None or plan.get("type") != "observational":
+        return df
+    sid = (plan.get("observational") or {}).get("symptom_id")
+    if not sid or STORE.symptom_maps_episode(sid):
+        return df
+    pid = plan["patient_id"]
+    dates = {e["date"] for e in STORE.episodes
+             if e.get("symptom_id") == sid and e.get("patient_id") == pid}
+    df = df.copy()
+    df["episode"] = df["date"].isin(dates).astype(int)
+    return df
+
+
+def _collection_summary(plan, df):
+    """A data-collection plan has no verdict; its 'result' is a per-signal data-coverage summary."""
+    n = int(len(df)) if df is not None else 0
+    per_signal = {}
+    for s in plan.get("signals", []):
+        if df is not None and s in df.columns:
+            have = int(df[s].notna().sum())
+            per_signal[s] = {"days_with_data": have,
+                             "missing_pct": round(100 * (1 - have / n), 1) if n else 100.0}
+        else:
+            per_signal[s] = {"days_with_data": 0, "missing_pct": 100.0}
+    return {"plan_id": plan["id"], "type": "collection", "complete": True, "verdict": None,
+            "headline": f"Collected {n} days of data across {len(per_signal)} signal(s).",
+            "patient_headline": "Your data was collected. Your clinician can review it.",
+            "collection": {"n_days": n, "per_signal": per_signal},
+            "observational": None, "intervention": None, "warnings": [],
+            "null_distribution": [], "series": [], "model": None}
+
+
 def _compute_results(plan, incomplete=False):
     df = _window_df(plan)
     win_end = (plan.get("window") or {}).get("end")
     collected_until = plan.get("collected_until") or win_end
-    if df is None or df.empty:
+
+    if plan.get("type") == "collection":
+        result = _collection_summary(plan, df)
+    elif df is None or df.empty:
         result = {"plan_id": plan["id"], "type": plan["type"], "complete": False,
                   "verdict": "not_enough_data", "headline": "No data for this patient.",
                   "patient_headline": "There isn't any data to analyze yet.",
@@ -136,6 +176,7 @@ def _compute_results(plan, incomplete=False):
                   "observational": None, "intervention": None,
                   "null_distribution": [], "series": [], "model": None}
     else:
+        df = _resolve_episode_series(df, plan)
         result = stats.run_plan(plan, df)
         result["plan_id"] = plan["id"]
         try:
@@ -170,6 +211,7 @@ def demo_reset():
     STORE.clear()
     STORE.seed(SEED_PLANS)
     STORE.seed_auth(PATIENTS)
+    STORE.seed_symptoms(PATIENTS)
     return {"ok": True}
 
 
@@ -197,10 +239,11 @@ def patient(patient_id: str):
 
 @app.get("/api/patients/{patient_id}/series")
 def series(patient_id: str, signals: str = "", plan_id: str = ""):
-    df = DAILY.get(patient_id)
-    if df is None:
+    full = DAILY.get(patient_id)
+    if full is None:
         return err(404, "not_found")
     requested = [s for s in signals.split(",") if s]
+    symptom_ids = []           # symptom logs to include as `symptom:<sid>` columns (B4)
 
     if plan_id:
         plan = STORE.get_plan(plan_id)
@@ -210,9 +253,24 @@ def series(patient_id: str, signals: str = "", plan_id: str = ""):
             return err(403, "not_in_scope")
         scope = set(plan["signals"])
         cols = [s for s in (requested or list(scope)) if s in scope]
+        df = _window_df(plan)   # window- and collected_until-clipped
+        if plan.get("type") == "observational":
+            sid = (plan.get("observational") or {}).get("symptom_id") or STORE.default_symptom_id(patient_id)
+            if sid:
+                symptom_ids.append(sid)
     else:
+        df = full
         present = set(PATIENTS[patient_id].get("signals_present", [])) | {"episode"}
         cols = [s for s in (requested or list(present)) if s in df.columns]
+
+    # symptom episode-series aligned to df rows: default symptom = daily `episode`, else logged dates
+    sym_hits = {}
+    for sid in symptom_ids:
+        if STORE.symptom_maps_episode(sid):
+            sym_hits[sid] = set(df.loc[df["episode"].fillna(0).astype(int) == 1, "date"])
+        else:
+            sym_hits[sid] = {e["date"] for e in STORE.episodes
+                             if e.get("symptom_id") == sid and e.get("patient_id") == patient_id}
 
     rows = []
     for _, r in df.iterrows():
@@ -221,6 +279,8 @@ def series(patient_id: str, signals: str = "", plan_id: str = ""):
             v = r.get(c)
             row[c] = None if (v is None or (isinstance(v, float) and v != v)) else (
                 int(v) if c == "episode" else round(float(v), 1))
+        for sid in symptom_ids:
+            row[f"symptom:{sid}"] = int(r["date"] in sym_hits[sid])
         rows.append(row)
     return {"patient_id": patient_id, "rows": rows}
 
@@ -231,13 +291,16 @@ async def add_episode(request: Request):
     pid, ep_date = body.get("patient_id"), body.get("date")
     if not pid or not ep_date:
         return err(422, "invalid_body")
-    STORE.add_episode(pid, ep_date, body.get("note", ""))
-    # reflect the logged episode in the in-memory daily table so later analysis sees it
-    df = DAILY.get(pid)
-    if df is not None:
-        mask = df["date"] == ep_date
-        if mask.any():
-            df.loc[mask, "episode"] = 1
+    symptom_id = body.get("symptom_id") or STORE.default_symptom_id(pid)
+    STORE.add_episode(pid, ep_date, body.get("note", ""), symptom_id)
+    # a default-symptom log reflects into the daily `episode` column (so analysis sees it);
+    # a custom symptom is resolved from the logs at analysis time, not the shared column.
+    if symptom_id is None or STORE.symptom_maps_episode(symptom_id):
+        df = DAILY.get(pid)
+        if df is not None:
+            mask = df["date"] == ep_date
+            if mask.any():
+                df.loc[mask, "episode"] = 1
     return JSONResponse(status_code=201, content={"ok": True})
 
 
@@ -253,11 +316,11 @@ async def create_plan(request: Request):
             return err(403, "not_connected")
     plan = {k: v for k, v in body.items()
             if k not in ("id", "status", "created_at", "history", "patient_summary")}
-    # v1.4: validate the observational look-back range (1 <= min <= max <= 14)
+    # look-back range: 1 <= min <= max <= 30 (v1.9: raised cap from 14 to 30)
     if plan.get("type") == "observational" and plan.get("observational"):
         o = plan["observational"]
         lo, hi = o.get("min_lag_days", 1), o.get("max_lag_days", 3)
-        if not (isinstance(lo, int) and isinstance(hi, int) and 1 <= lo <= hi <= 14):
+        if not (isinstance(lo, int) and isinstance(hi, int) and 1 <= lo <= hi <= 30):
             return err(422, "invalid_lag_range")
     plan["id"] = STORE.next_id()
     plan["status"] = "pending_approval"
@@ -267,6 +330,7 @@ async def create_plan(request: Request):
     plan.setdefault("observational", None)
     plan.setdefault("intervention", None)
 
+    # intervention schedule: generate only when randomized and none supplied; manual uses what's sent
     if plan.get("type") == "intervention" and plan.get("intervention"):
         iv = plan["intervention"]
         if not iv.get("schedule"):
@@ -454,3 +518,169 @@ def delete_connection(conn_id: str, request: Request):
     if error == "forbidden":
         return err(403, "forbidden")
     return {"ok": True}
+
+
+# --------------------------------------------------------------------------- #
+# Symptoms / conditions (v1.5 B1)
+# --------------------------------------------------------------------------- #
+def _may_write_patient(account, patient_id):
+    """Tokenless demo calls are allowed; with a token, must be the patient or a connected clinician."""
+    if account is None:
+        return True
+    if account["role"] == "patient":
+        return account.get("patient_id") == patient_id
+    return STORE.is_connected(account["id"], patient_id)
+
+
+def _public_symptom(s):
+    return {k: s.get(k) for k in ("id", "name", "kind", "created_by", "created_at")}
+
+
+@app.get("/api/patients/{patient_id}/symptoms")
+def list_symptoms(patient_id: str):
+    if patient_id not in PATIENTS:
+        return err(404, "not_found")
+    return [_public_symptom(s) for s in STORE.list_symptoms(patient_id)]
+
+
+@app.post("/api/patients/{patient_id}/symptoms")
+async def create_symptom(patient_id: str, request: Request):
+    if patient_id not in PATIENTS:
+        return err(404, "not_found")
+    account = current_account(request)
+    if not _may_write_patient(account, patient_id):
+        return err(403, "forbidden")
+    body = await request.json()
+    name = (body.get("name") or "").strip()
+    if not name:
+        return err(422, "invalid_body")
+    created_by = account["role"] if account else "patient"
+    s = STORE.add_symptom(patient_id, name, body.get("kind", "symptom"), created_by)
+    return JSONResponse(status_code=201, content=_public_symptom(s))
+
+
+@app.delete("/api/patients/{patient_id}/symptoms/{sid}")
+def delete_symptom(patient_id: str, sid: str, request: Request):
+    account = current_account(request)
+    if not _may_write_patient(account, patient_id):
+        return err(403, "forbidden")
+    if STORE.delete_symptom(sid) == "not_found":
+        return err(404, "not_found")
+    return {"ok": True}
+
+
+# --------------------------------------------------------------------------- #
+# Notes on a plan, both sides (v1.5 B6)
+# --------------------------------------------------------------------------- #
+@app.get("/api/plans/{plan_id}/notes")
+def list_notes(plan_id: str):
+    if STORE.get_plan(plan_id) is None:
+        return err(404, "not_found")
+    return STORE.list_notes(plan_id)
+
+
+@app.post("/api/plans/{plan_id}/notes")
+async def add_note(plan_id: str, request: Request):
+    plan = STORE.get_plan(plan_id)
+    if plan is None:
+        return err(404, "not_found")
+    account = current_account(request)
+    if not _may_write_patient(account, plan["patient_id"]):
+        return err(403, "forbidden")
+    body = await request.json()
+    text = (body.get("text") or "").strip()
+    if not text:
+        return err(422, "invalid_body")
+    role = account["role"] if account else "patient"
+    name = account["name"] if account else "Patient"
+    return JSONResponse(status_code=201, content=STORE.add_note(plan_id, role, name, text))
+
+
+# --------------------------------------------------------------------------- #
+# Clinician comment + review on a result (v1.5 B7)
+# --------------------------------------------------------------------------- #
+@app.post("/api/plans/{plan_id}/results/comment")
+async def result_comment(plan_id: str, request: Request):
+    result = STORE.get_result(plan_id)
+    if result is None:
+        return err(404, "no_results")
+    body = await request.json()
+    text = (body.get("text") or "").strip()
+    if not text:
+        return err(422, "invalid_body")
+    result["clinician_comment"] = {"text": text, "at": _now()}
+    STORE.set_result(plan_id, result)
+    return result
+
+
+@app.post("/api/plans/{plan_id}/results/review")
+def result_review(plan_id: str):
+    result = STORE.get_result(plan_id)
+    if result is None:
+        return err(404, "no_results")
+    result["reviewed_at"] = _now()
+    STORE.set_result(plan_id, result)
+    return {"ok": True, "reviewed_at": result["reviewed_at"]}
+
+
+# --------------------------------------------------------------------------- #
+# Run a test on a collection's data (v1.5 B3)
+# --------------------------------------------------------------------------- #
+@app.post("/api/plans/{collection_id}/analyses")
+async def create_analysis(collection_id: str, request: Request):
+    coll = STORE.get_plan(collection_id)
+    if coll is None:
+        return err(404, "not_found")
+    if coll.get("type") != "collection":
+        return err(422, "not_a_collection")
+    body = await request.json()
+    signals = set(coll.get("signals", []))
+    window = coll.get("window")
+    if body.get("observational"):
+        o = body["observational"]
+        if o.get("signal") not in signals:
+            return err(422, "signal_not_in_collection")
+        lo, hi = o.get("min_lag_days", 1), o.get("max_lag_days", 3)
+        if not (isinstance(lo, int) and isinstance(hi, int) and 1 <= lo <= hi <= 30):
+            return err(422, "invalid_lag_range")
+        adhoc = {"id": collection_id, "patient_id": coll["patient_id"], "type": "observational",
+                 "window": window, "signals": [o["signal"], "episode"], "observational": o}
+    elif body.get("intervention"):
+        iv = body["intervention"]
+        if iv.get("outcome_signal") not in signals:
+            return err(422, "signal_not_in_collection")
+        if not iv.get("schedule"):
+            return err(422, "window_too_short")
+        adhoc = {"id": collection_id, "patient_id": coll["patient_id"], "type": "intervention",
+                 "window": window, "signals": [iv["outcome_signal"]], "intervention": iv}
+    else:
+        return err(422, "invalid_body")
+
+    df = _window_df(coll)
+    if df is None or df.empty:
+        return err(422, "not_enough_data")
+    df = _resolve_episode_series(df, adhoc)
+    result = stats.run_plan(adhoc, df)
+    try:
+        result["model"] = fit_risk_model(df, adhoc, verdict=result.get("verdict"))
+    except Exception:
+        result["model"] = None
+    if result["verdict"] == "not_enough_data":
+        reason = "too_few_periods" if "too_few_periods" in result.get("warnings", []) else "not_enough_data"
+        return err(422, reason)
+    return JSONResponse(status_code=201, content=STORE.add_analysis(collection_id, result))
+
+
+@app.get("/api/plans/{collection_id}/analyses")
+def list_analyses(collection_id: str):
+    if STORE.get_plan(collection_id) is None:
+        return err(404, "not_found")
+    return STORE.list_analyses(collection_id)
+
+
+@app.get("/api/plans/{collection_id}/analyses/{aid}")
+def get_analysis(collection_id: str, aid: str):
+    a = STORE.get_analysis(aid)
+    if a is None or a.get("collection_id") != collection_id:
+        return err(404, "not_found")
+    return a

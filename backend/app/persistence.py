@@ -75,8 +75,15 @@ create table if not exists plans (
 create table if not exists results (
   plan_id text primary key, verdict text, type text, data jsonb
 );
+create table if not exists symptoms (id text primary key, data jsonb);
+create table if not exists notes (id text primary key, data jsonb);
+create table if not exists analyses (id text primary key, data jsonb);
 create table if not exists counters (name text primary key, value integer);
 """
+
+# jsonb-blob entities (added v1.5): snapshot key -> table name
+_BLOB_TABLES = {"symptoms": "symptoms", "notes": "notes", "analyses": "analyses"}
+_COUNTER_KEYS = ["counter", "conn_counter", "sym_counter", "note_counter", "analysis_counter"]
 
 _ACCOUNT_COLS = ["id", "role", "name", "email", "password", "patient_id", "specialty", "connect_code"]
 _CONN_COLS = ["id", "clinician_id", "clinician_name", "clinician_specialty", "patient_id",
@@ -99,8 +106,9 @@ class PostgresBackend:
             conn.commit()
 
     def load(self):
-        snap = {"plans": {}, "results": {}, "episodes": [], "accounts": {},
-                "connections": {}, "counter": 0, "conn_counter": 0}
+        snap = {"plans": {}, "results": {}, "episodes": [], "accounts": {}, "connections": {},
+                "symptoms": {}, "notes": {}, "analyses": {}}
+        snap.update({k: 0 for k in _COUNTER_KEYS})
         with self._connect() as conn, conn.cursor() as cur:
             cur.execute("select id, data from plans")
             for pid, data in cur.fetchall():
@@ -119,18 +127,21 @@ class PostgresBackend:
             for row in cur.fetchall():
                 c = dict(zip(_CONN_COLS, row))
                 snap["connections"][c["id"]] = c
+            for key, table in _BLOB_TABLES.items():          # symptoms / notes / analyses
+                cur.execute(f"select id, data from {table}")
+                for oid, data in cur.fetchall():
+                    snap[key][oid] = data
             cur.execute("select name, value from counters")
             for name, value in cur.fetchall():
-                if name == "counter":
-                    snap["counter"] = value
-                elif name == "conn_counter":
-                    snap["conn_counter"] = value
+                if name in _COUNTER_KEYS:
+                    snap[name] = value
         return snap
 
     def save(self, snapshot):
         from psycopg2.extras import Json
         with self._connect() as conn, conn.cursor() as cur:
-            cur.execute("truncate accounts, connections, episodes, plans, results, counters")
+            cur.execute("truncate accounts, connections, episodes, plans, results, "
+                        "symptoms, notes, analyses, counters")
             for p in snapshot["plans"].values():
                 cur.execute(
                     "insert into plans (id, patient_id, status, type, created_at, data) "
@@ -154,6 +165,10 @@ class PostgresBackend:
                     "insert into connections (%s) values (%s)"
                     % (", ".join(_CONN_COLS), ", ".join(["%s"] * len(_CONN_COLS))),
                     tuple(c.get(k) for k in _CONN_COLS))
-            cur.execute("insert into counters (name, value) values ('counter', %s), ('conn_counter', %s)",
-                        (snapshot.get("counter", 0), snapshot.get("conn_counter", 0)))
+            for key, table in _BLOB_TABLES.items():          # symptoms / notes / analyses
+                for oid, obj in snapshot.get(key, {}).items():
+                    cur.execute(f"insert into {table} (id, data) values (%s, %s)", (oid, Json(obj)))
+            for name in _COUNTER_KEYS:
+                cur.execute("insert into counters (name, value) values (%s, %s)",
+                            (name, snapshot.get(name, 0)))
             conn.commit()

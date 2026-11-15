@@ -395,6 +395,15 @@ def run_plan(plan, daily):
         warnings.append("too_few_periods")
     if r["missing"] >= 0.05:               # >= 5% of scheduled outcome-days missing
         warnings.append("missing_data")
+    # B8: a hand-assigned (non-randomized) A/B order invalidates the permutation p-value's meaning.
+    # Allow it, but flag it loudly so it can't read as a controlled result.
+    randomized = iv.get("assignment", "randomized") != "manual"
+    if not randomized:
+        warnings.append("not_randomized")
+        caveat = ("You chose the A/B order yourself rather than randomizing, so this isn't a controlled "
+                  "test — read the significance with caution; a randomized version is needed to be sure. ")
+        headline = caveat + headline
+        patient_headline = caveat + patient_headline
     iv_block = {
         "mean_a": r["mean_a"],
         "mean_b": r["mean_b"],
@@ -410,6 +419,7 @@ def run_plan(plan, daily):
         "verdict": v,
         "headline": headline,
         "patient_headline": patient_headline,
+        "randomized": randomized,
         "effect_pct": r["effect_pct"],
         "p_value": r["p"],
         "n_permutations": r["n_perm"],

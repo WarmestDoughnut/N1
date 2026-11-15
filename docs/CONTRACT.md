@@ -105,7 +105,9 @@ Scope-enforced: returns ONLY signals in the given plan's scope, and only if the 
 Observational look-back (v1.4): `observational.min_lag_days` (optional, default 1) and
 `observational.max_lag_days` (1–14) define the scan range; the engine scans each lag L in
 `[min_lag_days, max_lag_days]` (lag L = the L days immediately before each episode), max-statistic
-corrected across that set. `1 ≤ min ≤ max ≤ 14` or `POST /api/plans` returns `422 {"error":"invalid_lag_range"}`.
+corrected across that set. `1 ≤ min ≤ max ≤ 30` (v1.5 raised the cap from 14) or `POST /api/plans`
+returns `422 {"error":"invalid_lag_range"}`. `observational.symptom_id` (v1.5, optional) picks which
+symptom's log is the episode series; omitted = the patient's seeded default symptom (the daily `episode`).
 
 Intervention block (when `type == "intervention"`, `observational` is null):
 ```json
@@ -234,7 +236,7 @@ v1.4 added `quality` (`strong|moderate|weak`), `beats_chance` (bool), `plain` (s
 `coefficients[].label` (plain label) so the UI needn't show raw AUC / feature names.
 
 ## 6. Health
-`GET /api/health` → `{"ok": true, "contract_version": "1.2"}`
+`GET /api/health` → `{"ok": true, "contract_version": "1.5", "store": "json"|"postgres"}`
 
 ## 7. Schedule preview — `GET /api/schedule/preview`
 `?n_periods=12&period_days=6&washout_days=2&seed=42&start=2026-06-01`
@@ -278,7 +280,47 @@ Seed (on first run): clinicians `rivera@n1hub.demo` (RIV-482) and `okafor@n1hub.
 one patient account per patient (`maria@`, `james@`, … , `real-p07@n1hub.demo`), id `acct-<patient_id>`.
 Active: Rivera ↔ P01,P02,P03,P04,P07,REAL-P07 · Okafor ↔ P01,P05,P06. Pending (by patient): P06-LEO → Rivera.
 
+## 9. Symptoms, collections, analyses, notes, comments (v1.5 — additive)
+
+**Symptoms / conditions** (what a test "explains"; replaces the generic episode):
+- `GET /api/patients/{id}/symptoms` → `[{id, name, kind:"symptom"|"condition"|"event", created_by, created_at}]`
+- `POST /api/patients/{id}/symptoms {name, kind}` → `201` the symptom (patient self or connected clinician)
+- `DELETE /api/patients/{id}/symptoms/{sid}` → `{"ok":true}` (soft delete)
+- Each episode-having demo patient is seeded one **default** symptom mapped to the daily `episode`
+  column (so verdicts are unchanged). `POST /api/episodes` gains optional `symptom_id` (defaults to the
+  patient's default symptom); default-symptom logs reflect into `episode`, others are resolved per-symptom.
+
+**Collection plans** (`plan.type:"collection"` — gather data, no test):
+- `{devices, signals, window, instructions}`, no observational/intervention block, same consent flow.
+- `simulate-complete`/`stop` → result `{type:"collection", complete, verdict:null,
+  collection:{n_days, per_signal:{<sig>:{days_with_data, missing_pct}}}}`.
+
+**Analyses on a collection** (run the engine on collected data):
+- `POST /api/plans/{collection_id}/analyses` body `{observational}|{intervention}` → a normal Results
+  object + `{id, collection_id, created_at}`, stored. `GET …/analyses` → list; `GET …/analyses/{aid}` → one.
+- `422 {"error": …}`: `not_a_collection`, `signal_not_in_collection`, `invalid_lag_range`,
+  `not_enough_data`, `too_few_periods`, `window_too_short`.
+
+**Notes** (both sides): `GET/POST /api/plans/{id}/notes` → `[{id, author_role, author_name, text, created_at}]`.
+
+**Clinician comment + review**: `POST /api/plans/{id}/results/comment {text}` → `results.clinician_comment:{text, at}`;
+`POST /api/plans/{id}/results/review` → sets `results.reviewed_at` (null until reviewed → "unreviewed").
+
+**Plan instructions**: `plan.instructions?: string` (clinician-authored, shown to the patient), accepted on `POST /api/plans`.
+
+**Manual A/B (B8)**: `intervention.assignment:"manual"|"randomized"` (default randomized). A manual schedule
+(any period lengths, gaps ≥ 0, optional washout) still computes effect/p, but the result carries
+`randomized:false` + warning `not_randomized`, and `headline`/`patient_headline` lead with a caveat that it
+isn't a controlled, randomized result. Randomized path unchanged.
+
+**Series (B4)**: `GET /api/patients/{id}/series?plan_id=…` is window-clipped to the plan/collection scope and
+adds symptom logs as columns keyed `symptom:<sid>` (0/1) for symptoms the plan references.
+
 ## Changelog
+- v1.5 — additive overhaul: symptoms/conditions (+ `observational.symptom_id`, `episodes.symptom_id`),
+  `type:"collection"` plans + per-signal summary, `/analyses` on collections, plan `notes`,
+  results `clinician_comment`/`reviewed_at`, `plan.instructions`, manual A/B (`assignment` +
+  `not_randomized`/`randomized:false`), look-back cap raised to 30, series `symptom:<sid>` columns.
 - v1.4 (14:20) — additive: observational look-back range `observational.min_lag_days` (default 1) +
   `max_lag_days` up to 14, `422 invalid_lag_range`, warning `windows_cover_most_days`; new daily signals
   `screen_time_min`, `late_screen_min`, `mood_log`, `pain_level` (added to iPhone/Android catalog;

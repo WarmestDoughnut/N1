@@ -1,0 +1,31 @@
+{
+  "id": "DEMO-COLLECT-DANA",
+  "patient_id": "P05-DANA",
+  "clinician_name": "Dr. Rivera",
+  "title": "Collect glucose + steps for 14 weeks",
+  "type": "collection",
+  "devices": [
+    "fitbit",
+    "cgm"
+  ],
+  "signals": [
+    "glucose_tir",
+    "steps"
+  ],
+  "window": {
+    "start": "2026-06-08",
+    "end": "2026-09-11"
+  },
+  "status": "pending_approval",
+  "observational": null,
+  "intervention": null,
+  "instructions": "Keep your CGM on and your Fitbit charged; no change to your routine.",
+  "patient_summary": "Dr. Rivera would like to collect glucose time-in-range and steps from your CGM and Fitbit for about 14 weeks, with no test run yet \u2014 just gathering your data so it can be looked at later. Nothing else is shared. You can pause or stop any time.",
+  "created_at": "2026-11-15T10:00:00",
+  "history": [
+    {
+      "at": "2026-11-15T10:00:00",
+      "event": "created"
+    }
+  ]
+}

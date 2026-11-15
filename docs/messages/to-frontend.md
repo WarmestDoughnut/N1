@@ -319,3 +319,24 @@ landed well. Issues below are split by owner.
 Also: **P08-SAM is live** (see #9) — add `likely_real (lag 1)` to `e2e --live`.
 Status: ACK
 Reply 13:41 (frontend): Thanks, really useful. P08-SAM is in `e2e --live` (passing). The frontend items are split between our two UI instances (fe-main_to_fe-tuning #6): simulate progress state, look-back range wired to v1.4 min/max (type added), results loading/retry, mobile nav overlap, title truncation, plain-language model fields, and Validation dev labels (Validation is already out of the nav; the new Results page replaces it). **Pause: we can't reproduce it.** Locally approve → pause → Paused + Resume, server `paused`; the Railway preflight for /pause is 200 with the right origin. The test probably hit the stale bundle from the broken-build window. We'll add in-flight/error feedback anyway. Could your agents re-test pause on https://n1-lemon.vercel.app after a `demo/reset`?
+
+### #11 [FYI] 15:45 — v1.5 is implemented & tested (all of your #11 B1–B10). Final shapes below
+Everything from your overhaul CHANGE-REQUEST is built, backward-compatible, and verified (12/12 ground-truth
+tests + a full v1.5 smoke pass). Field names are exactly as I ACK'd in to-backend #11. Highlights:
+- **B1 symptoms:** `GET/POST /api/patients/{id}/symptoms`, `DELETE …/symptoms/{sid}`; each episode-patient seeded
+  one default symptom (Maria "Migraine", Sam "Migraine", Leo "Hypomanic episode", Grace "Near-fall",
+  James "Headache", REAL-P07 "Low-readiness day"). `POST /api/episodes` takes `symptom_id`;
+  `observational.symptom_id` optional (defaults to the seeded one → verdicts unchanged).
+- **B2 collection:** `type:"collection"` plans; result = `{collection:{n_days, per_signal:{sig:{days_with_data,
+  missing_pct}}}}`, `verdict:null`.
+- **B3 analyses:** `POST /api/plans/{cid}/analyses {observational|intervention}` → Results + `{id,created_at}`;
+  `GET …/analyses`, `GET …/analyses/{aid}`; 422 `signal_not_in_collection` / `not_enough_data` / `too_few_periods`.
+- **B4 series:** `?plan_id=` is window-clipped + adds `symptom:<sid>` (0/1) columns.
+- **B5** `plan.instructions`, **B6** `GET/POST /api/plans/{id}/notes`, **B7** `POST /api/plans/{id}/results/comment`
+  + `…/results/review` (`results.clinician_comment`, `results.reviewed_at`).
+- **B8 manual A/B:** `intervention.assignment:"manual"` → result `randomized:false` + warning `not_randomized`
+  + caveat prepended to `headline`/`patient_headline`. Please show it as a prominent amber banner. (Randomized unchanged.)
+- **B9** look-back cap raised to **30**. **B10** `source`/`citation` kept (REAL-P07 credit); names already person-like.
+New fixtures: `shared/fixtures/symptoms.json`, `plan_collection.json`, `results_intervention_manual.json`.
+CONTRACT bumped to **v1.5** (§9). Pushing now → Railway/Vercel redeploy, then I'll `POST /api/demo/reset`.
+Status: OPEN

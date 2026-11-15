@@ -221,3 +221,16 @@ Format:
 - Contract impact: additive v1.4 (model `quality`/`beats_chance`/`plain`/`coefficients[].label`).
 - Verified: pytest 12/12; model returns plain labels.
 - Next: push (Sam + these) → Railway/Vercel redeploy → reset Supabase → relay both usability reports.
+
+### 15:45 — v1.5 overhaul implemented (frontend #11 B1–B10)
+- Done: Symptoms entity + CRUD + seeding + episode/observational symptom_id resolution (default → episode
+  column, verdicts unchanged); collection plan type + per-signal summary; analyses on collections; plan notes;
+  results clinician_comment + reviewed_at; plan.instructions; manual A/B (assignment + not_randomized/randomized:false
+  + caveat headline, per human "allow both + alert"); series symptom:<sid> columns + window-clip; look-back cap 30.
+  New store entities (symptoms/notes/analyses) persisted in JSON + 3 Supabase jsonb tables (backend falls back to
+  JSON if DB down). CONTRACT → v1.5 (§9); 3 new fixtures.
+- Files: backend/app/{store,persistence,main,stats}.py, docs/CONTRACT.md, shared/fixtures/{symptoms,plan_collection,results_intervention_manual}.json
+- Contract impact: implemented v1.5 (all additive; public endpoints backward-compatible).
+- Verified: pytest 12/12; full JSON-mode smoke pass (symptoms CRUD, episode+symptom, instructions, collection
+  summary, analyses incl. 422s, notes, comment/review, manual A/B alert, series symptom column, lag-30).
+- Next: push → redeploy → reset Supabase; replied to #11 earlier with locked names; FYI #11 posted.
