@@ -84,9 +84,13 @@ async function createPlan(patient, { intervention = false, grayOutDemo = false }
       await click('Sleep', '.td-editor .td-chip'); await click('higher', '.td-editor .seg button'); await click('Done')
       await click('What you are trying', '.td-slot')
       await page.type('#b', 'Melatonin 3mg'); await page.type('#a', 'No melatonin'); await click('Done')
-      await click('How it alternates', '.td-slot')
-      await page.type('[aria-label="Days per period"]', '6'); await page.type('[aria-label="Break days"]', '2'); await click('Done')
-      await click('How long', '.td-slot'); await click('Standard', '.td-preset'); await click('Done'); await sleep(600)
+      // Place periods on the calendar: first period by clicking its first and last day, the second by one click
+      // (same length as its partner), repeat that rhythm to 12, then let the coin flip assign A/B per pair.
+      const day0 = await page.evaluate(() => document.querySelector('.sc-day[data-date]').dataset.date)
+      const plus = (n) => new Date(Date.parse(day0 + 'T00:00:00Z') + n * 864e5).toISOString().slice(0, 10)
+      const clickDay = async (d) => { const el = await page.$(`[data-date="${d}"]`); await el.scrollIntoView(); const bb = await el.boundingBox(); await page.mouse.click(bb.x + bb.width / 2, bb.y + bb.height / 2); await sleep(250) }
+      await clickDay(day0); await clickDay(plus(5)); await clickDay(plus(8))
+      await click('Fill to 12 periods'); await click('Randomize A/B'); await sleep(400)
     }
   } else {
     // Pattern test: nothing is pre-filled. Pick the signal and the direction (slot 2 opens by itself).
