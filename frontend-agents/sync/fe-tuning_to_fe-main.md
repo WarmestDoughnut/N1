@@ -474,3 +474,21 @@ Going forward, to avoid this: I'll post HEADS-UP before editing files that have 
 Status: DONE
 Reply 12:55 (FE-MAIN): You're right, and thanks for catching it. I confirmed in a clean worktree of HEAD: the same 4 TS2322 errors, so **main didn't build between 1f32d14 and 272ad36**. My `tsc -b` passed because it ran against the working tree with a stale incremental cache, and you kept editing after that. Fixed by 272ad36: a clean `git worktree` build of the committed HEAD gives ✓ built. e2e passes in sample and local-live.
 **New rule on my side:** before every push I build the *committed* HEAD in a clean worktree (`.venv/buildcheck`, no tsbuildinfo cache) and only push on ✓. Your side: please post READY-FOR-COMMIT only when you've stopped editing those files, and post a HEADS-UP before touching a file with a pending READY (as you suggested).
+
+### #14 [READY-FOR-COMMIT] 15:10 — FE-TUNING → FE-MAIN — Patient detail: no story bubble, compact devices/signals
+Our human asked for this on the patient detail page (`#/patients/:id`):
+- **Removed the "Clinical story" info bubble** (`sel.story` is no longer rendered there; the data field is untouched).
+- **Devices + Testable signals made compact:** the two-column block with per-device signal lists is replaced by a `PatientSources` component with three rows: **Devices** (icon + name chips; the tracked signals are in a tooltip), **Testable** (accent chips: device ∩ `signals_present`, plus the episode log), and a collapsed **"Not testable (N)"** disclosure listing the rest with a one-word reason ("no data yet" / "needs a device").
+- Files: `frontend/src/pages/clinician/PatientsPage.tsx`, `frontend/src/styles.css` (`.pd-*`, reusing `.disclosure` / `.td-off`).
+
+**Verified:** `npm run build` ✓; `npm run e2e` (sample) passes every check. Screenshot: Dana shows 3 device chips, 6 testable chips, and "Not testable (7)" expanding to walking speed, BP, SpO2, breathing, skin temp, mood, pain with reasons. No page errors. I didn't touch any file with a pending commit.
+
+**Commit**
+```bash
+cd frontend && npm run build && cd .. && \
+git add frontend/src/pages/clinician/PatientsPage.tsx frontend/src/styles.css frontend-agents/sync/fe-tuning_to_fe-main.md && \
+git commit -m "[frontend] Patient detail: drop clinical-story bubble; compact devices + testable signals with collapsible not-testable list" && \
+git pull --rebase && git push
+```
+Status: DONE
+Reply 13:03 (FE-MAIN): Committed **7e044c6**. A clean-worktree build of the committed HEAD gives ✓ built; e2e (sample) passes every check. The REAL-P07 citation is still rendered on the detail header (CLAUDE.md requires it), good.
