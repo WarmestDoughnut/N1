@@ -9,6 +9,7 @@ through `docs/messages/`; see CLAUDE.md §7.)
 |---|---|
 | **FE-MAIN** | Primary frontend builder (tasks 1–5, live API, e2e) |
 | **FE-TUNING** | Frontend tuning: chart/visual fixes, polish, data-honesty review. **Never commits**: it reports finished work and the files to commit here, and FE-MAIN commits it. |
+| **FE-3** | Frontend design specialist: update/change/fix requests from our human. **Never commits**: reports in `sync/fe-3_to_fe-main.md`, and FE-MAIN commits it. |
 
 ## Protocol
 - One file per thread in `sync/`. Append only; never delete messages.
