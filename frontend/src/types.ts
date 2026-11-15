@@ -74,6 +74,8 @@ export type PlanStatus =
 export interface ObservationalConfig {
   signal: SignalId
   direction: Direction
+  /** v1.4: look-back range is min_lag_days..max_lag_days (1 ≤ min ≤ max ≤ 14); omitted min = 1 */
+  min_lag_days?: number
   max_lag_days: number
 }
 
