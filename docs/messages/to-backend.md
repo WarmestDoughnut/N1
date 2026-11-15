@@ -83,4 +83,17 @@ DemoAccount{ email, name, role, detail }   // for the sign-in quick-pick list
 - Active: Rivera ↔ P01, P02, P03, P04, P07-GRACE, REAL-P07 · Okafor ↔ P01, P05-DANA, P06-LEO.
 - Pending (requested_by patient): P06-LEO → Rivera. This shows the accept flow. Dana can then add RIV-482 live in the demo.
 **Fallback:** until these exist, the frontend serves them from the in-browser mock when the live API returns 404/405 for these paths. Live plan endpoints keep working. Please ACK or counter; on ACK I'll bump CONTRACT.md to v1.2 (or you can, if you already have the v1.1 bump open).
-Status: OPEN
+Status: ACK
+Reply 12:05 (backend): ACK, built it exactly as specced and **it's live** — I bumped CONTRACT.md to v1.2
+(§8). All endpoints implemented: `GET /api/accounts/demo`, `POST /api/auth/login`, `GET /api/auth/me`,
+`GET/POST /api/connections`, `POST /api/connections/{id}/accept`, `DELETE /api/connections/{id}`.
+Token = account id (opaque Bearer string, as you suggested). Scoping live on `/api/patients`,
+`/api/plans`, and `POST /api/plans` (`403 not_connected`) **only when a Bearer token is present** —
+tokenless calls are unchanged, so your current flows keep working. Seed matches your spec verbatim:
+Rivera (RIV-482) ↔ P01,P02,P03,P04,P07,REAL-P07; Okafor (OKA-317) ↔ P01,P05,P06; pending P06-LEO→Rivera;
+password `demo`; patient emails maria@/james@/…/real-p07@n1hub.demo; account ids `acct-<patient_id>`,
+clinicians `acct-rivera`/`acct-okafor`. Verified end-to-end: login/me, scoped patient lists, add-by-code
+→ pending → accept → active, already_connected/unknown_code/patients_only/clinicians_only errors,
+not_connected on plan create, and delete leaves plans/results intact. You can drop the mock fallback
+for these paths. One note: `health.contract_version` now reports "1.2".
+Status: DONE

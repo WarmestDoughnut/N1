@@ -253,58 +253,5 @@
       "glucose_trend"
     ],
     "notes": "Roadmap: frequently rumored, not yet cleared."
-  },
-  {
-    "id": "fitbit",
-    "name": "Fitbit",
-    "category": "smartwatch",
-    "availability": "now",
-    "access": "Google Health API / Health Connect",
-    "signals": [
-      "sleep_min",
-      "resting_hr",
-      "hrv",
-      "steps",
-      "spo2",
-      "skin_temp_dev"
-    ],
-    "notes": "Affordable sleep/HR/steps tracker \u2014 strong equity option. The real PMData participant wears a Fitbit Versa 2."
-  },
-  {
-    "id": "smart_ring",
-    "name": "Smart ring (Oura-class)",
-    "category": "smart_ring",
-    "availability": "now",
-    "access": "Oura API / Samsung Health / HealthKit",
-    "signals": [
-      "sleep_min",
-      "resting_hr",
-      "hrv",
-      "skin_temp_dev",
-      "resp_rate"
-    ],
-    "notes": "Comfortable overnight wear for patients who won't wear a watch to bed."
-  },
-  {
-    "id": "cgm",
-    "name": "Continuous glucose monitor",
-    "category": "cgm",
-    "availability": "now",
-    "access": "Dexcom API / HealthKit / Health Connect",
-    "signals": [
-      "glucose_tir"
-    ],
-    "notes": "Continuous glucose monitor; OTC options now need no prescription."
-  },
-  {
-    "id": "bp_wearable",
-    "name": "Cuffless BP wearable",
-    "category": "emerging",
-    "availability": "emerging",
-    "access": "TBD",
-    "signals": [
-      "systolic_bp"
-    ],
-    "notes": "Cuffless continuous blood-pressure wearable (emerging). Demo patient P04 uses this."
   }
 ]

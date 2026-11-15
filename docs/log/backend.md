@@ -103,3 +103,22 @@ Format:
 - How to try it: simulate-complete DEMO-P02-JAMES → results.model.trained=false, reason=no_primary_signal.
 - Verified: 11 ground-truth tests pass; full API sweep consistent.
 - Next: pause for human steer — MDE/preview-power (#5) is the next optional item if we want it before freeze.
+
+### 12:05 — v1.2 demo auth + clinician↔patient connections (frontend CHANGE-REQUEST #3)
+- Done: Implemented the full v1.2 auth/connections per frontend #3 (human approved building it now).
+  Endpoints: `GET /api/accounts/demo`, `POST /api/auth/login`, `GET /api/auth/me`, `GET/POST
+  /api/connections`, `POST /api/connections/{id}/accept`, `DELETE /api/connections/{id}`. Token =
+  account id (opaque Bearer). Scoping applied **only when a Bearer token is present** on `/api/patients`,
+  `/api/plans`, and `POST /api/plans` (`403 not_connected`); tokenless calls unchanged (back-compat).
+  All auth state is isolated in `store.py` (accounts/connections + seed), persisted in store.json —
+  so it can move to Supabase/Postgres later without touching the API. Seeded 2 clinicians + 8 patient
+  accounts + the active/pending connections from the spec.
+- Files: backend/app/store.py (accounts/connections + seed_auth), backend/app/main.py (endpoints + scoping),
+  docs/CONTRACT.md (§8, v1.2), docs/messages/to-backend.md (ACK #3 DONE)
+- Contract impact: implemented v1.2 (additive; bumped CONTRACT.md).
+- How to try it: login `curl -XPOST localhost:8000/api/auth/login -d '{"email":"rivera@n1hub.demo","password":"demo"}'`
+  → use returned token as `Authorization: Bearer <token>` on /api/patients, /api/connections, etc.
+- Verified: 11 ground-truth tests pass; full auth/connection lifecycle verified end-to-end (login/me,
+  scoping, add-by-code→pending→accept→active, all error codes, not_connected, delete keeps data).
+- Next: none required. Optional MDE/preview-power (#5) remains if time before 14:30 freeze.
+- Blockers / needs from frontend: none. v1.2 live; you can drop the mock fallback for /api/auth + /api/connections.

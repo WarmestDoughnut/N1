@@ -61,7 +61,10 @@ class Store:
         self.plans = {}       # id -> plan dict
         self.results = {}     # plan_id -> results dict
         self.episodes = []    # [{patient_id, date, note}]
+        self.accounts = {}    # account_id -> account dict (v1.2)
+        self.connections = {} # conn_id -> connection dict (v1.2)
         self._counter = 0
+        self._conn_counter = 0
 
     # ----- persistence -----
     def load(self):
@@ -72,7 +75,10 @@ class Store:
         self.plans = data.get("plans", {})
         self.results = data.get("results", {})
         self.episodes = data.get("episodes", [])
+        self.accounts = data.get("accounts", {})
+        self.connections = data.get("connections", {})
         self._counter = data.get("counter", 0)
+        self._conn_counter = data.get("conn_counter", 0)
         return True
 
     def save(self):
@@ -81,7 +87,9 @@ class Store:
         with open(tmp, "w") as f:
             json.dump({
                 "plans": self.plans, "results": self.results,
-                "episodes": self.episodes, "counter": self._counter,
+                "episodes": self.episodes, "accounts": self.accounts,
+                "connections": self.connections,
+                "counter": self._counter, "conn_counter": self._conn_counter,
             }, f, indent=2)
         os.replace(tmp, STORE_PATH)
 
@@ -145,3 +153,146 @@ class Store:
         with self._lock:
             self.episodes.append({"patient_id": patient_id, "date": ep_date, "note": note})
             self.save()
+
+    # ----- accounts / connections (v1.2) -------------------------------------
+    # All auth state lives here and nowhere else, so this JSON-backed store can later be swapped
+    # for Supabase/Postgres (or Supabase Auth) without touching the API surface. Token = account id
+    # (opaque Bearer string); a real JWT could be verified in its place later with no shape change.
+    _CLINICIANS = [
+        {"id": "acct-rivera", "role": "clinician", "name": "Dr. Rivera", "email": "rivera@n1hub.demo",
+         "password": "demo", "specialty": "Internal medicine", "connect_code": "RIV-482", "patient_id": None},
+        {"id": "acct-okafor", "role": "clinician", "name": "Dr. Okafor", "email": "okafor@n1hub.demo",
+         "password": "demo", "specialty": "Neurology", "connect_code": "OKA-317", "patient_id": None},
+    ]
+    # active clinician<->patient links; plus one pending request from a patient (Leo -> Rivera)
+    _ACTIVE = [
+        ("acct-rivera", ["P01-MARIA", "P02-JAMES", "P03-AISHA", "P04-ROBERT", "P07-GRACE", "REAL-P07"]),
+        ("acct-okafor", ["P01-MARIA", "P05-DANA", "P06-LEO"]),
+    ]
+    _PENDING = [("acct-rivera", "P06-LEO")]   # requested_by patient
+
+    @staticmethod
+    def _patient_email(meta):
+        if meta.get("source") == "real":
+            return f"{meta['id'].lower()}@n1hub.demo"
+        first = meta.get("display_name", meta["id"]).split(",")[0].strip().split()[0]
+        return f"{first.lower()}@n1hub.demo"
+
+    def seed_auth(self, patients_meta):
+        """Seed demo accounts + connections once (patients_meta = {patient_id: metadata})."""
+        with self._lock:
+            if self.accounts:
+                return
+            for c in self._CLINICIANS:
+                self.accounts[c["id"]] = dict(c)
+            for pid, meta in patients_meta.items():
+                aid = f"acct-{pid.lower()}"
+                self.accounts[aid] = {
+                    "id": aid, "role": "patient", "name": meta.get("display_name", pid),
+                    "email": self._patient_email(meta), "password": "demo",
+                    "specialty": None, "connect_code": None, "patient_id": pid,
+                }
+            for clin_id, pids in self._ACTIVE:
+                for pid in pids:
+                    self._make_connection(clin_id, pid, "active", "clinician")
+            for clin_id, pid in self._PENDING:
+                self._make_connection(clin_id, pid, "pending", "patient")
+            self.save()
+
+    def _patient_name(self, patient_id):
+        for a in self.accounts.values():
+            if a.get("patient_id") == patient_id:
+                return a["name"]
+        return patient_id
+
+    def _make_connection(self, clinician_id, patient_id, status, requested_by):
+        clin = self.accounts[clinician_id]
+        self._conn_counter += 1
+        cid = f"conn-{self._conn_counter}"
+        self.connections[cid] = {
+            "id": cid, "clinician_id": clinician_id, "clinician_name": clin["name"],
+            "clinician_specialty": clin.get("specialty"), "patient_id": patient_id,
+            "patient_name": self._patient_name(patient_id), "status": status,
+            "requested_by": requested_by, "created_at": _now(),
+        }
+        return self.connections[cid]
+
+    # auth lookups
+    def get_account(self, account_id):
+        return self.accounts.get(account_id)
+
+    def account_by_email(self, email):
+        email = (email or "").strip().lower()
+        for a in self.accounts.values():
+            if a["email"].lower() == email:
+                return a
+        return None
+
+    def clinician_by_code(self, code):
+        code = (code or "").strip().upper()
+        for a in self.accounts.values():
+            if a["role"] == "clinician" and (a.get("connect_code") or "").upper() == code:
+                return a
+        return None
+
+    def demo_accounts(self):
+        out = []
+        for a in self.accounts.values():
+            detail = a["specialty"] if a["role"] == "clinician" else a["name"]
+            out.append({"email": a["email"], "name": a["name"], "role": a["role"], "detail": detail})
+        out.sort(key=lambda d: (d["role"] != "clinician", d["email"]))
+        return out
+
+    # connections
+    def connections_for(self, account):
+        if account["role"] == "clinician":
+            conns = [c for c in self.connections.values() if c["clinician_id"] == account["id"]]
+        else:
+            conns = [c for c in self.connections.values() if c["patient_id"] == account.get("patient_id")]
+        return sorted(conns, key=lambda c: c["created_at"])
+
+    def active_patient_ids(self, clinician_id):
+        return {c["patient_id"] for c in self.connections.values()
+                if c["clinician_id"] == clinician_id and c["status"] == "active"}
+
+    def is_connected(self, clinician_id, patient_id):
+        return any(c["clinician_id"] == clinician_id and c["patient_id"] == patient_id
+                   and c["status"] == "active" for c in self.connections.values())
+
+    def request_connection(self, patient_account, clinician_code):
+        """Patient adds a clinician by code → pending connection. Returns (conn, error)."""
+        with self._lock:
+            clin = self.clinician_by_code(clinician_code)
+            if clin is None:
+                return None, "unknown_code"
+            pid = patient_account.get("patient_id")
+            for c in self.connections.values():
+                if c["clinician_id"] == clin["id"] and c["patient_id"] == pid:
+                    return None, "already_connected"
+            conn = self._make_connection(clin["id"], pid, "pending", "patient")
+            self.save()
+            return conn, None
+
+    def accept_connection(self, conn_id, clinician_account):
+        with self._lock:
+            conn = self.connections.get(conn_id)
+            if conn is None:
+                return None, "not_found"
+            if conn["clinician_id"] != clinician_account["id"] or conn["status"] != "pending":
+                return conn, "invalid_transition"
+            conn["status"] = "active"
+            self.save()
+            return conn, None
+
+    def remove_connection(self, conn_id, account):
+        with self._lock:
+            conn = self.connections.get(conn_id)
+            if conn is None:
+                return "not_found"
+            allowed = (account["id"] == conn["clinician_id"]
+                       or account.get("patient_id") == conn["patient_id"])
+            if not allowed:
+                return "forbidden"
+            del self.connections[conn_id]
+            self.save()
+            return None

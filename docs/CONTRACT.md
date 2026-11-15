@@ -205,14 +205,54 @@ observed `effect_pct` can be marked directly on the histogram).
 ```
 
 ## 6. Health
-`GET /api/health` → `{"ok": true, "contract_version": "1.1"}`
+`GET /api/health` → `{"ok": true, "contract_version": "1.2"}`
 
 ## 7. Schedule preview — `GET /api/schedule/preview`
 `?n_periods=12&period_days=6&washout_days=2&seed=42&start=2026-06-01`
 → `{"schedule": [...], "smallest_possible_p": 0.0156}` (balanced randomized AB/BA blocks + washout;
 `smallest_possible_p` = 1/2^(n_periods/2), the permutation p-value floor, for the wizard helper).
 
+## 8. Accounts & connections (v1.2 — demo auth, additive)
+
+Demo-only auth: no hashing, password is plain, **token = account id** sent as
+`Authorization: Bearer <token>`. All existing endpoints keep working **without** a token
+(no scoping applied). State lives in the JSON store (swappable for Supabase/Postgres later).
+
+```json
+Account    {"id": "acct-rivera", "role": "clinician", "name": "Dr. Rivera",
+            "email": "rivera@n1hub.demo", "patient_id": null,
+            "specialty": "Internal medicine", "connect_code": "RIV-482"}
+Connection {"id": "conn-1", "clinician_id": "acct-rivera", "clinician_name": "Dr. Rivera",
+            "clinician_specialty": "Internal medicine", "patient_id": "P01-MARIA",
+            "patient_name": "Maria, 68", "status": "pending|active",
+            "requested_by": "patient|clinician", "created_at": "..."}
+DemoAccount{"email": "...", "name": "...", "role": "...", "detail": "..."}
+```
+Patient accounts carry `patient_id`; clinician accounts carry `specialty` + `connect_code`.
+
+Endpoints:
+- `GET  /api/accounts/demo` → `[DemoAccount]` (sign-in quick-pick; password is `demo` for all)
+- `POST /api/auth/login` `{email, password}` → `{account, token}` · `401 invalid_credentials`
+- `GET  /api/auth/me` → `Account` · `401 not_signed_in`
+- `GET  /api/connections` → `[Connection]` for the caller (clinician: theirs; patient: theirs)
+- `POST /api/connections` `{clinician_code}` (patient only) → `201 Connection` (status `pending`) ·
+  `404 unknown_code` · `409 already_connected` · `403 patients_only`
+- `POST /api/connections/{id}/accept` (clinician only, pending→active) → `Connection` · `409 invalid_transition`
+- `DELETE /api/connections/{id}` (either side) → `{"ok": true}` (does NOT delete plans/results)
+
+Scoping when a valid Bearer token is present:
+- `GET /api/patients` and `GET /api/plans`: clinician → only **active**-connected patients;
+  patient → only themselves.
+- `POST /api/plans`: `403 not_connected` if a clinician isn't actively connected to `patient_id`.
+
+Seed (on first run): clinicians `rivera@n1hub.demo` (RIV-482) and `okafor@n1hub.demo` (OKA-317);
+one patient account per patient (`maria@`, `james@`, … , `real-p07@n1hub.demo`), id `acct-<patient_id>`.
+Active: Rivera ↔ P01,P02,P03,P04,P07,REAL-P07 · Okafor ↔ P01,P05,P06. Pending (by patient): P06-LEO → Rivera.
+
 ## Changelog
+- v1.2 (12:05) — additive demo auth: accounts, `/api/auth/login|me`, `/api/connections` (+accept,
+  delete), `/api/accounts/demo`; Bearer-token scoping on `/api/patients`, `/api/plans`, `POST /api/plans`
+  (`not_connected`). Existing endpoints unchanged without a token.
 - v1.1 (11:45) — additive: 6 new daily signals (`skin_temp_dev, resp_rate, spo2, systolic_bp,
   glucose_tir, walking_speed`); device fields `category, availability, access, notes` and merged
   catalog (vision 17 + compact ids patients reference); patient fields `condition, story,

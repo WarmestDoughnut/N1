@@ -16,7 +16,7 @@ from app.model import fit_risk_model
 from app.schedule import generate_schedule, smallest_possible_p
 from app.store import Store, build_patient_summary
 
-CONTRACT_VERSION = "1.1"
+CONTRACT_VERSION = "1.2"
 
 app = FastAPI(title="N1 Hub API", version=CONTRACT_VERSION)
 app.add_middleware(
@@ -36,6 +36,7 @@ DEVICE_SIGNALS = {d["id"]: set(d.get("signals", [])) for d in DEVICES}
 STORE = Store()
 STORE.load()
 STORE.seed(data_loader.load_seed_plans(DAILY))
+STORE.seed_auth(PATIENTS)
 
 # statuses in which a plan's data may be read / results exist
 SCOPE_OK = {"active", "paused", "stopped", "complete"}
@@ -43,6 +44,23 @@ SCOPE_OK = {"active", "paused", "stopped", "complete"}
 
 def err(status, code):
     return JSONResponse(status_code=status, content={"error": code})
+
+
+def current_account(request: Request):
+    """Resolve the caller from `Authorization: Bearer <token>` (token = account id). None if absent/invalid."""
+    auth = request.headers.get("authorization", "")
+    if not auth.lower().startswith("bearer "):
+        return None
+    return STORE.get_account(auth.split(" ", 1)[1].strip())
+
+
+def _allowed_patient_ids(account):
+    """Patient ids the caller may see, or None for 'no restriction' (no/!valid token)."""
+    if account is None:
+        return None
+    if account["role"] == "patient":
+        return {account.get("patient_id")}
+    return STORE.active_patient_ids(account["id"])  # clinician: active connections only
 
 
 def _window_df(plan):
@@ -96,8 +114,12 @@ def devices():
 
 
 @app.get("/api/patients")
-def patients():
-    return list(PATIENTS.values())
+def patients(request: Request):
+    allowed = _allowed_patient_ids(current_account(request))
+    vals = list(PATIENTS.values())
+    if allowed is not None:
+        vals = [p for p in vals if p["id"] in allowed]
+    return vals
 
 
 @app.get("/api/patients/{patient_id}")
@@ -160,6 +182,10 @@ async def add_episode(request: Request):
 @app.post("/api/plans")
 async def create_plan(request: Request):
     body = await request.json()
+    account = current_account(request)
+    if account is not None and account["role"] == "clinician":
+        if not STORE.is_connected(account["id"], body.get("patient_id")):
+            return err(403, "not_connected")
     plan = {k: v for k, v in body.items()
             if k not in ("id", "status", "created_at", "history", "patient_summary")}
     plan["id"] = STORE.next_id()
@@ -184,8 +210,12 @@ async def create_plan(request: Request):
 
 
 @app.get("/api/plans")
-def list_plans(patient_id: str = ""):
-    return STORE.list_plans(patient_id or None)
+def list_plans(request: Request, patient_id: str = ""):
+    plans = STORE.list_plans(patient_id or None)
+    allowed = _allowed_patient_ids(current_account(request))
+    if allowed is not None:
+        plans = [p for p in plans if p["patient_id"] in allowed]
+    return plans
 
 
 @app.get("/api/plans/{plan_id}")
@@ -267,3 +297,86 @@ def schedule_preview(n_periods: int = 12, period_days: int = 6, washout_days: in
                      seed: int = 42, start: str = "2026-06-01"):
     sched = generate_schedule(n_periods, period_days, washout_days, seed, start)
     return {"schedule": sched, "smallest_possible_p": round(smallest_possible_p(n_periods), 4)}
+
+
+# --------------------------------------------------------------------------- #
+# Auth + connections (v1.2) — demo only: no hashing, token = account id.
+# All state lives in the store so it can move to Supabase/Postgres later unchanged.
+# --------------------------------------------------------------------------- #
+def _public_account(a):
+    return {k: a.get(k) for k in
+            ("id", "role", "name", "email", "patient_id", "specialty", "connect_code")}
+
+
+@app.get("/api/accounts/demo")
+def demo_accounts():
+    return STORE.demo_accounts()
+
+
+@app.post("/api/auth/login")
+async def login(request: Request):
+    body = await request.json()
+    acct = STORE.account_by_email(body.get("email"))
+    if acct is None or acct["password"] != body.get("password"):
+        return err(401, "invalid_credentials")
+    return {"account": _public_account(acct), "token": acct["id"]}
+
+
+@app.get("/api/auth/me")
+def me(request: Request):
+    acct = current_account(request)
+    if acct is None:
+        return err(401, "not_signed_in")
+    return _public_account(acct)
+
+
+@app.get("/api/connections")
+def list_connections(request: Request):
+    acct = current_account(request)
+    if acct is None:
+        return err(401, "not_signed_in")
+    return STORE.connections_for(acct)
+
+
+@app.post("/api/connections")
+async def create_connection(request: Request):
+    acct = current_account(request)
+    if acct is None:
+        return err(401, "not_signed_in")
+    if acct["role"] != "patient":
+        return err(403, "patients_only")
+    body = await request.json()
+    conn, error = STORE.request_connection(acct, body.get("clinician_code"))
+    if error == "unknown_code":
+        return err(404, "unknown_code")
+    if error == "already_connected":
+        return err(409, "already_connected")
+    return JSONResponse(status_code=201, content=conn)
+
+
+@app.post("/api/connections/{conn_id}/accept")
+def accept_connection(conn_id: str, request: Request):
+    acct = current_account(request)
+    if acct is None:
+        return err(401, "not_signed_in")
+    if acct["role"] != "clinician":
+        return err(403, "clinicians_only")
+    conn, error = STORE.accept_connection(conn_id, acct)
+    if error == "not_found":
+        return err(404, "not_found")
+    if error == "invalid_transition":
+        return err(409, "invalid_transition")
+    return conn
+
+
+@app.delete("/api/connections/{conn_id}")
+def delete_connection(conn_id: str, request: Request):
+    acct = current_account(request)
+    if acct is None:
+        return err(401, "not_signed_in")
+    error = STORE.remove_connection(conn_id, acct)
+    if error == "not_found":
+        return err(404, "not_found")
+    if error == "forbidden":
+        return err(403, "forbidden")
+    return {"ok": True}
