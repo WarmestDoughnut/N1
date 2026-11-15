@@ -292,18 +292,24 @@ function computeIntervention(plan: Plan, incomplete: boolean): Results {
   const b = period_means.filter((x) => x.arm === 'B').map((x) => x.mean)
   const mean_a = mean(a), mean_b = mean(b)
   const eff = ((mean_b - mean_a) / mean_a) * 100
-  const rng = mulberry32(99)
-  const N_PERM = 2000
+  // Exact permutation test: every way to relabel the periods with the same A/B counts.
   const nulls: number[] = []
   const pm = period_means.map((x) => x.mean)
-  for (let k = 0; k < N_PERM; k++) {
-    const labels = period_means.map((x) => x.arm).sort(() => rng() - 0.5)
-    const ma = mean(pm.filter((_, i) => labels[i] === 'A'))
-    const mb = mean(pm.filter((_, i) => labels[i] === 'B'))
-    nulls.push(((mb - ma) / ma) * 100)
+  const nA = a.length
+  const walk = (start: number, chosen: number[]) => {
+    if (chosen.length === nA) {
+      const isA = new Set(chosen)
+      const ma = mean(pm.filter((_, i) => isA.has(i)))
+      const mb = mean(pm.filter((_, i) => !isA.has(i)))
+      nulls.push(((mb - ma) / ma) * 100)
+      return
+    }
+    for (let i = start; i < pm.length; i++) walk(i + 1, [...chosen, i])
   }
+  if (pm.length <= 20) walk(0, [])
+  const N_PERM = nulls.length
   const sign = cfg.better === 'higher' ? 1 : -1
-  const p = (nulls.filter((x) => sign * x >= sign * eff).length + 1) / (N_PERM + 1)
+  const p = N_PERM ? nulls.filter((x) => sign * x >= sign * eff - 1e-9).length / N_PERM : 1
   const enough = a.length >= 2 && b.length >= 2 && missing / Math.max(1, total) <= 0.4
   const verdict = verdictFor(p, eff, sign * eff > 0, enough)
   const warnings: string[] = []
@@ -342,7 +348,7 @@ function mockModel(plan: Plan, verdict: Verdict): Results['model'] {
 }
 
 const round1 = (x: number) => Math.round(x * 10) / 10
-const round3 = (x: number) => Math.round(x * 1000) / 1000
+const round3 = (x: number) => Math.round(x * 10000) / 10000
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
 function summaryFor(p: PlanCreate): string {
@@ -435,4 +441,41 @@ export const mock = {
     if (!r) throw new MockHttpError(404, { error: 'no_results' })
     return structuredClone(r)
   },
+}
+
+// ---------- sample results for the gallery (not persisted) ----------
+export function sampleResults(): { name: string; plan: Plan; results: Results }[] {
+  const pat = (id: string) => PATIENTS.find((p) => p.id === id) ?? SPECS.find((s) => s.patient.id === id)!.patient
+  const obs = (pid: string, title: string, maxLag = 3): Plan => {
+    const p = pat(pid)
+    return {
+      id: `SAMPLE-${pid}`, patient_id: pid, clinician_name: 'Dr. Rivera', title, type: 'observational',
+      devices: p.devices, signals: ['sleep_min', 'episode'], window: { start: p.date_range[0], end: p.date_range[1] },
+      status: 'complete', created_at: nowIso(), observational: { signal: 'sleep_min', direction: 'lower', max_lag_days: maxLag },
+      intervention: null, patient_summary: '', history: [],
+    }
+  }
+  const iv = (pid: string): Plan => {
+    const p = pat(pid)
+    const cfg = { arm_a: 'No melatonin', arm_b: 'Melatonin 3mg', outcome_signal: 'sleep_min' as SignalId, better: 'higher' as const, period_days: 7, washout_days: 2, n_periods: 8, seed: 42 }
+    const schedule = makeSchedule({ ...cfg, start: p.date_range[0] })
+    return {
+      id: `SAMPLE-${pid}`, patient_id: pid, clinician_name: 'Dr. Rivera', title: 'Does melatonin improve sleep?', type: 'intervention',
+      devices: p.devices, signals: ['sleep_min'], window: { start: p.date_range[0], end: schedule[schedule.length - 1].washout_end },
+      status: 'complete', created_at: nowIso(), observational: null, intervention: { ...cfg, schedule }, patient_summary: '', history: [],
+    }
+  }
+  const short = obs('SYN-PATTERN', 'Does low sleep precede episodes? (first 3 weeks only)')
+  short.window = { start: short.window.start, end: addDays(short.window.start, 20) }
+  const out = [
+    { name: 'Observational · SYN-PATTERN (should pass)', plan: obs('SYN-PATTERN', 'Does low sleep precede episodes?'), incomplete: false },
+    { name: 'Observational · SYN-NULL (should be chance)', plan: obs('SYN-NULL', 'Does low sleep precede episodes?'), incomplete: false },
+    { name: 'Intervention · SYN-TREAT (should pass)', plan: iv('SYN-TREAT'), incomplete: false },
+    { name: 'Intervention · SYN-TREAT-NULL (should be chance)', plan: iv('SYN-TREAT-NULL'), incomplete: false },
+    { name: 'Observational · stopped early (not enough data)', plan: short, incomplete: true },
+  ]
+  return out.map(({ name, plan, incomplete }) => ({
+    name, plan,
+    results: plan.type === 'observational' ? computeObservational(plan, incomplete) : computeIntervention(plan, incomplete),
+  }))
 }
