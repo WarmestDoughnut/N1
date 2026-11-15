@@ -5,3 +5,4 @@ numpy
 scikit-learn
 pytest
 psycopg2-binary   # only used when DATABASE_URL is set (Supabase Postgres)
+anthropic         # only used when the design-copilot assistant is enabled (ASSISTANT_ENABLED + key)

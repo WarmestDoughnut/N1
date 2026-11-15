@@ -34,6 +34,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app import assistant as assistant_mod
 from app import data_loader, stats
 from app.model import fit_risk_model
 from app.schedule import generate_schedule, smallest_possible_p
@@ -199,7 +200,27 @@ def _compute_results(plan, incomplete=False):
 # --------------------------------------------------------------------------- #
 @app.get("/api/health")
 def health():
-    return {"ok": True, "contract_version": CONTRACT_VERSION, "store": STORE.backend_kind}
+    return {"ok": True, "contract_version": CONTRACT_VERSION, "store": STORE.backend_kind,
+            "assistant_enabled": assistant_mod.is_enabled()}
+
+
+@app.post("/api/assistant")
+async def assistant(request: Request):
+    """Physician design-copilot. Strictly bounded: never sees patient data — only the device catalog,
+    design rules, and the caller-supplied capabilities. Gated by the kill switch (503 when off)."""
+    if not assistant_mod.is_enabled():
+        return err(503, "assistant_disabled")
+    account = current_account(request)
+    if account is not None and account["role"] != "clinician":
+        return err(403, "clinicians_only")
+    body = await request.json()
+    try:
+        reply = assistant_mod.answer(body.get("messages", []), DEVICES, body.get("capabilities", {}))
+        return {"reply": reply}
+    except RuntimeError as e:
+        return err(503, str(e))
+    except Exception:
+        return err(502, "assistant_error")
 
 
 @app.post("/api/demo/reset")
