@@ -50,3 +50,26 @@ Format:
 - How to try it: `cd frontend && npm run dev`, open http://localhost:5173, and follow the demo script. If the backend isn't up, the app uses sample data (badge at top right).
 - Next: Task 5. Switch to the live API once the backend is up and verify shapes field by field.
 - Blockers / needs from backend: the live API and fixtures. Please reply to message #1.
+
+### 12:10 — UI overhaul: sign-in, separate clinician and patient apps, new visual system
+- Done (requested by our human):
+  - Replaced the Clinician/Patient top-bar toggle with a **sign-in page**. Choosing clinician or patient plus an account (demo build, no password) opens a **separate app per role**. Sign out is in the sidebar profile.
+  - The whole UI now follows `FrontEndInspo/Data Dashboard`: DM Sans, white sidebar shell, sticky search topbar, summary cards with icon tiles, tabbed "workspace" chart card with an insights/donut side card, statistics strip, patient rows, and toasts. Type is scaled up from the inspo for readability.
+  - **Clinician app:**
+    - **Overview:** summary cards, latest results with tabs per finished test, chart, "chance check" donut showing % of shuffles beaten, a statistical analysis strip, and a Needs attention list.
+    - **Patients:** devices and testable signals per patient, with a "new plan for this patient" shortcut.
+    - **Test plans:** status filters.
+    - **Plan detail:** verdict hero, key-number cards, an Evidence workspace (tabs: over time / lag scan or period averages / chance check / risk model), and the statistical analysis strip.
+    - **Wizard** (restyled) and **Validation** (the former results gallery).
+  - **Patient app**, same system with fewer stats and larger text:
+    - **Home:** review requests, in-progress and finished tiles, latest result in plain language, "What you're sharing" card.
+    - **My tests:** list of all tests.
+    - **Test page:** consent review with an "Exactly what will be shared" list, active controls (log episode / pause / resume / stop / simulate), and a simple results page.
+  - **Wizard fix:** removing a device now only *masks* the signals it provided. Re-adding Fitbit restores Sleep automatically, which matches demo step 1.
+  - **Chart fix:** the patient-view signal chart was squished horizontally by a hidden empty bar series.
+- Verified: headless Chrome runs demo §10 steps 1–5 entirely through sign-in / sign-out with no page errors. PLAN-1 SYN-PATTERN → Likely real. PLAN-2 SYN-NULL → Probably chance. PLAN-3 SYN-TREAT A/B → Likely real. Also checked at 390px mobile width.
+- Files: frontend/src/{App.tsx, styles.css, lib/session.ts, components/{Shell,Icon,ResultsView,charts,Verdict,PlanSummary}.tsx, pages/SignIn.tsx, pages/clinician/*, pages/patient/*}; removed pages/{ClinicianPlans,ClinicianPlanDetail,PatientHome,PatientPlan}.tsx and components/TopBar.tsx
+- Contract impact: none. Sign-in is client-side only; patient pages only request their own `patient_id`.
+- How to try it: `cd frontend && npm run dev` → http://localhost:5173 → sign in as Dr. Rivera, create a plan → sign out → sign in as that patient → approve → simulate.
+- Next: Task 5. Switch to the live API once the backend lands.
+- Blockers / needs from backend: still none received (no backend commits yet). Message #1 is still open.

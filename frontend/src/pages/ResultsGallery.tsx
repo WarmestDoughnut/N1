@@ -23,26 +23,28 @@ export function ResultsGallery() {
   const cur = items[i]
   return (
     <div>
-      <div className="page-head row-between">
+      <section className="page-heading">
         <div>
-          <div className="eyebrow">Results gallery</div>
-          <h1>Every verdict, side by side</h1>
-          <p className="muted">Backend fixtures (if present) plus built-in sample results. Use this to check that pass and chance results both read clearly.</p>
+          <p className="eyebrow">Validation</p>
+          <h1>Synthetic patients with known answers</h1>
+          <span className="sub">Each synthetic patient has a built-in ground truth. The tool must find real patterns and say "probably chance" when there are none.</span>
         </div>
         <div className="seg">
           <button className={aud === 'clinician' ? 'active' : ''} onClick={() => setAud('clinician')}>Clinician view</button>
           <button className={aud === 'patient' ? 'active' : ''} onClick={() => setAud('patient')}>Patient view</button>
         </div>
-      </div>
-      <div className="row mb">
-        {items.map((it, k) => (
-          <button key={it.name} className={`btn btn-small ${k === i ? '' : 'btn-secondary'}`} onClick={() => setI(k)}>
-            <VerdictBadge verdict={it.results.verdict} small /> {it.name}
-          </button>
-        ))}
+      </section>
+      <div className="workspace mb">
+        <div className="signal-tabs" role="tablist">
+          {items.map((it, k) => (
+            <button key={it.name} role="tab" aria-selected={k === i} className={k === i ? 'selected' : ''} onClick={() => setI(k)}>
+              <VerdictBadge verdict={it.results.verdict} small /> {it.name}
+            </button>
+          ))}
+        </div>
       </div>
       {cur && (aud === 'patient'
-        ? <div className="patient-page"><ResultsView key={cur.name + aud} results={cur.results} plan={cur.plan} audience="patient" /></div>
+        ? <div className="patient-app"><ResultsView key={cur.name + aud} results={cur.results} plan={cur.plan} audience="patient" /></div>
         : <ResultsView key={cur.name + aud} results={cur.results} plan={cur.plan} audience="clinician" />)}
     </div>
   )

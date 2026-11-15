@@ -74,7 +74,18 @@ function toApiError(status: number, code: string): ApiError {
   return new ApiError(status, code, FRIENDLY[code] ?? fallback)
 }
 
+/** After any successful write, let every view refetch (keeps badges/lists in sync). */
+function notifyMutation(method: string) {
+  if (method !== 'GET') setTimeout(() => listeners.forEach((l) => l()), 0)
+}
+
 async function call<T>(method: string, path: string, body: unknown, viaMock: () => Promise<T>): Promise<T> {
+  const out = await callRaw<T>(method, path, body, viaMock)
+  notifyMutation(method)
+  return out
+}
+
+async function callRaw<T>(method: string, path: string, body: unknown, viaMock: () => Promise<T>): Promise<T> {
   const runMock = async () => {
     try {
       return await viaMock()

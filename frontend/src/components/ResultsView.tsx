@@ -1,26 +1,21 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import type { Plan, Results } from '../types'
-import { VerdictBadge } from './Verdict'
+import { ChanceDonut, VerdictBadge } from './Verdict'
 import { ScheduleTimeline } from './ScheduleTimeline'
-import {
-  ABMeansChart,
-  ArmSeriesChart,
-  CoefficientChart,
-  LagScanChart,
-  NullHistogram,
-  PeriodMeansChart,
-  SignalChart,
-} from './charts'
+import { Icon, SIGNAL_COLOR, SIGNAL_ICON } from './Icon'
+import { ABMeansChart, ArmSeriesChart, CoefficientChart, LagScanChart, NullHistogram, PeriodMeansChart, SignalChart } from './charts'
 import { formatValue, pct, shufflePct, signalLabel, SIGNAL_INFO, VERDICT_INFO, warningLabel } from '../lib/util'
 
 interface Props {
   results: Results
   plan?: Plan | null
   audience?: 'clinician' | 'patient'
+  /** extra card for the bottom-right slot (clinician view) */
+  aside?: ReactNode
 }
 
-/** Infers which signal/direction the result is about, preferring the plan's config. */
-function describe(results: Results, plan?: Plan | null) {
+/** Which signal/direction the result is about, preferring the plan's config. */
+export function describe(results: Results, plan?: Plan | null) {
   if (results.type === 'observational') {
     const signal = plan?.observational?.signal ?? 'sleep_min'
     const sign: 1 | -1 = plan?.observational ? (plan.observational.direction === 'lower' ? -1 : 1) : results.effect_pct < 0 ? -1 : 1
@@ -31,217 +26,215 @@ function describe(results: Results, plan?: Plan | null) {
   return { signal, sign }
 }
 
-export function ResultsView({ results, plan, audience = 'clinician' }: Props) {
-  const [tab, setTab] = useState<'results' | 'model'>('results')
-  const showModelTab = audience === 'clinician' && results.model != null
-  const patient = audience === 'patient'
+const fmtP = (p: number) => (p < 0.001 ? '<0.001' : p.toFixed(3))
+const plain = (s: string) => SIGNAL_INFO[s as keyof typeof SIGNAL_INFO]?.plain ?? s
 
-  return (
-    <div className="stack">
-      <VerdictHero results={results} plan={plan} patient={patient} />
-
-      {showModelTab && (
-        <div className="tabs" role="tablist">
-          <button role="tab" aria-selected={tab === 'results'} className={tab === 'results' ? 'active' : ''} onClick={() => setTab('results')}>Results</button>
-          <button role="tab" aria-selected={tab === 'model'} className={tab === 'model' ? 'active' : ''} onClick={() => setTab('model')}>Personal risk model</button>
-        </div>
-      )}
-
-      {tab === 'model' && showModelTab ? (
-        <ModelPanel results={results} />
-      ) : patient ? (
-        <PatientBody results={results} plan={plan} />
-      ) : results.type === 'observational' ? (
-        <ObservationalBody results={results} plan={plan} />
-      ) : (
-        <InterventionBody results={results} plan={plan} />
-      )}
-
-      <ResultsFooter results={results} patient={patient} />
-    </div>
-  )
+export function ResultsView({ results, plan, audience = 'clinician', aside }: Props) {
+  return audience === 'patient' ? <PatientResults results={results} plan={plan} /> : <ClinicianResults results={results} plan={plan} aside={aside} />
 }
 
-function VerdictHero({ results, plan, patient }: { results: Results; plan?: Plan | null; patient: boolean }) {
-  const question = plan?.title
-  return (
-    <div className="card">
-      {question && (
-        <>
-          <div className="eyebrow">{patient ? 'The question' : results.type === 'observational' ? 'Observational test' : 'A/B n-of-1 trial'}</div>
-          <h1 style={{ marginBottom: '1rem' }}>{question}</h1>
-        </>
-      )}
-      <div className="verdict-hero">
-        <VerdictBadge verdict={results.verdict} patient={patient} />
-        <p className="headline">{patient ? results.patient_headline : results.headline}</p>
-      </div>
-      {!patient && <p className="muted small mt" style={{ marginBottom: 0 }}>{VERDICT_INFO[results.verdict]?.blurb}</p>}
-      {!results.complete && (
-        <div className="alert alert-warn mt" style={{ marginBottom: 0 }}>
-          This plan was stopped early. These results use only the data collected before it stopped and are incomplete.
-        </div>
-      )}
-    </div>
-  )
-}
+// ======================= clinician =======================
 
-function ChanceCard({ results, sign, shuffledWhat }: { results: Results; sign: 1 | -1; shuffledWhat: string }) {
-  const p = results.p_value
-  const n = results.n_permutations.toLocaleString()
-  const passed = p < 0.05
-  const borderline = !passed && p < 0.15
-  return (
-    <div className="card chance-card">
-      <div className="row-between">
-        <h2 style={{ margin: 0 }}>Chance check</h2>
-        <span className={`chip ${passed ? '' : 'chip-warn'}`} style={passed ? { background: 'var(--real-bg)', color: 'var(--real)', borderColor: '#22c55e' } : undefined}>
-          {passed ? '✓ Passed' : borderline ? 'Borderline' : '✗ Not passed'}
-        </span>
-      </div>
-      <p className="big mt">
-        {passed ? (
-          <>A pattern this strong appeared in only <strong>{shufflePct(p)}</strong> of {n} random shuffles.</>
-        ) : (
-          <>A pattern this strong appeared in <strong>{shufflePct(p)}</strong> of {n} random shuffles, so chance explains it {borderline ? 'fairly often' : 'easily'}.</>
-        )}
-      </p>
-      <p className="muted small">
-        We {shuffledWhat} {n} times and recomputed the effect each time. Permutation p = {p < 0.001 ? '<0.001' : p.toFixed(3)}.
-      </p>
-      <NullHistogram nulls={results.null_distribution} observed={results.effect_pct} sign={sign} />
-    </div>
-  )
-}
-
-function ObservationalBody({ results, plan }: { results: Results; plan?: Plan | null }) {
+function ClinicianResults({ results, plan, aside }: { results: Results; plan?: Plan | null; aside?: ReactNode }) {
   const obs = results.observational
-  const { signal, sign } = describe(results, plan)
-  return (
-    <>
-      <div className="stat-grid">
-        <div className="stat"><div className="k">Effect</div><div className="v">{pct(results.effect_pct)}</div><div className="s">{signalLabel(signal)} before episodes vs normal days</div></div>
-        <div className="stat"><div className="k">Lag</div><div className="v">{obs ? `${obs.best_lag_days} day${obs.best_lag_days > 1 ? 's' : ''}` : '—'}</div><div className="s">strongest window before episodes</div></div>
-        <div className="stat"><div className="k">Permutation p</div><div className="v">{results.p_value < 0.001 ? '<0.001' : results.p_value.toFixed(3)}</div><div className="s">{results.n_permutations.toLocaleString()} shuffles</div></div>
-        <div className="stat"><div className="k">Episodes</div><div className="v">{results.n_episodes ?? '—'}</div><div className="s">over {results.n_days} days</div></div>
-        {obs && (
-          <div className="stat"><div className="k">Before episodes / normal</div><div className="v" style={{ fontSize: '1.1rem' }}>{formatValue(signal, obs.pre_episode_mean)} / {formatValue(signal, obs.baseline_mean)}</div><div className="s">average {SIGNAL_INFO[signal as keyof typeof SIGNAL_INFO]?.plain ?? signal}</div></div>
-        )}
-      </div>
-
-      <div className="card">
-        <div className="chart-title">{signalLabel(signal)} over the test window</div>
-        <div className="chart-sub">Shaded days are the {obs?.best_lag_days ?? ''}-day windows before each episode. These are compared against all other days.</div>
-        <SignalChart series={results.series} signal={signal} />
-      </div>
-
-      <div className="grid-2">
-        <div className="card">
-          <div className="chart-title">How far ahead? (lag scan)</div>
-          <div className="chart-sub">Difference from normal days, looking 1 to {obs?.lag_scan.length ?? 3} days before episodes. The highlighted bar is the strongest. p-values are corrected for testing several lags.</div>
-          {obs ? <LagScanChart lagScan={obs.lag_scan} best={obs.best_lag_days} /> : <div className="muted">No lag scan.</div>}
-        </div>
-        <ChanceCard results={results} sign={sign} shuffledWhat="moved the episode dates to random days" />
-      </div>
-    </>
-  )
-}
-
-function InterventionBody({ results, plan }: { results: Results; plan?: Plan | null }) {
   const iv = results.intervention
   const cfg = plan?.intervention
   const { signal, sign } = describe(results, plan)
   const armA = cfg?.arm_a ?? 'A'
   const armB = cfg?.arm_b ?? 'B'
+  const isObs = results.type === 'observational'
+  type Tab = 'time' | 'lag' | 'periods' | 'chance' | 'model'
+  const tabs: { id: Tab; label: string; icon: Parameters<typeof Icon>[0]['name'] }[] = [
+    { id: 'time', label: isObs ? `${signalLabel(signal)} over time` : 'Outcome by period', icon: SIGNAL_ICON[signal] ?? 'activity' },
+    isObs ? { id: 'lag', label: 'Lag scan', icon: 'calendar' } : { id: 'periods', label: 'Period averages', icon: 'grid' },
+    { id: 'chance', label: 'Chance check', icon: 'shuffle' },
+    ...(results.model ? [{ id: 'model' as Tab, label: 'Personal risk model', icon: 'sparkles' as const }] : []),
+  ]
+  const [tab, setTab] = useState<Tab>('time')
+  const passed = results.p_value < 0.05
+  const nUnits = isObs ? results.n_episodes ?? 0 : (iv?.n_periods_a ?? 0) + (iv?.n_periods_b ?? 0)
+
   return (
-    <>
-      <div className="stat-grid">
-        <div className="stat"><div className="k">Effect (B vs A)</div><div className="v">{pct(results.effect_pct)}</div><div className="s">{signalLabel(signal)}, {cfg ? `${cfg.better} is better` : ''}</div></div>
-        <div className="stat"><div className="k">Mean A</div><div className="v" style={{ color: 'var(--arm-a)' }}>{iv ? formatValue(signal, iv.mean_a) : '—'}</div><div className="s">{armA}</div></div>
-        <div className="stat"><div className="k">Mean B</div><div className="v" style={{ color: 'var(--arm-b)' }}>{iv ? formatValue(signal, iv.mean_b) : '—'}</div><div className="s">{armB}</div></div>
-        <div className="stat"><div className="k">Permutation p</div><div className="v">{results.p_value < 0.001 ? '<0.001' : results.p_value.toFixed(3)}</div><div className="s">{results.n_permutations.toLocaleString()} shuffles</div></div>
-        <div className="stat"><div className="k">Periods</div><div className="v">{iv ? `${iv.n_periods_a} A · ${iv.n_periods_b} B` : '—'}</div><div className="s">over {results.n_days} days</div></div>
-      </div>
-
-      {cfg?.schedule?.length ? (
-        <div className="card">
-          <div className="chart-title">Randomized schedule</div>
-          <div className="chart-sub">Each pair of periods is randomly A-B or B-A. Washout days are not analyzed.</div>
-          <ScheduleTimeline schedule={cfg.schedule} armA={armA} armB={armB} />
-        </div>
-      ) : null}
-
+    <div className="stack">
       <div className="card">
-        <div className="chart-title">{signalLabel(signal)} by period</div>
-        <div className="chart-sub">Blue = A ({armA}), orange = B ({armB}), gray dashes = washout.</div>
-        <ArmSeriesChart series={results.series} signal={signal} />
+        <p className="eyebrow">{isObs ? 'Observational test' : 'A/B n-of-1 trial'} · result</p>
+        <h1 style={{ marginBottom: 16 }}>{plan?.title ?? 'Test result'}</h1>
+        <div className="verdict-hero">
+          <VerdictBadge verdict={results.verdict} />
+          <p className="headline">{results.headline}</p>
+        </div>
+        <p className="muted small" style={{ margin: '12px 0 0' }}>{VERDICT_INFO[results.verdict]?.blurb}</p>
+        {!results.complete && (
+          <div className="alert alert-warn mt"><Icon name="info" /><span>This plan was stopped early. Results use only the data collected before it stopped, so they are incomplete.</span></div>
+        )}
       </div>
 
-      <div className="grid-2">
-        <div className="card">
-          <div className="chart-title">A vs B average</div>
-          {iv && <ABMeansChart meanA={iv.mean_a} meanB={iv.mean_b} signal={signal} armA={armA} armB={armB} height={140} />}
-          <div className="chart-title mt">Each period's average</div>
-          {iv && <PeriodMeansChart periodMeans={iv.period_means} signal={signal} armA={armA} armB={armB} />}
+      <section className="summary-grid four" aria-label="Key numbers">
+        <Summary icon="activity" tone="tone-purple" k={isObs ? 'Effect before episodes' : 'Effect (B vs A)'} v={pct(results.effect_pct)}
+          s={isObs ? `${signalLabel(signal)} vs normal days` : `${signalLabel(signal)} · ${cfg?.better ?? ''} is better`} />
+        {isObs
+          ? <Summary icon="calendar" tone="tone-yellow" k="Strongest lag" v={obs ? `${obs.best_lag_days} day${obs.best_lag_days > 1 ? 's' : ''}` : '—'} s="before episodes" />
+          : <Summary icon={SIGNAL_ICON[signal] ?? 'activity'} tone="tone-yellow" k="A → B average" v={iv ? `${formatValue(signal, iv.mean_a)} → ${formatValue(signal, iv.mean_b)}` : '—'} s={`${armA} → ${armB}`} small />}
+        <Summary icon="shuffle" tone={passed ? 'tone-green' : 'tone-gray'} k="Permutation p" v={fmtP(results.p_value)} s={`${results.n_permutations.toLocaleString()} shuffles`} />
+        <Summary icon={isObs ? 'heart' : 'grid'} tone="tone-coral" k={isObs ? 'Episodes' : 'Periods'} v={String(nUnits)}
+          s={isObs ? `over ${results.n_days} days` : `${iv?.n_periods_a ?? 0} A · ${iv?.n_periods_b ?? 0} B`} />
+      </section>
+
+      <section className="workspace">
+        <div className="workspace-head">
+          <div>
+            <h2>Evidence</h2>
+            <p>{isObs ? `The days before each episode compared against this patient's normal days.` : 'Randomized A/B periods compared, with washout days excluded.'}</p>
+          </div>
+          {cfg?.schedule?.length ? <span className="pill pill-purple no-dot">{cfg.schedule.map((p) => p.arm).join('-')}</span> : null}
         </div>
-        <ChanceCard results={results} sign={sign} shuffledWhat="randomly reassigned the A/B labels across periods" />
-      </div>
-    </>
+        <div className="signal-tabs" role="tablist" aria-label="Evidence views">
+          {tabs.map((t) => (
+            <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? 'selected' : ''} onClick={() => setTab(t.id)}>
+              <span style={{ color: t.id === 'time' ? SIGNAL_COLOR[signal] : '#8d8d98' }}><Icon name={t.icon} size={17} /></span>{t.label}
+            </button>
+          ))}
+        </div>
+        <div className="analytics-grid">
+          <article className="chart-card">
+            {tab === 'time' && (
+              <>
+                <ChartHead k={isObs ? `Average ${plain(signal)} before episodes` : `Average ${plain(signal)} on B`}
+                  v={isObs ? formatValue(signal, obs?.pre_episode_mean) : formatValue(signal, iv?.mean_b)}
+                  delta={results.effect_pct} good={sign * results.effect_pct > 0 && results.verdict === 'likely_real'}
+                  sub={isObs ? `vs ${formatValue(signal, obs?.baseline_mean)} on normal days` : `vs ${formatValue(signal, iv?.mean_a)} on A (${armA})`} />
+                {isObs
+                  ? <SignalChart series={results.series} signal={signal} baseline={obs?.baseline_mean} color={SIGNAL_COLOR[signal]} />
+                  : <>
+                      <ArmSeriesChart series={results.series} signal={signal} />
+                      <div className="legend">
+                        <span><i style={{ background: 'var(--arm-a)' }} />A · {armA}</span>
+                        <span><i style={{ background: 'var(--arm-b)' }} />B · {armB}</span>
+                        <span><i className="dashed" />Washout (not analyzed)</span>
+                      </div>
+                    </>}
+              </>
+            )}
+            {tab === 'lag' && obs && (
+              <>
+                <ChartHead k="How far ahead does the signal change?" v={`${obs.best_lag_days} day${obs.best_lag_days > 1 ? 's' : ''}`} sub="Highlighted bar is the strongest window. p-values are corrected for testing several lags." />
+                <LagScanChart lagScan={obs.lag_scan} best={obs.best_lag_days} />
+              </>
+            )}
+            {tab === 'periods' && iv && (
+              <>
+                <ChartHead k="Average per period" v={`${iv.n_periods_a + iv.n_periods_b} periods`} sub="Each pair of periods is randomly A-B or B-A." />
+                {cfg?.schedule?.length ? <div className="mb"><ScheduleTimeline schedule={cfg.schedule} armA={armA} armB={armB} compact /></div> : null}
+                <PeriodMeansChart periodMeans={iv.period_means} signal={signal} armA={armA} armB={armB} height={200} />
+                <div className="chart-title mt">A vs B average</div>
+                <ABMeansChart meanA={iv.mean_a} meanB={iv.mean_b} signal={signal} armA={armA} armB={armB} height={110} />
+              </>
+            )}
+            {tab === 'chance' && (
+              <>
+                <ChartHead k="Where the real result falls among random shuffles" v={`${shufflePct(results.p_value)}`} sub={`of ${results.n_permutations.toLocaleString()} shuffles were at least this strong`} />
+                <NullHistogram nulls={results.null_distribution} observed={results.effect_pct} sign={sign} height={240} />
+              </>
+            )}
+            {tab === 'model' && results.model && <ModelPanel results={results} />}
+          </article>
+
+          <aside className="insights-card">
+            <div className="card-title">
+              <div>
+                <h3>Chance check</h3>
+                <p>{isObs ? 'Episode dates moved to random days' : 'A/B labels reassigned across periods'}</p>
+              </div>
+              <span className={`pill ${passed ? 'pill-green' : results.p_value < 0.15 ? 'pill-yellow' : 'pill-gray'}`}>{passed ? 'Passed' : results.p_value < 0.15 ? 'Borderline' : 'Not passed'}</span>
+            </div>
+            <div className="donut-row">
+              <ChanceDonut p={results.p_value} />
+              <div className="range-list">
+                <span><i style={{ background: '#6258df' }} />Effect <b>{pct(results.effect_pct)}</b></span>
+                {isObs && obs && <span><i style={{ background: '#d29a2c' }} />Lag <b>{obs.best_lag_days} d</b></span>}
+                <span><i style={{ background: '#e05a5f' }} />{isObs ? 'Episodes' : 'Periods'} <b>{nUnits}</b></span>
+                <span><i style={{ background: '#c9c9d3' }} />p-value <b>{fmtP(results.p_value)}</b></span>
+              </div>
+            </div>
+            <div className={`insight ${passed ? '' : 'warn'}`}>
+              <span><Icon name="sparkles" size={17} /></span>
+              <p>
+                <strong>{passed ? 'Unlikely to be chance' : results.verdict === 'not_enough_data' ? 'Not enough data to judge' : 'Chance explains it easily'}</strong>
+                A pattern this strong appeared in {passed ? 'only ' : ''}{shufflePct(results.p_value)} of {results.n_permutations.toLocaleString()} random shuffles.
+              </p>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section className="bottom-grid">
+        <article className="card">
+          <div className="card-title">
+            <div>
+              <h3>Statistical analysis</h3>
+              <p>Permutation test on this patient's own data. No population assumptions.</p>
+            </div>
+            <VerdictBadge verdict={results.verdict} small />
+          </div>
+          <div className="results">
+            <div><span>p-value</span><strong>{fmtP(results.p_value)}</strong><small className={passed ? 'good' : ''}>{passed ? 'Below 0.05' : 'Not below 0.05'}</small></div>
+            <div><span>Effect size</span><strong>{pct(results.effect_pct)}</strong><small className={Math.abs(results.effect_pct) >= 5 ? 'good' : ''}>{Math.abs(results.effect_pct) >= 5 ? '≥ 5% threshold' : 'Under 5% threshold'}</small></div>
+            {isObs
+              ? <div><span>Before vs normal</span><strong style={{ fontSize: 16 }}>{formatValue(signal, obs?.pre_episode_mean)} / {formatValue(signal, obs?.baseline_mean)}</strong><small>Average {plain(signal)}</small></div>
+              : <div><span>A vs B</span><strong style={{ fontSize: 16 }}>{formatValue(signal, iv?.mean_a)} / {formatValue(signal, iv?.mean_b)}</strong><small>Average {plain(signal)}</small></div>}
+            <div><span>Data</span><strong>{results.n_days} days</strong><small>{isObs ? `${nUnits} episodes` : `${nUnits} periods`}</small></div>
+          </div>
+          <p className="method-note">
+            <Icon name="flask" size={16} />
+            <span><b>Interpretation:</b> {interpretation(results, signal)}</span>
+          </p>
+          <div className="row mt">
+            {results.warnings.map((w) => <span key={w} className="chip warn"><Icon name="info" size={13} />{warningLabel(w)}</span>)}
+            {results.warnings.length === 0 && <span className="chip"><Icon name="check" size={13} />No data warnings</span>}
+          </div>
+          <div className="disclaimer mt"><Icon name="shield" size={16} /><span><strong>Not diagnostic.</strong> Results describe this one patient over this window and are worth discussing with them.</span></div>
+        </article>
+        {aside}
+      </section>
+    </div>
   )
 }
 
-function PatientBody({ results, plan }: { results: Results; plan?: Plan | null }) {
-  const { signal } = describe(results, plan)
-  const p = results.p_value
-  const plain = SIGNAL_INFO[signal as keyof typeof SIGNAL_INFO]?.plain ?? signal
-  const iv = results.intervention
-  const cfg = plan?.intervention
+function interpretation(r: Results, signal: string) {
+  const what = plain(signal)
+  switch (r.verdict) {
+    case 'likely_real': return r.type === 'observational'
+      ? `Strong evidence that ${what} changes in the days before this patient's episodes, beyond what random timing would produce.`
+      : `Strong evidence that the intervention changed this patient's ${what}, beyond what random A/B labeling would produce.`
+    case 'suggestive': return `The effect points the hypothesized way but isn't strong enough to rule out chance. Consider a longer or repeated plan.`
+    case 'probably_chance': return `An effect this size shows up routinely when the data is shuffled. There's no reliable evidence for the hypothesis in this window.`
+    default: return `Too few ${r.type === 'observational' ? 'episodes' : 'periods per arm'} or too much missing data to judge. Extend the window or run the plan again.`
+  }
+}
+
+function Summary({ icon, tone, k, v, s, small }: { icon: Parameters<typeof Icon>[0]['name']; tone: string; k: string; v: string; s: string; small?: boolean }) {
   return (
-    <>
-      <div className="card">
-        <h2>What we looked at</h2>
-        {results.type === 'observational' ? (
-          <>
-            <p>Your {plain} each day. Red lines are days you had an episode.</p>
-            <SignalChart series={results.series} signal={signal} height={260} showWindows={false} />
-          </>
-        ) : (
-          <>
-            <p>Your {plain} during "{cfg?.arm_a ?? 'A'}" and "{cfg?.arm_b ?? 'B'}" periods.</p>
-            {iv && <ABMeansChart meanA={iv.mean_a} meanB={iv.mean_b} signal={signal} armA={cfg?.arm_a ?? 'A'} armB={cfg?.arm_b ?? 'B'} height={150} />}
-          </>
-        )}
+    <article className="summary-card">
+      <div className={`summary-icon ${tone}`}><Icon name={icon} /></div>
+      <div style={{ minWidth: 0 }}>
+        <span className="k">{k}</span>
+        <div className="v"><strong style={small ? { fontSize: 18 } : undefined}>{v}</strong></div>
+        <small>{s}</small>
       </div>
-      <div className="card">
-        <h2>Could this be chance?</h2>
-        <p style={{ fontSize: '1.15rem' }}>
-          {p < 0.05
-            ? `We mixed up your data ${results.n_permutations.toLocaleString()} times. A pattern this strong showed up only ${shufflePct(p).replace('<', 'less than ')} of the time, so it's unlikely to be luck.`
-            : `We mixed up your data ${results.n_permutations.toLocaleString()} times. A pattern like this showed up ${shufflePct(p)} of the time, so it could easily be luck.`}
-        </p>
-      </div>
-    </>
+    </article>
   )
 }
 
-function ResultsFooter({ results, patient }: { results: Results; patient: boolean }) {
+function ChartHead({ k, v, sub, delta, good }: { k: string; v: string; sub?: string; delta?: number; good?: boolean }) {
   return (
-    <div className="card">
-      <div className="row" style={{ marginBottom: '0.75rem' }}>
-        {results.type === 'observational' ? (
-          <span className="chip">{results.n_episodes ?? 0} episodes</span>
-        ) : (
-          <span className="chip">{(results.intervention?.n_periods_a ?? 0) + (results.intervention?.n_periods_b ?? 0)} periods</span>
-        )}
-        <span className="chip">{results.n_days} days</span>
-        {!patient && <span className="chip">{results.n_permutations.toLocaleString()} permutations</span>}
-        {results.warnings.filter((w) => !patient || w !== 'multiple_lags_tested').map((w) => (
-          <span key={w} className="chip chip-warn">⚠ {warningLabel(w)}</span>
-        ))}
-      </div>
-      <div className="disclaimer">
-        <strong>Not diagnostic</strong> — worth discussing with your clinician.
-        {!patient && ' Results describe this one patient over this window only.'}
+    <div className="chart-head">
+      <div>
+        <span className="k">{k}</span>
+        <div className="v">
+          <strong>{v}</strong>
+          {delta != null && <span className={`delta ${good ? 'good' : 'neutral'}`}>{pct(delta)}</span>}
+        </div>
+        {sub && <small>{sub}</small>}
       </div>
     </div>
   )
@@ -249,26 +242,72 @@ function ResultsFooter({ results, patient }: { results: Results; patient: boolea
 
 function ModelPanel({ results }: { results: Results }) {
   const m = results.model!
-  if (!m.trained) {
-    return <div className="card"><h2>Personal risk model</h2><p className="muted">The model wasn't trained: {m.reason ?? 'not enough data'}.</p></div>
-  }
+  if (!m.trained) return <p className="muted">The model wasn't trained: {m.reason ?? 'not enough data'}.</p>
   return (
-    <div className="grid-2">
+    <>
+      <ChartHead k="Chance of an episode tomorrow" v={m.risk_tomorrow != null ? `${Math.round(m.risk_tomorrow * 100)}%` : '—'}
+        sub={`${m.kind === 'logistic_l2' ? 'L2 logistic regression' : m.kind} · AUC ${m.auc?.toFixed(2) ?? '—'}${m.auc_null_p != null ? ` (vs chance p = ${m.auc_null_p.toFixed(3)})` : ''}`} />
+      <div className="chart-sub">What drives the prediction. A negative weight means lower values raise episode risk.</div>
+      <CoefficientChart coefficients={m.coefficients} />
+      <p className="muted small">Exploratory. Not validated for clinical use.</p>
+    </>
+  )
+}
+
+// ======================= patient =======================
+
+function PatientResults({ results, plan }: { results: Results; plan?: Plan | null }) {
+  const { signal } = describe(results, plan)
+  const iv = results.intervention
+  const cfg = plan?.intervention
+  const passed = results.p_value < 0.05
+  return (
+    <div className="stack">
       <div className="card">
-        <h2>Personal risk model</h2>
-        <p className="muted small">{m.kind === 'logistic_l2' ? 'L2-regularized logistic regression' : m.kind} trained on this patient's own history.</p>
-        <div className="stat-grid">
-          <div className="stat"><div className="k">AUC</div><div className="v">{m.auc?.toFixed(2) ?? '—'}</div><div className="s">0.5 = coin flip</div></div>
-          <div className="stat"><div className="k">AUC vs chance</div><div className="v">{m.auc_null_p != null ? `p=${m.auc_null_p.toFixed(3)}` : '—'}</div><div className="s">{m.auc_null_p != null && m.auc_null_p < 0.05 ? 'better than chance' : 'not better than chance'}</div></div>
-          <div className="stat"><div className="k">Risk tomorrow</div><div className="v">{m.risk_tomorrow != null ? `${Math.round(m.risk_tomorrow * 100)}%` : '—'}</div><div className="s">chance of an episode</div></div>
+        <p className="eyebrow">Your result</p>
+        <h1 style={{ marginBottom: 16 }}>{plan?.title ?? 'Your test'}</h1>
+        <div className="verdict-hero">
+          <VerdictBadge verdict={results.verdict} patient />
         </div>
-        <p className="muted small mt">Exploratory and not validated for clinical use.</p>
+        <p className="headline" style={{ marginTop: 14, fontSize: 21, lineHeight: 1.45 }}>{results.patient_headline}</p>
+        {!results.complete && <div className="alert alert-warn mt"><Icon name="info" /><span>You stopped this test early, so these results are incomplete.</span></div>}
       </div>
-      <div className="card">
-        <div className="chart-title">What drives the prediction</div>
-        <div className="chart-sub">Negative weight means lower values raise episode risk.</div>
-        <CoefficientChart coefficients={m.coefficients} />
-      </div>
+
+      <section className="bottom-grid">
+        <article className="card">
+          <div className="card-title">
+            <div>
+              <h3 style={{ fontSize: 18 }}>What we looked at</h3>
+              <p style={{ fontSize: 14.5 }}>
+                {results.type === 'observational'
+                  ? `Your ${plain(signal)} each day. Red lines are days you had an episode.`
+                  : `Your average ${plain(signal)} during "${cfg?.arm_a ?? 'A'}" and "${cfg?.arm_b ?? 'B'}" periods.`}
+              </p>
+            </div>
+          </div>
+          {results.type === 'observational'
+            ? <SignalChart series={results.series} signal={signal} height={260} showWindows={false} color={SIGNAL_COLOR[signal]} />
+            : iv && <ABMeansChart meanA={iv.mean_a} meanB={iv.mean_b} signal={signal} armA={cfg?.arm_a ?? 'A'} armB={cfg?.arm_b ?? 'B'} height={140} />}
+        </article>
+        <aside className="card">
+          <div className="card-title"><div><h3 style={{ fontSize: 18 }}>Could this be chance?</h3></div></div>
+          <div className="donut-row" style={{ paddingTop: 4 }}>
+            <ChanceDonut p={results.p_value} />
+            <p style={{ margin: 0, fontSize: 15.5, color: '#4c4c58' }}>
+              We mixed up your data {results.n_permutations.toLocaleString()} times.
+              {passed
+                ? ` A pattern this strong showed up ${shufflePct(results.p_value).startsWith('<') ? shufflePct(results.p_value).replace('<', 'less than ') : `only ${shufflePct(results.p_value)}`} of the time, so it's unlikely to be luck.`
+                : ` A pattern like this showed up ${shufflePct(results.p_value)} of the time, so it could easily be luck.`}
+            </p>
+          </div>
+          <div className="row">
+            <span className="chip">{results.type === 'observational' ? `${results.n_episodes ?? 0} episodes` : `${(iv?.n_periods_a ?? 0) + (iv?.n_periods_b ?? 0)} periods`}</span>
+            <span className="chip">{results.n_days} days</span>
+          </div>
+        </aside>
+      </section>
+
+      <div className="disclaimer" style={{ fontSize: 15 }}><Icon name="shield" size={17} /><span><strong>This is not a diagnosis.</strong> It's worth discussing with your clinician, who sees the same result.</span></div>
     </div>
   )
 }

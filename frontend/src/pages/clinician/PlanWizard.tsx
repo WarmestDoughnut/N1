@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import { api, friendlyError } from '../api'
-import type { Device, Direction, Patient, Plan, PlanCreate, PlanType, SchedulePeriod, SignalId } from '../types'
-import { navigate, useAsync } from '../lib/hooks'
-import { ScheduleTimeline } from '../components/ScheduleTimeline'
-import { ALL_SIGNALS, formatDate, SIGNAL_INFO, signalLabel } from '../lib/util'
+import { api, friendlyError } from '../../api'
+import type { Device, Direction, Patient, Plan, PlanCreate, PlanType, SchedulePeriod, SignalId } from '../../types'
+import { navigate, useAsync } from '../../lib/hooks'
+import { ScheduleTimeline } from '../../components/ScheduleTimeline'
+import { DEVICE_ICON, Icon, SIGNAL_ICON } from '../../components/Icon'
+import { useToast } from '../../components/Shell'
+import { getSession, initials } from '../../lib/session'
+import { ALL_SIGNALS, formatDate, SIGNAL_INFO, signalLabel } from '../../lib/util'
 
 const STEPS = ['Patient', 'Devices', 'Signals', 'Test design', 'Review & send']
 const SENSOR_SIGNALS: SignalId[] = ALL_SIGNALS.filter((s) => s !== 'episode')
@@ -14,25 +17,27 @@ interface IvForm { arm_a: string; arm_b: string; outcome_signal: SignalId; bette
 function binom(n: number, k: number) { let r = 1; for (let i = 1; i <= k; i++) r = (r * (n - k + i)) / i; return Math.round(r) }
 
 /** "#/new?from=PLAN-3" pre-fills the wizard from an existing plan (demo: same plan, another patient). */
-function readFromParam(): string | null {
+function readParam(name: string): string | null {
   const q = window.location.hash.split('?')[1]
-  return q ? new URLSearchParams(q).get('from') : null
+  return q ? new URLSearchParams(q).get(name) : null
 }
 
 export function PlanWizard({ patients }: { patients: Patient[] }) {
   const devicesQ = useAsync<Device[]>(() => api.devices(), [])
   const catalog = devicesQ.data ?? []
+  const toast = useToast()
 
   const [step, setStep] = useState(0)
   const [patientId, setPatientId] = useState('')
   const [devices, setDevices] = useState<string[]>([])
-  const [signals, setSignals] = useState<SignalId[]>([])
+  // What the clinician ticked. Kept even while a device is removed, so re-adding it restores the choice.
+  const [picked, setSignals] = useState<SignalId[]>([])
   const [type, setType] = useState<PlanType>('observational')
   const [obs, setObs] = useState<ObsForm>({ signal: 'sleep_min', direction: 'lower', max_lag_days: 3 })
   const [iv, setIv] = useState<IvForm>({ arm_a: 'No melatonin', arm_b: 'Melatonin 3mg', outcome_signal: 'sleep_min', better: 'higher', period_days: 7, washout_days: 2, n_periods: 8, seed: 42 })
   const [title, setTitle] = useState('')
   const [titleTouched, setTitleTouched] = useState(false)
-  const [clinician, setClinician] = useState('Dr. Rivera')
+  const [clinician, setClinician] = useState(() => getSession()?.name ?? 'Dr. Rivera')
   const [schedule, setSchedule] = useState<SchedulePeriod[]>([])
   const [scheduleErr, setScheduleErr] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
@@ -43,7 +48,7 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
 
   // ----- clone from existing plan -----
   useEffect(() => {
-    const from = readFromParam()
+    const from = readParam('from')
     if (!from) return
     api.getPlan(from).then((p) => {
       setCloneOf(p)
@@ -72,10 +77,8 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
       : `No device in the catalog tracks ${what}`
   }
 
-  // Drop signals that became unavailable when devices change.
-  useEffect(() => {
-    setSignals((cur) => cur.filter((s) => available.has(s)))
-  }, [available])
+  // Effective selection = ticked AND provided by a selected device.
+  const signals: SignalId[] = useMemo(() => picked.filter((s) => available.has(s)), [picked, available])
 
   const chosenSensors: SignalId[] = signals.filter((s) => s !== 'episode')
 
@@ -116,6 +119,15 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
       setSignals((['sleep_min', 'episode'] as SignalId[]).filter((s) => avail.has(s)))
     }
   }
+
+  // "#/new?patient=SYN-PATTERN" jumps straight to the device step for that patient.
+  const [prefilled, setPrefilled] = useState(false)
+  useEffect(() => {
+    const pid = readParam('patient')
+    const p = pid && patients.find((x) => x.id === pid)
+    if (!prefilled && p && catalog.length) { pickPatient(p); setStep(1); setPrefilled(true) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [patients, catalog, prefilled])
 
   const toggleDevice = (id: string) => setDevices((d) => (d.includes(id) ? d.filter((x) => x !== id) : [...d, id]))
   const toggleSignal = (s: SignalId) => setSignals((cur) => (cur.includes(s) ? cur.filter((x) => x !== s) : [...cur, s]))
@@ -173,6 +185,7 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
     }
     try {
       const plan = await api.createPlan(body)
+      toast(`Sent to ${patient.display_name} for approval`)
       navigate(`/plans/${plan.id}`)
     } catch (e) {
       setSendErr(friendlyError(e))
@@ -183,16 +196,19 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
 
   return (
     <div>
-      <div className="page-head">
-        <div className="eyebrow"><a href="#/">← Test plans</a></div>
-        <h1>New test plan</h1>
-        {cloneOf && <div className="alert alert-info" style={{ marginTop: '0.5rem' }}>Copying the design of <strong>{cloneOf.title}</strong> ({cloneOf.id}). Choose a patient to run it on.</div>}
-      </div>
+      <section className="page-heading">
+        <div>
+          <p className="eyebrow"><a href="#/plans">Test plans</a> / New</p>
+          <h1>New test plan</h1>
+          <span className="sub">Turn a clinical hunch into a structured test on one patient's own device data.</span>
+        </div>
+      </section>
+      {cloneOf && <div className="alert alert-info mb"><Icon name="clipboard" /><span>Copying the design of <strong>{cloneOf.title}</strong> ({cloneOf.id}). Choose a patient to run it on.</span></div>}
 
       <ol className="steps">
         {STEPS.map((s, i) => (
           <li key={s} className={i === step ? 'current' : i < step ? 'done' : ''}>
-            <span className="n">{i < step ? '✓' : i + 1}</span>{s}
+            <span className="n">{i < step ? <Icon name="check" size={14} /> : i + 1}</span>{s}
           </li>
         ))}
       </ol>
@@ -204,8 +220,8 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
             <div className="option-grid">
               {patients.map((p) => (
                 <button key={p.id} className={`option ${patientId === p.id ? 'selected' : ''}`} onClick={() => pickPatient(p)}>
-                  {patientId === p.id && <span className="check">✓</span>}
-                  <span className="title">{p.display_name}</span>
+                  {patientId === p.id && <span className="check"><Icon name="check" size={14} /></span>}
+                  <span className="head"><span className={`mini-avatar ${p.source === 'pmdata' ? 'tone-green' : 'tone-purple'}`}>{initials(p.display_name)}</span><span className="title">{p.display_name}</span></span>
                   <span className="sub">{p.id} · {p.source === 'pmdata' ? 'PMData (real)' : 'Synthetic'}</span>
                   <span className="sub">{p.n_days} days · {p.n_episodes} episodes logged</span>
                   <span className="sub">Owns: {p.devices.map((d) => catalog.find((c) => c.id === d)?.name ?? d).join(', ')}</span>
@@ -226,8 +242,8 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
                 const owned = patient?.devices.includes(d.id)
                 return (
                   <button key={d.id} className={`option ${sel ? 'selected' : ''}`} onClick={() => toggleDevice(d.id)} aria-pressed={sel}>
-                    {sel && <span className="check">✓</span>}
-                    <span className="title">{d.name}</span>
+                    {sel && <span className="check"><Icon name="check" size={14} /></span>}
+                    <span className="head"><span className="summary-icon tone-purple" style={{ width: 36, height: 36, margin: 0 }}><Icon name={DEVICE_ICON[d.id] ?? 'watch'} size={17} /></span><span className="title">{d.name}</span></span>
                     <span className="sub">Tracks: {d.signals.map(signalLabel).join(', ')}</span>
                     <span className="sub">{owned ? 'Patient owns this' : 'Patient would need this device'}</span>
                   </button>
@@ -248,13 +264,13 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
                 return (
                   <button key={s} className={`option ${sel ? 'selected' : ''} ${ok ? '' : 'unavailable'}`} disabled={!ok}
                     onClick={() => toggleSignal(s)} aria-pressed={sel}>
-                    {sel && <span className="check">✓</span>}
-                    <span className="title">{SIGNAL_INFO[s].label}</span>
+                    {sel && <span className="check"><Icon name="check" size={14} /></span>}
+                    <span className="head"><span className={`summary-icon ${ok ? 'tone-purple' : 'tone-gray'}`} style={{ width: 36, height: 36, margin: 0 }}><Icon name={SIGNAL_ICON[s] ?? 'activity'} size={17} /></span><span className="title">{SIGNAL_INFO[s].label}</span></span>
                     {s === 'episode'
                       ? <span className="sub">Logged by the patient in the app. Always available.</span>
                       : ok
                         ? <span className="sub">From {catalog.filter((d) => devices.includes(d.id) && d.signals.includes(s)).map((d) => d.name).join(', ')}</span>
-                        : <span className="reason">{reasonFor(s)}</span>}
+                        : <span className="reason"><Icon name="info" size={14} />{reasonFor(s)}</span>}
                   </button>
                 )
               })}
@@ -327,7 +343,7 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
                       {[4, 6, 8, 10, 12].map((n) => <option key={n} value={n}>{n} ({n / 2} A + {n / 2} B)</option>)}
                     </select>
                     {minP != null && (
-                      <span className="hint" style={minP >= 0.05 ? { color: 'var(--suggest)', fontWeight: 600 } : undefined}>
+                      <span className="hint" style={minP >= 0.05 ? { color: 'var(--yellow)', fontWeight: 600 } : undefined}>
                         Smallest possible p-value: {minP.toFixed(3)}{minP >= 0.05 ? ', too few periods to ever reach "likely real"' : ''}
                       </span>
                     )}
@@ -345,7 +361,7 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
                     <span className="label">Randomization seed</span>
                     <div className="row">
                       <input type="number" value={iv.seed} onChange={(e) => setIv({ ...iv, seed: Number(e.target.value) })} style={{ width: 110 }} />
-                      <button className="btn btn-secondary btn-small" onClick={() => setIv({ ...iv, seed: Math.floor(Math.random() * 10000) })}>Re-randomize</button>
+                      <button className="button secondary sm" onClick={() => setIv({ ...iv, seed: Math.floor(Math.random() * 10000) })}>Re-randomize</button>
                     </div>
                   </div>
                 </div>
@@ -369,7 +385,7 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
                   <input id="t" value={title} onChange={(e) => { setTitle(e.target.value); setTitleTouched(true) }} />
                 </div>
                 <div className="field"><label htmlFor="c">Clinician</label><input id="c" value={clinician} onChange={(e) => setClinician(e.target.value)} /></div>
-                <table className="table">
+                <table className="table kv">
                   <tbody>
                     <tr><th>Patient</th><td>{patient.display_name} <span className="muted small">({patient.id})</span></td></tr>
                     <tr><th>Devices</th><td>{finalDevices.map((d) => catalog.find((c) => c.id === d)?.name ?? d).join(', ')}</td></tr>
@@ -385,12 +401,10 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
                 </table>
               </div>
               <div>
-                <div className="chart-title">What happens next</div>
-                <ol className="muted" style={{ paddingLeft: '1.2rem' }}>
-                  <li>The patient gets a plain-language summary listing exactly these signals and dates.</li>
-                  <li>Nothing is shared unless they approve. They can pause or stop at any time.</li>
-                  <li>You don't need to monitor anything. You'll get the verdict when the plan completes.</li>
-                </ol>
+                <div className="insight mb">
+                  <span><Icon name="shield" size={17} /></span>
+                  <p><strong>The plan is the consent</strong>The patient gets a plain-language summary listing exactly these signals and dates. Nothing is shared unless they approve, and they can pause or stop at any time. You don't need to monitor anything: you'll get the verdict when the plan completes.</p>
+                </div>
                 {type === 'intervention' && <ScheduleTimeline schedule={schedule} armA={iv.arm_a} armB={iv.arm_b} compact />}
               </div>
             </div>
@@ -399,13 +413,13 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
         )}
 
         <div className="wizard-nav">
-          <button className="btn btn-ghost" onClick={() => (step === 0 ? navigate('/') : setStep(step - 1))}>{step === 0 ? 'Cancel' : '← Back'}</button>
+          <button className="button ghost" onClick={() => (step === 0 ? navigate('/') : setStep(step - 1))}>{step === 0 ? 'Cancel' : '← Back'}</button>
           <div className="row">
-            {stepError && step > 0 && <span className="small" style={{ color: 'var(--suggest)' }}>{stepError}</span>}
+            {stepError && step > 0 && <span className="small" style={{ color: 'var(--yellow)' }}>{stepError}</span>}
             {step < 4 ? (
-              <button className="btn" disabled={!!stepError} onClick={() => setStep(step + 1)}>Next →</button>
+              <button className="button primary" disabled={!!stepError} onClick={() => setStep(step + 1)}>Next →</button>
             ) : (
-              <button className="btn btn-large btn-success" disabled={!!stepError || sending} onClick={send}>{sending ? 'Sending…' : 'Send to patient for approval'}</button>
+              <button className="button success lg" disabled={!!stepError || sending} onClick={send}>{sending ? 'Sending…' : 'Send to patient for approval'}</button>
             )}
           </div>
         </div>
