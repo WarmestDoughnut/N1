@@ -5,11 +5,15 @@ import { navigate, useAsync } from '../../lib/hooks'
 import { ScheduleTimeline } from '../../components/ScheduleTimeline'
 import { Icon } from '../../components/Icon'
 import { DevicePicker, SignalPicker } from '../../components/SourcePicker'
+import { ABCalendar, ABTimeline, Fact, PatientDayPreview, PatternStrip, Slot, SlotEditor, Stepper, StrengthMeter, strengthFor } from '../../components/TestDesign'
 import { useToast } from '../../components/Shell'
 import { getSession, initials } from '../../lib/session'
-import { ALL_SIGNALS, formatDate, SIGNAL_INFO, signalLabel } from '../../lib/util'
+import { ALL_SIGNALS, daysBetween, formatDate, formatDateShort, SIGNAL_INFO, signalLabel } from '../../lib/util'
 
 const STEPS = ['Patient', 'Devices', 'Signals', 'Test design', 'Review & send']
+/** Backend lag scan today: days 1..max_lag_days, max 3 (a "from" day > 1 and up to 14 needs a contract change). */
+const LAG_MAX = 3
+const PRESETS = [{ name: 'Quick', n: 10 }, { name: 'Standard', n: 12 }, { name: 'Thorough', n: 16 }]
 const SENSOR_SIGNALS: SignalId[] = ALL_SIGNALS.filter((s) => s !== 'episode')
 
 interface ObsForm { signal: SignalId; direction: Direction; max_lag_days: number }
@@ -47,6 +51,11 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
   // randomized schedule can't line up with when the patient actually took the intervention, so we
   // offer the recorded one. `recorded` = the schedule + window we're locked to, if chosen.
   const [recorded, setRecorded] = useState<Plan | null>(null)
+  // Test design step (FrontEndInspo/TestDesignStep): one slot editor open at a time.
+  const [openSlot, setOpenSlot] = useState<number | null>(null)
+  const [abView, setAbView] = useState<'timeline' | 'calendar'>('timeline')
+  /** observational plan dates (defaults to the patient's whole data range) */
+  const [obsWin, setObsWin] = useState<{ start: string; end: string } | null>(null)
 
   const patient = patients.find((p) => p.id === patientId)
 
@@ -105,7 +114,8 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
 
   const patientPlans = useAsync<Plan[]>(() => (patientId ? api.listPlans(patientId) : Promise.resolve([])), [patientId])
   const recordedPlan = (patientPlans.data ?? []).find((p) => p.intervention?.schedule?.length && (p.seeded ?? p.id.startsWith('DEMO-'))) ?? null
-  useEffect(() => { setRecorded(null) }, [patientId])
+  useEffect(() => { setRecorded(null); setObsWin(null); setOpenSlot(null) }, [patientId])
+  useEffect(() => { setOpenSlot(null) }, [type])
   const applyRecorded = (p: Plan) => {
     const { schedule: sch, ...rest } = p.intervention!
     setIv(rest); setSchedule(sch); setRecorded(p); setScheduleErr(null)
@@ -160,8 +170,8 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
   const window_ = useMemo(() => {
     if (!patient) return { start: '', end: '' }
     if (type === 'intervention' && schedule.length) return { start: schedule[0].start, end: schedule[schedule.length - 1].washout_end }
-    return { start: patient.date_range[0], end: patient.date_range[1] }
-  }, [patient, type, schedule])
+    return obsWin ?? { start: patient.date_range[0], end: patient.date_range[1] }
+  }, [patient, type, schedule, obsWin])
 
   // Consent is minimal: share only the signals the test actually uses, from devices that provide them.
   const finalSignals: SignalId[] = useMemo(
@@ -175,8 +185,6 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
   const droppedSignals = signals.filter((s) => !finalSignals.includes(s))
 
   const scheduleOverruns = !!patient && type === 'intervention' && schedule.length > 0 && window_.end > patient.date_range[1]
-  // Block randomization: k AB/BA blocks → 2^k equally likely schedules → smallest possible p = 1/2^k.
-  const minP = type === 'intervention' && iv.n_periods % 2 === 0 ? 1 / 2 ** (iv.n_periods / 2) : null
 
   const stepError = (() => {
     if (step === 0 && !patient) return 'Choose a patient.'
@@ -185,6 +193,7 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
     if (step === 3) {
       if (type === 'observational' && obsBlocked) return 'No episodes logged, so use an A/B test.'
       if (type === 'observational' && !chosenSensors.includes(obs.signal)) return 'Pick a signal to test.'
+      if (type === 'observational' && window_.end <= window_.start) return 'The plan end date must be after its start date.'
       if (type === 'intervention') {
         if (!iv.arm_a.trim() || !iv.arm_b.trim()) return 'Name both arms.'
         if (iv.n_periods < 10 || iv.n_periods % 2) return 'Use an even number of periods, at least 10 (5 A/B blocks). Fewer can never pass the chance check.'
@@ -221,6 +230,54 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
     }
   }
 
+  // Live "What this test will do" panel for the Test design step.
+  const testDesignAside = () => {
+    if (!patient) return null
+    const firstName = patient.display_name.replace(/,.*$/, '')
+    const range = `${formatDateShort(window_.start)} to ${formatDateShort(window_.end)}`
+    if (type === 'observational') {
+      return (
+        <aside className="td-aside">
+          <div className="card stack">
+            <h3>What this test will do</h3>
+            <Fact k="Explains">Episodes ({episodes} logged, at least 5 needed)</Fact>
+            <Fact k="Using">{SIGNAL_INFO[obs.signal].label}, expected to be {obs.direction}</Fact>
+            <Fact k="Looks back">{obs.max_lag_days === 1 ? '1 day' : `1 to ${obs.max_lag_days} days`} before each episode{obs.max_lag_days > 1 ? ', each tested and corrected for' : ''}</Fact>
+            <Fact k="Chance check">The same comparison on 2,000 random shifts of {firstName}'s episode dates</Fact>
+            <Fact k="Shared with you">{SIGNAL_INFO[obs.signal].label} and the episode log, {range} only</Fact>
+          </div>
+        </aside>
+      )
+    }
+    const st = strengthFor(iv.n_periods)
+    const total = iv.n_periods * (iv.period_days + iv.washout_days)
+    const counted = iv.n_periods * iv.period_days
+    return (
+      <aside className="td-aside">
+        <div className="card stack">
+          <h3>What this test will do</h3>
+          <Fact k="Question">Does {iv.arm_b || 'the change'} {iv.better === 'higher' ? 'improve' : 'lower'} {SIGNAL_INFO[iv.outcome_signal].plain}?</Fact>
+          <Fact k="Runs">{total} days{schedule.length ? ` · ${range}` : ''}</Fact>
+          <Fact k="Patient does">Switches between the two options every {iv.period_days} days{iv.washout_days ? `, with a ${iv.washout_days}-day break after each` : ''}</Fact>
+          <Fact k="Counted">{counted} days.{total > counted ? ` The ${total - counted} break days are left out.` : ''}</Fact>
+          <Fact k="Shared with you">{SIGNAL_INFO[iv.outcome_signal].label} only, for these dates only</Fact>
+          <div className="td-fact td-sep">
+            <span>Evidence strength</span>
+            <StrengthMeter bars={st.bars} tone={st.tone} />
+            <div>{st.tone === 'bad' ? 'Too short to give a clear answer. Use at least 10 periods.' : st.bars >= 3 ? 'Long enough to give a clear answer either way.' : 'Just long enough; a small effect may be missed.'}</div>
+            <small className="muted">Smallest possible p-value: {st.minP < 0.001 ? st.minP.toFixed(4) : st.minP.toFixed(3)}</small>
+          </div>
+        </div>
+        {schedule.length > 0 && (
+          <div className="card stack">
+            <span className="td-slot-label">What the patient sees each day</span>
+            <PatientDayPreview schedule={schedule} armA={iv.arm_a} armB={iv.arm_b} />
+          </div>
+        )}
+      </aside>
+    )
+  }
+
   return (
     <div>
       <section className="page-heading">
@@ -240,6 +297,7 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
         ))}
       </ol>
 
+      <div className={step === 3 ? 'td-wrap' : undefined}>
       <div className="card">
         {step === 0 && (
           <>
@@ -277,120 +335,201 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
           </>
         )}
 
-        {step === 3 && (
-          <>
-            <h2>Test design</h2>
-            <div className="seg mb" role="radiogroup">
-              <button className={type === 'observational' ? 'active' : ''} disabled={obsBlocked} title={obsBlocked ? 'No episodes logged, so use an A/B test' : undefined} onClick={() => setType('observational')}>Observational</button>
-              <button className={type === 'intervention' ? 'active' : ''} onClick={() => setType('intervention')}>Intervention (A/B trial)</button>
+        {step === 3 && patient && (() => {
+          const firstName = patient?.display_name.replace(/,.*$/, '') ?? 'the patient'
+          const sig = SIGNAL_INFO[obs.signal]
+          const out = SIGNAL_INFO[iv.outcome_signal]
+          const lagText = obs.max_lag_days === 1 ? 'the day' : `the ${obs.max_lag_days} days`
+          const winDays = window_.start && window_.end ? daysBetween(window_.start, window_.end) + 1 : 0
+          const cycle = iv.period_days + iv.washout_days
+          const totalDays = iv.n_periods * cycle
+          const toggle = (n: number) => setOpenSlot(openSlot === n ? null : n)
+          const signalChoices = (value: SignalId, onPick: (s: SignalId) => void) => (
+            <div className="td-tray-row">
+              {chosenSensors.map((s) => (
+                <button key={s} type="button" className={`td-chip ${value === s ? 'on' : ''}`} aria-pressed={value === s} onClick={() => onPick(s)}>
+                  <strong>{SIGNAL_INFO[s].label}</strong>
+                  <span>{catalog.filter((d) => devices.includes(d.id) && d.signals.includes(s)).map((d) => d.name).join(', ')}</span>
+                </button>
+              ))}
             </div>
-            {obsBlocked && <div className="alert alert-info mb"><Icon name="info" /><span>{patient?.display_name} has no episodes logged, so an observational test isn't possible. Use an A/B test.</span></div>}
-            {!obsBlocked && type === 'observational' && episodes < 5 && (
-              <div className="alert alert-warn mb"><Icon name="info" /><span>Only {episodes} episode{episodes === 1 ? '' : 's'} logged. With fewer than 5, expect "not enough data".</span></div>
-            )}
-            <p className="muted">
-              {type === 'observational'
-                ? 'Does a signal change in the days before logged episodes? Compares those days against normal days and checks 1 to N day lags against random shuffles.'
-                : 'Does a change (B) improve an outcome compared with none (A)? Periods are randomized in balanced A-B / B-A pairs, with washout days excluded.'}
-            </p>
-
-            {type === 'observational' ? (
-              <div className="grid-3">
-                <div className="field">
-                  <label htmlFor="o-sig">Signal</label>
-                  <select id="o-sig" value={obs.signal} onChange={(e) => setObs({ ...obs, signal: e.target.value as SignalId })}>
-                    {SENSOR_SIGNALS.map((s) => <option key={s} value={s} disabled={!chosenSensors.includes(s)}>{SIGNAL_INFO[s].label}{chosenSensors.includes(s) ? '' : ' (not selected)'}</option>)}
-                  </select>
-                </div>
-                <div className="field">
-                  <span className="label">Hypothesis: before episodes it is…</span>
-                  <div className="seg">
-                    {(['lower', 'higher'] as Direction[]).map((d) => (
-                      <button key={d} className={obs.direction === d ? 'active' : ''} onClick={() => setObs({ ...obs, direction: d })}>{d}</button>
-                    ))}
-                  </div>
-                </div>
-                <div className="field">
-                  <label htmlFor="o-lag">Look back up to (days)</label>
-                  <select id="o-lag" value={obs.max_lag_days} onChange={(e) => setObs({ ...obs, max_lag_days: Number(e.target.value) })}>
-                    {[1, 2, 3].map((n) => <option key={n} value={n}>{n} day{n > 1 ? 's' : ''}</option>)}
-                  </select>
-                  <span className="hint">Each extra lag is corrected for in the p-value.</span>
-                </div>
+          )
+          const dirSeg = (value: Direction, onPick: (d: Direction) => void, opts: Direction[]) => (
+            <div className="seg">{opts.map((d) => <button key={d} type="button" className={value === d ? 'active' : ''} onClick={() => onPick(d)}>{d}</button>)}</div>
+          )
+          return (
+            <div className="td-main">
+              <div className="seg td-type" role="radiogroup" aria-label="Test type">
+                <button type="button" role="radio" aria-checked={type === 'observational'} className={type === 'observational' ? 'active' : ''} disabled={obsBlocked}
+                  title={obsBlocked ? 'No episodes logged, so use an A/B test' : undefined} onClick={() => setType('observational')}>Look for a pattern</button>
+                <button type="button" role="radio" aria-checked={type === 'intervention'} className={type === 'intervention' ? 'active' : ''} onClick={() => setType('intervention')}>Try a change (A/B trial)</button>
               </div>
-            ) : (
-              <>
-                <div className="grid-2">
-                  <div className="field"><label htmlFor="a">Arm A (control)</label><input id="a" value={iv.arm_a} onChange={(e) => setIv({ ...iv, arm_a: e.target.value })} /></div>
-                  <div className="field"><label htmlFor="b">Arm B (intervention)</label><input id="b" value={iv.arm_b} onChange={(e) => setIv({ ...iv, arm_b: e.target.value })} /></div>
-                </div>
-                <div className="grid-3">
-                  <div className="field">
-                    <label htmlFor="i-sig">Outcome signal</label>
-                    <select id="i-sig" value={iv.outcome_signal} onChange={(e) => setIv({ ...iv, outcome_signal: e.target.value as SignalId })}>
-                      {SENSOR_SIGNALS.map((s) => <option key={s} value={s} disabled={!chosenSensors.includes(s)}>{SIGNAL_INFO[s].label}{chosenSensors.includes(s) ? '' : ' (not selected)'}</option>)}
-                    </select>
-                  </div>
-                  <div className="field">
-                    <span className="label">Better is…</span>
-                    <div className="seg">
-                      {(['higher', 'lower'] as Direction[]).map((d) => (
-                        <button key={d} className={iv.better === d ? 'active' : ''} onClick={() => setIv({ ...iv, better: d })}>{d}</button>
-                      ))}
+              {obsBlocked && <div className="alert alert-info"><Icon name="info" /><span>{patient.display_name} has no episodes logged, so a pattern test isn't possible. Try a change (A/B trial) instead.</span></div>}
+              {!obsBlocked && type === 'observational' && episodes < 5 && (
+                <div className="alert alert-warn"><Icon name="info" /><span>Only {episodes} episode{episodes === 1 ? '' : 's'} logged. With fewer than 5, expect “not enough data”.</span></div>
+              )}
+
+              <section className="td-section">
+                <h3 className="td-h">Your test</h3>
+
+                {type === 'observational' ? (
+                  <>
+                    <div className="td-tray">
+                      <span className="td-slot-label">Signals · click one to use it in slot 2</span>
+                      <div className="td-tray-row">
+                        {chosenSensors.map((s) => (
+                          <button key={s} type="button" className={`td-chip ${obs.signal === s ? 'on' : ''}`} aria-pressed={obs.signal === s}
+                            onClick={() => setObs({ ...obs, signal: s })}>
+                            <strong>{SIGNAL_INFO[s].label}</strong>
+                            <span>{catalog.filter((d) => devices.includes(d.id) && d.signals.includes(s)).map((d) => d.name).join(', ')}</span>
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                  <div className="field">
-                    <label htmlFor="np">Number of periods</label>
-                    <select id="np" value={iv.n_periods} onChange={(e) => setIv({ ...iv, n_periods: Number(e.target.value) })}>
-                      {[6, 8, 10, 12, 14, 16].map((n) => <option key={n} value={n}>{n} periods ({n / 2} A/B blocks)</option>)}
-                    </select>
-                    {minP != null && (
-                      <span className="hint" style={minP >= 0.05 ? { color: 'var(--yellow)', fontWeight: 600 } : undefined}>
-                        Smallest possible p-value: {minP < 0.001 ? minP.toFixed(4) : minP.toFixed(3)}{minP >= 0.05 ? '. Too few blocks: results will be "not enough data". Use at least 10 periods.' : ''}
-                      </span>
+                    <div className="td-slots">
+                      <Slot n={1} label="What you want to explain" value="Episodes" sub={`${episodes} logged by ${firstName}`} open={openSlot === 1} onOpen={() => toggle(1)} />
+                      <Slot n={2} label="What might come first" value={`${sig.label}, ${obs.direction}`} sub="than on normal days" open={openSlot === 2} onOpen={() => toggle(2)} />
+                      <Slot n={3} label="How far back" value={`${obs.max_lag_days} day${obs.max_lag_days > 1 ? 's' : ''}`} sub="before each episode" open={openSlot === 3} onOpen={() => toggle(3)} />
+                      <Slot n={4} label="Over what dates" value={`${formatDateShort(window_.start)} to ${formatDateShort(window_.end)}`} sub={`${winDays} days`} open={openSlot === 4} onOpen={() => toggle(4)} />
+                    </div>
+                    {openSlot === 1 && (
+                      <SlotEditor title="Editing 1: what you want to explain" onDone={() => setOpenSlot(null)}>
+                        <p className="td-note">Logged episodes are the only outcome a pattern test can explain for now. {firstName} has logged <strong>{episodes}</strong>; at least 5 are needed.</p>
+                      </SlotEditor>
                     )}
-                  </div>
-                  <div className="field">
-                    <label htmlFor="pd">Days per period</label>
-                    <input id="pd" type="number" min={1} max={30} value={iv.period_days} onChange={(e) => setIv({ ...iv, period_days: Math.max(1, Number(e.target.value)) })} />
-                  </div>
-                  <div className="field">
-                    <label htmlFor="wd">Washout days after each period</label>
-                    <input id="wd" type="number" min={0} max={14} value={iv.washout_days} onChange={(e) => setIv({ ...iv, washout_days: Math.max(0, Number(e.target.value)) })} />
-                    <span className="hint">Excluded from analysis so effects can wear off.</span>
-                  </div>
-                  <div className="field">
-                    <span className="label">Randomization seed</span>
-                    <div className="row">
-                      <input type="number" value={iv.seed} onChange={(e) => setIv({ ...iv, seed: Number(e.target.value) })} style={{ width: 110 }} />
-                      <button className="button secondary sm" onClick={() => setIv({ ...iv, seed: Math.floor(Math.random() * 10000) })}>Re-randomize</button>
+                    {openSlot === 2 && (
+                      <SlotEditor title="Editing 2: what might come first" onDone={() => setOpenSlot(null)}>
+                        {signalChoices(obs.signal, (s) => setObs({ ...obs, signal: s }))}
+                        <div className="td-inline"><span>Before episodes it is</span>{dirSeg(obs.direction, (d) => setObs({ ...obs, direction: d }), ['lower', 'higher'])}<span>than usual</span></div>
+                        <p className="td-note">One signal per test. To use a signal that isn't listed, go back to Signals.</p>
+                      </SlotEditor>
+                    )}
+                    {openSlot === 3 && (
+                      <SlotEditor title="Editing 3: how far back to look" onDone={() => setOpenSlot(null)}>
+                        <div className="td-inline">
+                          <span>From</span><Stepper label="First day of the range" value={1} min={1} max={1} onChange={() => {}} disabled />
+                          <span>to</span><Stepper label="Last day of the range" value={obs.max_lag_days} min={1} max={LAG_MAX} onChange={(n) => setObs({ ...obs, max_lag_days: n })} />
+                          <span>days before each episode</span>
+                        </div>
+                        <p className="td-note">Each day in the range is tested, and the p-value is corrected for testing several. Ranges that start later or reach past {LAG_MAX} days are coming soon.</p>
+                      </SlotEditor>
+                    )}
+                    {openSlot === 4 && (
+                      <SlotEditor title="Editing 4: over what dates" onDone={() => setOpenSlot(null)}>
+                        <div className="td-inline">
+                          <span>From</span>
+                          <input type="date" aria-label="Plan start" value={window_.start} min={patient.date_range[0]} max={window_.end}
+                            onChange={(e) => e.target.value && setObsWin({ start: e.target.value, end: window_.end })} />
+                          <span>to</span>
+                          <input type="date" aria-label="Plan end" value={window_.end} min={window_.start} max={patient.date_range[1]}
+                            onChange={(e) => e.target.value && setObsWin({ start: window_.start, end: e.target.value })} />
+                          {obsWin && <button type="button" className="link-btn" onClick={() => setObsWin(null)}>Use all {patient.n_days} days</button>}
+                        </div>
+                        <p className="td-note">{firstName}'s data runs {formatDate(patient.date_range[0])} to {formatDate(patient.date_range[1])}. Shorter windows contain fewer episodes.</p>
+                      </SlotEditor>
+                    )}
+                    <p className="td-reads"><strong>Reads as:</strong> Is {sig.plain} {obs.direction} than usual in {lagText} before {firstName}'s episodes?</p>
+                  </>
+                ) : (
+                  <>
+                    <div className="td-slots">
+                      <Slot n={1} label="What you want to improve" value={`${out.label}, ${iv.better}`} sub="is better" open={openSlot === 1} onOpen={() => toggle(1)} />
+                      <Slot n={2} label="What you are trying" value={iv.arm_b || 'Unnamed'} sub={`compared with ${iv.arm_a || '…'}`} open={openSlot === 2} onOpen={() => toggle(2)} />
+                      <Slot n={3} label="How it alternates" value={`${iv.period_days} days each`} sub={iv.washout_days ? `then a ${iv.washout_days}-day break` : 'no break'} open={openSlot === 3} onOpen={() => toggle(3)} />
+                      <Slot n={4} label="How long" value={`${iv.n_periods} periods`}
+                        sub={schedule.length ? `${totalDays} days · ${formatDateShort(schedule[0].start)} to ${formatDateShort(schedule[schedule.length - 1].washout_end)}` : `${totalDays} days`}
+                        open={openSlot === 4} onOpen={() => toggle(4)} />
+                    </div>
+                    {openSlot === 1 && (
+                      <SlotEditor title="Editing 1: what you want to improve" onDone={() => setOpenSlot(null)}>
+                        {signalChoices(iv.outcome_signal, (s) => setIv({ ...iv, outcome_signal: s }))}
+                        <div className="td-inline"><span>Better is</span>{dirSeg(iv.better, (d) => setIv({ ...iv, better: d }), ['higher', 'lower'])}</div>
+                      </SlotEditor>
+                    )}
+                    {openSlot === 2 && (
+                      <SlotEditor title="Editing 2: what you are trying" onDone={() => setOpenSlot(null)}>
+                        <div className="grid-2">
+                          <div className="field"><label htmlFor="b">B · the change (intervention)</label><input id="b" value={iv.arm_b} onChange={(e) => setIv({ ...iv, arm_b: e.target.value })} /></div>
+                          <div className="field"><label htmlFor="a">A · compared with (control)</label><input id="a" value={iv.arm_a} onChange={(e) => setIv({ ...iv, arm_a: e.target.value })} /></div>
+                        </div>
+                      </SlotEditor>
+                    )}
+                    {openSlot === 3 && (
+                      <SlotEditor title="Editing 3: how it alternates" onDone={() => setOpenSlot(null)}>
+                        <div className="td-inline"><Stepper label="Days per period" value={iv.period_days} min={1} max={30} onChange={(n) => setIv({ ...iv, period_days: n })} /><span>days on each option, then a</span>
+                          <Stepper label="Break days" value={iv.washout_days} min={0} max={14} onChange={(n) => setIv({ ...iv, washout_days: n })} /><span>-day break</span></div>
+                        <p className="td-note">Break (washout) days are left out of the analysis so the last option's effect can wear off.</p>
+                      </SlotEditor>
+                    )}
+                    {openSlot === 4 && (
+                      <SlotEditor title="Editing 4: how long it runs" onDone={() => setOpenSlot(null)}>
+                        <div className="td-presets">
+                          {PRESETS.map((pr) => {
+                            const st = strengthFor(pr.n)
+                            const days = pr.n * cycle
+                            const sel = iv.n_periods === pr.n
+                            return (
+                              <button key={pr.n} type="button" className={`td-preset ${sel ? 'on' : ''}`} aria-pressed={sel} onClick={() => setIv({ ...iv, n_periods: pr.n })}>
+                                <span className="row-between"><strong>{pr.name}</strong>{sel && <span className="pill pill-purple no-dot">Selected</span>}</span>
+                                <span className="big">{Math.round(days / 7)} weeks</span>
+                                <span className="muted small">{pr.n} periods · {days} days</span>
+                                <StrengthMeter bars={st.bars} />
+                                <span className="small muted">{st.text}</span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                        <span className="td-slot-label">Or set the number of periods</span>
+                        <div className="td-inline"><Stepper label="Number of periods" value={iv.n_periods} min={2} max={24} step={2} onChange={(n) => setIv({ ...iv, n_periods: n })} /><span>periods (even numbers, at least 10)</span></div>
+                      </SlotEditor>
+                    )}
+                    <p className="td-reads"><strong>Reads as:</strong> Does {iv.arm_b || 'the change'} give {firstName} {iv.better === 'higher' ? 'more' : 'less'} {out.noun} than {iv.arm_a || 'the control'}, over {iv.n_periods} alternating {iv.period_days}-day periods?</p>
+                  </>
+                )}
+              </section>
+
+              {type === 'observational' ? (
+                <section className="td-section">
+                  <h3 className="td-h">What gets compared, for one episode</h3>
+                  <PatternStrip from={1} to={obs.max_lag_days} episodeLabel="Episode day" />
+                  <p className="td-note">Illustration, not {firstName}'s data. Shaded days are compared with normal days; episode days are left out.</p>
+                </section>
+              ) : (
+                <section className="td-section">
+                  <div className="row-between">
+                    <h3 className="td-h">What the patient will do, and when</h3>
+                    <div className="row" style={{ gap: 10 }}>
+                      <div className="seg" role="tablist">
+                        <button type="button" className={abView === 'timeline' ? 'active' : ''} onClick={() => setAbView('timeline')}>Timeline</button>
+                        <button type="button" className={abView === 'calendar' ? 'active' : ''} onClick={() => setAbView('calendar')}>Calendar</button>
+                      </div>
+                      {!recorded && <button type="button" className="button secondary sm" onClick={() => setIv({ ...iv, seed: Math.floor(Math.random() * 10000) })}><Icon name="shuffle" size={14} /> Shuffle order</button>}
                     </div>
                   </div>
-                </div>
-                {recordedPlan && (
-                  <div className={`insight ${recorded ? '' : 'warn'} mt`} style={{ alignItems: 'center' }}>
-                    <span><Icon name="calendar" size={17} /></span>
-                    <p style={{ flex: 1 }}>
-                      <strong>{recorded ? 'Using the schedule this patient followed' : 'This patient already followed a recorded A/B schedule'}</strong>
+                  {recordedPlan && (
+                    <div className={`insight ${recorded ? '' : 'warn'}`} style={{ alignItems: 'center' }}>
+                      <span><Icon name="calendar" size={17} /></span>
+                      <p style={{ flex: 1 }}>
+                        <strong>{recorded ? 'Using the schedule this patient followed' : 'This patient already followed a recorded A/B schedule'}</strong>
+                        {recorded
+                          ? `${recorded.intervention!.arm_a} vs ${recorded.intervention!.arm_b}, ${recorded.intervention!.n_periods} periods from ${formatDate(recorded.window.start)}. Demo data is historical, so the analysis must use the order the patient actually followed.`
+                          : 'Demo data is historical: a newly randomized order would not match the days the patient actually took each option. Use the recorded schedule for an honest result.'}
+                      </p>
                       {recorded
-                        ? `${recorded.intervention!.arm_a} vs ${recorded.intervention!.arm_b}, ${recorded.intervention!.n_periods} periods from ${formatDate(recorded.window.start)}. Demo data is historical, so the analysis must use the order the patient actually followed.`
-                        : 'Demo data is historical: a newly randomized order would not match the days the patient actually took each option. Use the recorded schedule for an honest result.'}
-                    </p>
-                    {recorded
-                      ? <button className="button ghost sm" onClick={() => setRecorded(null)}>Randomize instead</button>
-                      : <button className="button primary sm" onClick={() => applyRecorded(recordedPlan)}>Use recorded schedule</button>}
-                  </div>
-                )}
-                <div className="mt">
-                  <div className="chart-title">{recorded ? 'Recorded schedule' : 'Schedule preview'}</div>
+                        ? <button className="button ghost sm" onClick={() => setRecorded(null)}>Randomize instead</button>
+                        : <button className="button primary sm" onClick={() => applyRecorded(recordedPlan)}>Use recorded schedule</button>}
+                    </div>
+                  )}
                   {scheduleErr && <div className="alert alert-error">{scheduleErr}</div>}
-                  <ScheduleTimeline schedule={schedule} armA={iv.arm_a} armB={iv.arm_b} />
-                  {scheduleOverruns && <div className="alert alert-warn mt">This schedule ends {formatDate(window_.end)}, after the patient's data ends ({formatDate(patient!.date_range[1])}).</div>}
-                </div>
-              </>
-            )}
-          </>
-        )}
+                  {abView === 'timeline'
+                    ? <ABTimeline schedule={schedule} armA={iv.arm_a} armB={iv.arm_b} />
+                    : <ABCalendar schedule={schedule} armA={iv.arm_a} armB={iv.arm_b} />}
+                  {scheduleOverruns && <div className="alert alert-warn">This schedule ends {formatDate(window_.end)}, after the patient's data ends ({formatDate(patient.date_range[1])}). Use fewer or shorter periods.</div>}
+                </section>
+              )}
+            </div>
+          )
+        })()}
 
         {step === 4 && patient && (
           <>
@@ -439,6 +578,8 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
             )}
           </div>
         </div>
+      </div>
+      {step === 3 && patient && testDesignAside()}
       </div>
     </div>
   )
