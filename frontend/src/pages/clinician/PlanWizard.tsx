@@ -5,7 +5,8 @@ import { navigate, useAsync } from '../../lib/hooks'
 import { ScheduleTimeline } from '../../components/ScheduleTimeline'
 import { Icon } from '../../components/Icon'
 import { DevicePicker, SignalPicker } from '../../components/SourcePicker'
-import { ABCalendar, ABTimeline, Fact, PatientDayPreview, PatternStrip, Slot, SlotEditor, Stepper, StrengthMeter, strengthFor } from '../../components/TestDesign'
+import { ABTimeline, Fact, PatientDayPreview, PatternStrip, Slot, SlotEditor, Stepper, StrengthMeter, strengthFor } from '../../components/TestDesign'
+import { randomizeStints, scheduleToStints, StintCalendar, stintsToSchedule, stintStats, type Stint } from '../../components/StintCalendar'
 import { useToast } from '../../components/Shell'
 import { getSession, initials } from '../../lib/session'
 import { ALL_SIGNALS, daysBetween, formatDate, formatDateShort, SIGNAL_INFO, signalLabel } from '../../lib/util'
@@ -13,7 +14,6 @@ import { ALL_SIGNALS, daysBetween, formatDate, formatDateShort, SIGNAL_INFO, sig
 const STEPS = ['Patient', 'Devices', 'Signals', 'Test design', 'Review & send']
 /** Backend lag scan today: days 1..max_lag_days, max 3 (a "from" day > 1 and up to 14 needs a contract change). */
 const LAG_MAX = 3
-const PRESETS = [{ name: 'Quick', n: 10 }, { name: 'Standard', n: 12 }, { name: 'Thorough', n: 16 }]
 const SENSOR_SIGNALS: SignalId[] = ALL_SIGNALS.filter((s) => s !== 'episode')
 
 interface ObsForm { signal: SignalId | null; direction: Direction | null; max_lag_days: number | null }
@@ -46,8 +46,10 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
   const [title, setTitle] = useState('')
   const [titleTouched, setTitleTouched] = useState(false)
   const [clinician, setClinician] = useState(() => getSession()?.name ?? 'Dr. Rivera')
-  const [schedule, setSchedule] = useState<SchedulePeriod[]>([])
-  const [scheduleErr, setScheduleErr] = useState<string | null>(null)
+  /** A/B periods the clinician placed on the calendar (arms come from a coin flip per pair) */
+  const [stints, setStints] = useState<Stint[]>([])
+  const ss = stintStats(stints)
+  const schedule: SchedulePeriod[] = useMemo(() => (stintStats(stints).randomized ? stintsToSchedule(stints) : []), [stints])
   const [sending, setSending] = useState(false)
   const [sendErr, setSendErr] = useState<string | null>(null)
   const [cloneOf, setCloneOf] = useState<Plan | null>(null)
@@ -57,7 +59,7 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
   const [recorded, setRecorded] = useState<Plan | null>(null)
   // Test design step (FrontEndInspo/TestDesignStep): one slot editor open at a time.
   const [openSlot, setOpenSlot] = useState<number | null>(null)
-  const [abView, setAbView] = useState<'timeline' | 'calendar'>('timeline')
+  const [abView, setAbView] = useState<'calendar' | 'timeline'>('calendar')
   /** observational plan dates (defaults to the patient's whole data range) */
   /** observational plan dates; '' = not chosen yet */
   const [obsWin, setObsWin] = useState<{ start: string; end: string }>(NO_WIN)
@@ -125,7 +127,7 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
 
   const patientPlans = useAsync<Plan[]>(() => (patientId ? api.listPlans(patientId) : Promise.resolve([])), [patientId])
   const recordedPlan = (patientPlans.data ?? []).find((p) => p.intervention?.schedule?.length && (p.seeded ?? p.id.startsWith('DEMO-'))) ?? null
-  useEffect(() => { setRecorded(null); setObsWin(NO_WIN); setOpenSlot(null) }, [patientId])
+  useEffect(() => { setRecorded(null); setObsWin(NO_WIN); setOpenSlot(null); setStints([]) }, [patientId])
   useEffect(() => { setOpenSlot(null) }, [type])
   // Arriving on the design step with nothing chosen: open the first slot that needs input.
   useEffect(() => {
@@ -137,36 +139,20 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
     } else {
       if (!iv.outcome_signal || !iv.better) setOpenSlot(1)
       else if (!ivReady) setOpenSlot(2)
-      else if (iv.period_days == null || iv.washout_days == null) setOpenSlot(3)
-      else if (iv.n_periods == null) setOpenSlot(4)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, type])
+  const sig = (xs: { start: string; end: string; arm: string | null }[]) => [...xs].sort((a, b) => a.start.localeCompare(b.start)).map((x) => `${x.start}|${x.end}|${x.arm}`).join(',')
   const applyRecorded = (p: Plan) => {
     const { schedule: sch, ...rest } = p.intervention!
-    setIv(rest); setSchedule(sch); setRecorded(p); setScheduleErr(null)
+    setIv(rest); setStints(scheduleToStints(sch)); setRecorded(p)
     if (!titleTouched) { setTitle(p.title); setTitleTouched(true) }
   }
-
-  // Editing the design after choosing the recorded schedule means a new (randomized) schedule.
+  // Moving a period after loading the recorded schedule means it no longer matches what the patient did.
   useEffect(() => {
-    const r = recorded?.intervention
-    if (r && (r.n_periods !== iv.n_periods || r.period_days !== iv.period_days || r.washout_days !== iv.washout_days || r.seed !== iv.seed)) setRecorded(null)
-  }, [recorded, iv.n_periods, iv.period_days, iv.washout_days, iv.seed])
-
-  // Live schedule preview
-  const start = patient?.date_range[0] ?? '2026-01-01'
-  useEffect(() => {
-    if (type !== 'intervention' || recorded) return
-    const valid = iv.n_periods != null && iv.period_days != null && iv.washout_days != null && iv.n_periods >= 2 && iv.period_days >= 1 && iv.washout_days >= 0
-    if (!valid) { setSchedule([]); return }
-    const t = setTimeout(() => {
-      api.schedulePreview({ n_periods: iv.n_periods!, period_days: iv.period_days!, washout_days: iv.washout_days!, seed: iv.seed, start })
-        .then((r) => { setSchedule(r.schedule); setScheduleErr(null) })
-        .catch((e) => setScheduleErr(friendlyError(e)))
-    }, 200)
-    return () => clearTimeout(t)
-  }, [type, iv.n_periods, iv.period_days, iv.washout_days, iv.seed, start, recorded])
+    if (recorded?.intervention && sig(stints) !== sig(recorded.intervention.schedule)) setRecorded(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stints, recorded])
 
   // ----- step handlers -----
   const pickPatient = (p: Patient) => {
@@ -181,7 +167,7 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
       setDevices(p.devices)
       // Nothing pre-ticked or pre-filled: the clinician chooses what to measure and what to try.
       setSignals([])
-      setObs(EMPTY_OBS); setIv(EMPTY_IV); setTitleTouched(false)
+      setObs(EMPTY_OBS); setIv(EMPTY_IV); setStints([]); setTitleTouched(false)
     }
   }
 
@@ -214,8 +200,6 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
   }, [devices, catalog, finalSignals])
   const droppedSignals = signals.filter((s) => !finalSignals.includes(s))
 
-  const scheduleOverruns = !!patient && type === 'intervention' && schedule.length > 0 && window_.end > patient.date_range[1]
-
   const stepError = (() => {
     if (step === 0 && !patient) return 'Choose a patient.'
     if (step === 1 && devices.length === 0) return 'Select at least one device.'
@@ -231,11 +215,10 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
         if (!iv.outcome_signal) return 'Choose what you want to improve (slot 1).'
         if (!iv.better) return 'Choose whether higher or lower is better (slot 1).'
         if (!iv.arm_b.trim() || !iv.arm_a.trim()) return 'Name what you are trying and what it is compared with (slot 2).'
-        if (iv.period_days == null || iv.washout_days == null) return 'Choose how it alternates (slot 3).'
-        if (iv.n_periods == null) return 'Choose how long it runs (slot 4).'
-        if (iv.n_periods < 10 || iv.n_periods % 2) return 'Use an even number of periods, at least 10 (5 A/B blocks). Fewer can never pass the chance check.'
-        if (!schedule.length) return 'Waiting for the schedule preview…'
-        if (scheduleOverruns) return `The schedule runs past this patient's data (ends ${patient!.date_range[1]}). Use fewer or shorter periods.`
+        if (ss.count === 0) return 'Place the periods on the calendar (slot 3).'
+        if (ss.count % 2) return 'Add one more period to finish the last pair.'
+        if (ss.count < 10) return `Place at least 10 periods (5 pairs); you have ${ss.count}. Fewer can never pass the chance check.`
+        if (!ss.randomized) return 'Randomize which option each period gets (slot 4).'
       }
     }
     if (step === 4 && !title.trim()) return 'Give the plan a title.'
@@ -256,7 +239,7 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
       // stepError guarantees these are chosen before Send is enabled
       observational: type === 'observational' ? { ...obs, signal: obs.signal!, direction: obs.direction!, max_lag_days: obs.max_lag_days! } : null,
       intervention: type === 'intervention'
-        ? { ...iv, arm_a: iv.arm_a.trim(), arm_b: iv.arm_b.trim(), outcome_signal: iv.outcome_signal!, better: iv.better!, period_days: iv.period_days!, washout_days: iv.washout_days!, n_periods: iv.n_periods!, schedule }
+        ? { ...iv, arm_a: iv.arm_a.trim(), arm_b: iv.arm_b.trim(), outcome_signal: iv.outcome_signal!, better: iv.better!, period_days: ss.periodDays ?? 1, washout_days: ss.breakDays ?? 0, n_periods: ss.count, schedule }
         : null,
     }
     try {
@@ -289,19 +272,18 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
         </aside>
       )
     }
-    const lengthsSet = iv.n_periods != null && iv.period_days != null && iv.washout_days != null
-    const st = iv.n_periods != null ? strengthFor(iv.n_periods) : null
-    const total = lengthsSet ? iv.n_periods! * (iv.period_days! + iv.washout_days!) : null
-    const counted = lengthsSet ? iv.n_periods! * iv.period_days! : null
-    const notYet = <span className="muted">Not chosen yet</span>
+    const st = ss.count >= 2 ? strengthFor(ss.pairs * 2) : null
+    const total = ss.count ? daysBetween(stints.reduce((a, x) => (x.start < a ? x.start : a), stints[0].start), stints.reduce((a, x) => (x.end > a ? x.end : a), stints[0].end)) + 1 : null
+    const notYet = <span className="muted">Not placed yet</span>
     return (
       <aside className="td-aside">
         <div className="card stack">
           <h3>What this test will do</h3>
           <Fact k="Question">{iv.outcome_signal && iv.better ? `Does ${iv.arm_b.trim() || 'the change'} ${iv.better === 'higher' ? 'improve' : 'lower'} ${SIGNAL_INFO[iv.outcome_signal].plain}?` : <span className="muted">Choose an outcome and a change</span>}</Fact>
-          <Fact k="Runs">{total != null ? `${total} days${schedule.length && range ? ` · ${range}` : ''}` : notYet}</Fact>
-          <Fact k="Patient does">{iv.period_days != null && iv.washout_days != null ? `Switches between the two options every ${iv.period_days} days${iv.washout_days ? `, with a ${iv.washout_days}-day break after each` : ''}` : notYet}</Fact>
-          <Fact k="Counted">{total != null && counted != null ? `${counted} days.${total > counted ? ` The ${total - counted} break days are left out.` : ''}` : notYet}</Fact>
+          <Fact k="Runs">{total != null ? `${total} days${range ? ` · ${range}` : ''}` : notYet}</Fact>
+          <Fact k="Patient does">{ss.count ? `Alternates between the two options over ${ss.count} periods${ss.periodDays ? ` (mostly ${ss.periodDays} days)` : ''}${ss.breakDays ? `, with breaks between` : ''}` : notYet}</Fact>
+          <Fact k="Counted">{total != null ? `${ss.countedDays} days.${total > ss.countedDays ? ` The ${total - ss.countedDays} break days are left out.` : ''}` : notYet}</Fact>
+          <Fact k="Order">{ss.randomized ? 'A coin flip decided which option goes first in each pair' : <span className="muted">Coin flip per pair, after placing</span>}</Fact>
           <Fact k="Shared with you">{iv.outcome_signal ? `${lbl(iv.outcome_signal)} only, for these dates only` : <span className="muted">Only the outcome you choose</span>}</Fact>
           <div className="td-fact td-sep">
             <span>Evidence strength</span>
@@ -309,7 +291,7 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
               <StrengthMeter bars={st.bars} tone={st.tone} />
               <div>{st.tone === 'bad' ? 'Too short to give a clear answer. Use at least 10 periods.' : st.bars >= 3 ? 'Long enough to give a clear answer either way.' : 'Just long enough; a small effect may be missed.'}</div>
               <small className="muted">Smallest possible p-value: {st.minP < 0.001 ? st.minP.toFixed(4) : st.minP.toFixed(3)}</small>
-            </> : <div className="muted">Depends on how long it runs (slot 4)</div>}
+            </> : <div className="muted">Depends on how many periods you place</div>}
           </div>
         </div>
         {schedule.length > 0 && (
@@ -383,8 +365,6 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
           const firstName = patient?.display_name.replace(/,.*$/, '') ?? 'the patient'
           const lagText = obs.max_lag_days == null ? 'the days' : obs.max_lag_days === 1 ? 'the day' : `the ${obs.max_lag_days} days`
           const winDays = window_.start && window_.end ? daysBetween(window_.start, window_.end) + 1 : 0
-          const cycle = iv.period_days != null && iv.washout_days != null ? iv.period_days + iv.washout_days : null
-          const totalDays = cycle != null && iv.n_periods != null ? iv.n_periods * cycle : null
           const toggle = (n: number) => setOpenSlot(openSlot === n ? null : n)
           const sourceOf = (s: SignalId) => catalog.filter((d) => devices.includes(d.id) && d.signals.includes(s)).map((d) => d.name).join(', ')
           // Every signal this patient's selected devices record (and that has data). Others are listed, grayed, with why.
@@ -491,12 +471,12 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
                         sub={!iv.outcome_signal ? 'steps, heart rate, sleep…' : iv.better ? 'is better' : 'higher or lower is better?'} open={openSlot === 1} onOpen={() => toggle(1)} />
                       <Slot n={2} label="What you are trying" empty={!iv.arm_b.trim() || !iv.arm_a.trim()}
                         value={iv.arm_b.trim() || 'Name the change'} sub={iv.arm_a.trim() ? `compared with ${iv.arm_a.trim()}` : 'and what it is compared with'} open={openSlot === 2} onOpen={() => toggle(2)} />
-                      <Slot n={3} label="How it alternates" empty={cycle == null}
-                        value={iv.period_days != null ? `${iv.period_days} days each` : 'Choose days'}
-                        sub={iv.washout_days == null ? 'and the break between' : iv.washout_days ? `then a ${iv.washout_days}-day break` : 'no break'} open={openSlot === 3} onOpen={() => toggle(3)} />
-                      <Slot n={4} label="How long" empty={iv.n_periods == null} value={iv.n_periods != null ? `${iv.n_periods} periods` : 'Choose length'}
-                        sub={totalDays == null ? 'number of periods' : schedule.length ? `${totalDays} days · ${formatDateShort(schedule[0].start)} to ${formatDateShort(schedule[schedule.length - 1].washout_end)}` : `${totalDays} days`}
-                        open={openSlot === 4} onOpen={() => toggle(4)} />
+                      <Slot n={3} label="When each period runs" empty={ss.count < 10 || ss.count % 2 === 1}
+                        value={ss.count ? `${ss.count} period${ss.count > 1 ? 's' : ''} placed` : 'Place on calendar'}
+                        sub={ss.count ? `${ss.periodDays ?? '?'}-day periods${ss.breakDays ? ` · ${ss.breakDays}-day breaks` : ''}` : 'drag across days below'}
+                        open={false} onOpen={() => { setOpenSlot(null); setAbView('calendar'); document.getElementById('sc-anchor')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }} />
+                      <Slot n={4} label="Which goes first" empty={!ss.randomized}
+                        value={ss.randomized ? 'Randomized' : 'Coin flip needed'} sub={ss.randomized ? `${ss.pairs} pairs · coin flip each` : 'one flip per pair'} open={openSlot === 4} onOpen={() => toggle(4)} />
                     </div>
                     {openSlot === 1 && (
                       <SlotEditor title="Editing 1: what you want to improve" onDone={() => setOpenSlot(null)}>
@@ -512,38 +492,21 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
                         </div>
                       </SlotEditor>
                     )}
-                    {openSlot === 3 && (
-                      <SlotEditor title="Editing 3: how it alternates" onDone={() => setOpenSlot(null)}>
-                        <div className="td-inline"><Stepper label="Days per period" value={iv.period_days} min={1} max={30} onChange={(n) => setIv({ ...iv, period_days: n })} /><span>days on each option, then a</span>
-                          <Stepper label="Break days" value={iv.washout_days} min={0} max={14} onChange={(n) => setIv({ ...iv, washout_days: n })} /><span>-day break</span></div>
-                        <p className="td-note">Break (washout) days are left out of the analysis so the last option's effect can wear off.</p>
-                      </SlotEditor>
-                    )}
                     {openSlot === 4 && (
-                      <SlotEditor title="Editing 4: how long it runs" onDone={() => setOpenSlot(null)}>
-                        <div className="td-presets">
-                          {PRESETS.map((pr) => {
-                            const st = strengthFor(pr.n)
-                            const days = cycle != null ? pr.n * cycle : null
-                            const sel = iv.n_periods === pr.n
-                            return (
-                              <button key={pr.n} type="button" className={`td-preset ${sel ? 'on' : ''}`} aria-pressed={sel} onClick={() => setIv({ ...iv, n_periods: pr.n })}>
-                                <span className="row-between"><strong>{pr.name}</strong>{sel && <span className="pill pill-purple no-dot">Selected</span>}</span>
-                                <span className="big">{days != null ? `${Math.round(days / 7)} weeks` : `${pr.n} periods`}</span>
-                                <span className="muted small">{days != null ? `${pr.n} periods · ${days} days` : 'Set slot 3 to see the length'}</span>
-                                <StrengthMeter bars={st.bars} />
-                                <span className="small muted">{st.text}</span>
-                              </button>
-                            )
-                          })}
+                      <SlotEditor title="Editing 4: which goes first" onDone={() => setOpenSlot(null)}>
+                        <p className="td-note">You choose <strong>when</strong> each period runs. A coin flip chooses <strong>which</strong> option each period of a pair gets. That random order is what lets the chance check rule out time trends, so A and B can't be assigned by hand.</p>
+                        <div className="td-inline">
+                          <button type="button" className="button primary" disabled={ss.count < 2 || ss.count % 2 === 1 || !!recorded} onClick={() => setStints(randomizeStints(stints))}>
+                            <Icon name="shuffle" size={15} /> {ss.randomized ? 'Flip again' : 'Randomize A/B'}
+                          </button>
+                          {ss.count % 2 === 1 && <span className="small muted">Add one more period to finish the last pair first.</span>}
+                          {recorded && <span className="small muted">Using the recorded order the patient followed.</span>}
                         </div>
-                        <span className="td-slot-label">Or set the number of periods</span>
-                        <div className="td-inline"><Stepper label="Number of periods" value={iv.n_periods} min={10} max={24} step={2} onChange={(n) => setIv({ ...iv, n_periods: n })} /><span>periods (even numbers, at least 10)</span></div>
                       </SlotEditor>
                     )}
                     <p className="td-reads"><strong>Reads as:</strong>{' '}
                       {ivReady
-                        ? <>Does {iv.arm_b.trim()} give {firstName} {iv.outcome_signal === 'sleep_min' ? (iv.better === 'higher' ? 'more sleep' : 'less sleep') : `${iv.better} ${SIGNAL_INFO[iv.outcome_signal!].plain}`} than {iv.arm_a.trim()}{iv.n_periods != null && iv.period_days != null ? `, over ${iv.n_periods} alternating ${iv.period_days}-day periods` : ''}?</>
+                        ? <>Does {iv.arm_b.trim()} give {firstName} {iv.outcome_signal === 'sleep_min' ? (iv.better === 'higher' ? 'more sleep' : 'less sleep') : `${iv.better} ${SIGNAL_INFO[iv.outcome_signal!].plain}`} than {iv.arm_a.trim()}{ss.count >= 2 ? `, over ${ss.count} alternating periods` : ''}?</>
                         : <span className="muted">Fill in slots 1 and 2 to finish the question.</span>}
                     </p>
                   </>
@@ -558,15 +521,19 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
                   <p className="td-note">Illustration, not {firstName}'s data. Shaded days are compared with normal days; episode days are left out.</p>
                 </section>
               ) : (
-                <section className="td-section">
+                <section className="td-section" id="sc-anchor">
                   <div className="row-between">
                     <h3 className="td-h">What the patient will do, and when</h3>
                     <div className="row" style={{ gap: 10 }}>
                       <div className="seg" role="tablist">
-                        <button type="button" className={abView === 'timeline' ? 'active' : ''} onClick={() => setAbView('timeline')}>Timeline</button>
-                        <button type="button" className={abView === 'calendar' ? 'active' : ''} onClick={() => setAbView('calendar')}>Calendar</button>
+                        <button type="button" className={abView === 'calendar' ? 'active' : ''} onClick={() => setAbView('calendar')}>Place on calendar</button>
+                        <button type="button" className={abView === 'timeline' ? 'active' : ''} disabled={!schedule.length} title={schedule.length ? undefined : 'Randomize A/B first'} onClick={() => setAbView('timeline')}>Timeline</button>
                       </div>
-                      {!recorded && <button type="button" className="button secondary sm" onClick={() => setIv({ ...iv, seed: Math.floor(Math.random() * 10000) })}><Icon name="shuffle" size={14} /> Shuffle order</button>}
+                      {!recorded && (
+                        <button type="button" className="button primary sm" disabled={ss.count < 2 || ss.count % 2 === 1} onClick={() => setStints(randomizeStints(stints))}>
+                          <Icon name="shuffle" size={14} /> {ss.randomized ? 'Flip again' : 'Randomize A/B'}
+                        </button>
+                      )}
                     </div>
                   </div>
                   {recordedPlan && (
@@ -575,21 +542,18 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
                       <p style={{ flex: 1 }}>
                         <strong>{recorded ? 'Using the schedule this patient followed' : 'This patient already followed a recorded A/B schedule'}</strong>
                         {recorded
-                          ? `${recorded.intervention!.arm_a} vs ${recorded.intervention!.arm_b}, ${recorded.intervention!.n_periods} periods from ${formatDate(recorded.window.start)}. Demo data is historical, so the analysis must use the order the patient actually followed.`
-                          : 'Demo data is historical: a newly randomized order would not match the days the patient actually took each option. Use the recorded schedule for an honest result.'}
+                          ? `${recorded.intervention!.arm_a} vs ${recorded.intervention!.arm_b}, ${recorded.intervention!.n_periods} periods from ${formatDate(recorded.window.start)}. Demo data is historical, so the analysis must use the order the patient actually followed. Moving a period undoes this.`
+                          : 'Demo data is historical: periods placed by hand would not match the days the patient actually took each option. Use the recorded schedule for an honest result.'}
                       </p>
                       {recorded
-                        ? <button className="button ghost sm" onClick={() => setRecorded(null)}>Randomize instead</button>
+                        ? <button className="button ghost sm" onClick={() => { setRecorded(null); setStints([]) }}>Place my own instead</button>
                         : <button className="button primary sm" onClick={() => applyRecorded(recordedPlan)}>Use recorded schedule</button>}
                     </div>
                   )}
-                  {scheduleErr && <div className="alert alert-error">{scheduleErr}</div>}
-                  {!schedule.length && !recorded
-                    ? <div className="td-scroll muted small">The schedule appears here once you choose how it alternates (slot 3) and how long it runs (slot 4).</div>
-                    : abView === 'timeline'
+                  {abView === 'timeline' && schedule.length
                     ? <ABTimeline schedule={schedule} armA={iv.arm_a.trim() || 'Option A'} armB={iv.arm_b.trim() || 'Option B'} />
-                    : <ABCalendar schedule={schedule} armA={iv.arm_a.trim() || 'Option A'} armB={iv.arm_b.trim() || 'Option B'} />}
-                  {scheduleOverruns && <div className="alert alert-warn">This schedule ends {formatDate(window_.end)}, after the patient's data ends ({formatDate(patient.date_range[1])}). Use fewer or shorter periods.</div>}
+                    : <StintCalendar range={{ start: patient.date_range[0], end: patient.date_range[1] }} stints={stints} onChange={setStints}
+                        armA={iv.arm_a.trim() || 'Option A'} armB={iv.arm_b.trim() || 'Option B'} />}
                 </section>
               )}
             </div>

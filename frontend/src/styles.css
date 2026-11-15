@@ -576,3 +576,32 @@ input:focus, select:focus, textarea:focus { border-color: #a9a3f5; box-shadow: 0
 .pd-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .pd-row .disclosure { padding: 2px 0 6px; font-size: 13px; }
 @media (max-width: 560px) { .pd-row { grid-template-columns: 1fr; gap: 4px; } }
+
+/* A/B period placement calendar (components/StintCalendar.tsx) */
+.sc { display: flex; flex-direction: column; gap: 10px; }
+.sc-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.sc-fill { display: flex; flex-direction: column; gap: 6px; border: 1px dashed #c9c9d3; border-radius: 12px; padding: 10px 12px; background: #fafafd; }
+.sc-fill-btn { display: inline-flex; align-items: center; gap: 8px; }
+.sc-fill-btn .td-meter i { width: 14px; height: 6px; }
+.sc-months { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 16px; border: 1px solid #ededf1; border-radius: 11px; background: #fafafd; padding: 16px;
+  user-select: none; -webkit-user-select: none; touch-action: none; }
+.sc-months .td-cal-grid { gap: 2px 0; }
+.sc-months .td-cal-grid span { height: 30px; border-radius: 0; }
+.sc-day { cursor: crosshair; color: #6f707d !important; font-size: 12px; position: relative; }
+.sc-day:hover:not(.out) { background: #eeedfb; }
+.sc-day.out { color: #d0d0d8 !important; cursor: default; background: transparent; }
+.sc-day.p { background: #cfcfda; color: #2f2f3b !important; font-weight: 700; cursor: grab; }
+.sc-day.a { background: var(--arm-a); color: #fff !important; font-weight: 700; cursor: grab; }
+.sc-day.b { background: var(--arm-b); color: #2b1503 !important; font-weight: 700; cursor: grab; }
+.sc-day.first { border-top-left-radius: 7px; border-bottom-left-radius: 7px; cursor: ew-resize; }
+.sc-day.last { border-top-right-radius: 7px; border-bottom-right-radius: 7px; cursor: ew-resize; }
+.sc-day.first.last { cursor: grab; }
+.sc-day b { font-size: 11px; background: #ffffffd9; color: #2f2f3b; border-radius: 4px; padding: 0 4px; }
+.sc-day.sel { box-shadow: inset 0 0 0 2px #242430; }
+.sc-day.w { background: repeating-linear-gradient(45deg, #e4e4ea, #e4e4ea 3px, #f8f8fb 3px, #f8f8fb 6px); }
+.sc-day.prev { background: #d9d6fb; color: var(--accent-ink) !important; font-weight: 700; }
+.sc-day.bad { background: #fde4e5; color: #a52e34 !important; }
+.sc-day.pending { box-shadow: inset 0 0 0 2px var(--accent); background: #efedfd; font-weight: 700; }
+.sc-months.dragging .sc-day { cursor: grabbing; }
+.sc-selected { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; border: 1px solid var(--accent-line); background: var(--accent-soft-2); border-radius: 10px; padding: 8px 12px; font-size: 14px; }
+.sc-selected .button { margin-left: auto; }
