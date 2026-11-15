@@ -71,6 +71,7 @@ def observational(df, signal, direction, max_lag, rng):
 
     p_best = (1 + np.sum(null_max >= oriented[best])) / (N_PERM + 1)
     per_lag_p = [(1 + np.sum(null_max >= o)) / (N_PERM + 1) for o in oriented]
+    n_missing_days = int(np.isnan(sig).sum())
     missing = float(np.isnan(sig).mean())
 
     pre = _pre_mask(ep, lags[best])
@@ -90,6 +91,7 @@ def observational(df, signal, direction, max_lag, rng):
         "lag_p": [round(float(x), 3) for x in per_lag_p],
         "lags": lags,
         "missing": round(missing, 2),
+        "n_missing_days": n_missing_days,
         "enough": n_ep >= 5 and missing <= 0.4,
         "direction_ok": bool(oriented[best] > 0),
         "pre_episode_mean": None if pre_mean is None else round(pre_mean, 1),
@@ -106,11 +108,22 @@ def intervention(df, iv, rng):
     sig = df[iv["outcome_signal"]].to_numpy(float)
     dates = pd.to_datetime(df["date"])
     periods = []
+    n_period_days = 0     # scheduled outcome-days present in the (possibly truncated) table
+    n_missing_days = 0    # of those, how many had no reading
     for p in iv["schedule"]:
-        m = (dates >= p["start"]) & (dates <= p["end"])
-        vals = sig[m.to_numpy()]
-        vals = vals[~np.isnan(vals)]
-        periods.append((p["arm"], vals.mean() if len(vals) else np.nan))
+        idx = ((dates >= p["start"]) & (dates <= p["end"])).to_numpy()
+        day_count = int(idx.sum())
+        if day_count == 0:
+            periods.append((p["arm"], np.nan))   # period outside the collected window
+            continue
+        present = sig[idx][~np.isnan(sig[idx])]
+        n_period_days += day_count
+        n_missing_days += day_count - len(present)
+        # A period must have >= 50% of its scheduled days covered, else its mean is missing
+        # (so a 6-day period with 1 reading can't carry the trial). CONTRACT §5.
+        period_len = (pd.Timestamp(p["end"]) - pd.Timestamp(p["start"])).days + 1
+        mean = present.mean() if len(present) >= 0.5 * period_len else np.nan
+        periods.append((p["arm"], mean))
     arms = np.array([a for a, _ in periods])
     means = np.array([m for _, m in periods])
     sign = 1 if iv["better"] == "higher" else -1
@@ -119,7 +132,7 @@ def intervention(df, iv, rng):
         return np.nanmean(means[arm_labels == "B"]) - np.nanmean(means[arm_labels == "A"])
 
     obs = diff(arms)
-    n_blocks = len(arms) // 2
+    n_blocks = len(arms) // 2      # structural blocks — drives the 2^k permutation enumeration
 
     # null: re-randomize within each AB/BA block (exactly how the schedule was generated).
     if 2 ** n_blocks <= 4096:
@@ -144,9 +157,13 @@ def intervention(df, iv, rng):
 
     mean_a = float(np.nanmean(means[arms == "A"]))
     mean_b = float(np.nanmean(means[arms == "B"]))
-    n_a, n_b = int((arms == "A").sum()), int((arms == "B").sum())
-    missing = float(np.isnan(means).mean())
-    enough = n_a >= 2 and n_b >= 2 and n_blocks >= MIN_BLOCKS and missing <= 0.4
+    # count only periods that actually carry a usable mean (>= 50% covered)
+    valid = ~np.isnan(means)
+    n_a = int(((arms == "A") & valid).sum())
+    n_b = int(((arms == "B") & valid).sum())
+    valid_blocks = (n_a + n_b) // 2
+    missing = float(n_missing_days / n_period_days) if n_period_days else 1.0
+    enough = n_a >= 2 and n_b >= 2 and valid_blocks >= MIN_BLOCKS and missing <= 0.4
     # null distribution expressed as effect_pct, in the same sign convention as effect_pct
     null_pct = (null * sign) / mean_a * 100 if mean_a else null
 
@@ -160,11 +177,12 @@ def intervention(df, iv, rng):
         "p": round(p, 4),
         "n_a": n_a,
         "n_b": n_b,
-        "n_blocks": n_blocks,
+        "n_blocks": valid_blocks,
         "n_perm": n_perm,
         "missing": round(missing, 2),
+        "n_missing_days": int(n_missing_days),
         "enough": enough,
-        "too_few_periods": n_blocks < MIN_BLOCKS,
+        "too_few_periods": valid_blocks < MIN_BLOCKS,
         "direction_ok": bool(obs * sign > 0),
         "period_means": [
             {"period": p["period"], "arm": p["arm"],
@@ -283,12 +301,13 @@ def _iv_series(df, iv):
             arm_of[i] = p["arm"]
         for i in np.flatnonzero(wash):
             arm_of[i] = "washout"
+    ep = df["episode"].to_numpy(int) if "episode" in df.columns else np.zeros(len(df), int)
     out = []
     for i, d in enumerate(date_strs):
         out.append({
             "date": d,
             "value": None if np.isnan(sig[i]) else round(float(sig[i]), 1),
-            "episode": 0,
+            "episode": int(ep[i]),
             "arm": arm_of[i],
             "in_window": False,
         })
@@ -311,7 +330,7 @@ def run_plan(plan, daily):
         r = observational(daily, o["signal"], o["direction"], o["max_lag_days"], rng)
         v = verdict(r)
         headline, patient_headline = _obs_headlines(r, v)
-        if r["missing"] > 0.4:
+        if r["missing"] >= 0.05:            # >= 5% of days missing (40% still -> not_enough_data)
             warnings.append("missing_data")
         if r["n_episodes"] < 8:
             warnings.append("few_episodes")
@@ -338,6 +357,7 @@ def run_plan(plan, daily):
             "n_permutations": N_PERM,
             "n_episodes": r["n_episodes"],
             "n_days": int(len(daily)),
+            "n_missing_days": r["n_missing_days"],
             "warnings": warnings,
             "observational": obs_block,
             "intervention": None,
@@ -353,7 +373,7 @@ def run_plan(plan, daily):
     headline, patient_headline = _iv_headlines(r, v, iv)
     if r["too_few_periods"]:
         warnings.append("too_few_periods")
-    if r["missing"] > 0.4:
+    if r["missing"] >= 0.05:               # >= 5% of scheduled outcome-days missing
         warnings.append("missing_data")
     iv_block = {
         "mean_a": r["mean_a"],
@@ -375,6 +395,7 @@ def run_plan(plan, daily):
         "n_permutations": r["n_perm"],
         "n_episodes": 0,
         "n_days": int(len(daily)),
+        "n_missing_days": r["n_missing_days"],
         "warnings": warnings,
         "observational": None,
         "intervention": iv_block,

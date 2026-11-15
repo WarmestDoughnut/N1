@@ -10,7 +10,9 @@
   "n_permutations": 2000,
   "n_episodes": 12,
   "n_days": 120,
+  "n_missing_days": 6,
   "warnings": [
+    "missing_data",
     "multiple_lags_tested"
   ],
   "observational": {
@@ -1388,5 +1390,6 @@
     "auc_null_p": null,
     "coefficients": [],
     "risk_tomorrow": null
-  }
+  },
+  "collected_until": null
 }

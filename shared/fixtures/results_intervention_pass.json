@@ -9,8 +9,11 @@
   "p_value": 0.0156,
   "n_permutations": 64,
   "n_episodes": 0,
-  "n_days": 120,
-  "warnings": [],
+  "n_days": 96,
+  "n_missing_days": 4,
+  "warnings": [
+    "missing_data"
+  ],
   "observational": null,
   "intervention": {
     "mean_a": 363.7,
@@ -148,55 +151,6 @@
     -7.57
   ],
   "series": [
-    {
-      "date": "2026-06-01",
-      "value": null,
-      "episode": 0,
-      "arm": null,
-      "in_window": false
-    },
-    {
-      "date": "2026-06-02",
-      "value": 347.0,
-      "episode": 0,
-      "arm": null,
-      "in_window": false
-    },
-    {
-      "date": "2026-06-03",
-      "value": 383.0,
-      "episode": 0,
-      "arm": null,
-      "in_window": false
-    },
-    {
-      "date": "2026-06-04",
-      "value": 357.0,
-      "episode": 0,
-      "arm": null,
-      "in_window": false
-    },
-    {
-      "date": "2026-06-05",
-      "value": 373.0,
-      "episode": 0,
-      "arm": null,
-      "in_window": false
-    },
-    {
-      "date": "2026-06-06",
-      "value": 363.0,
-      "episode": 0,
-      "arm": null,
-      "in_window": false
-    },
-    {
-      "date": "2026-06-07",
-      "value": 394.0,
-      "episode": 0,
-      "arm": null,
-      "in_window": false
-    },
     {
       "date": "2026-06-08",
       "value": 348.0,
@@ -868,126 +822,8 @@
       "episode": 0,
       "arm": "washout",
       "in_window": false
-    },
-    {
-      "date": "2026-09-12",
-      "value": 372.0,
-      "episode": 0,
-      "arm": null,
-      "in_window": false
-    },
-    {
-      "date": "2026-09-13",
-      "value": 384.0,
-      "episode": 0,
-      "arm": null,
-      "in_window": false
-    },
-    {
-      "date": "2026-09-14",
-      "value": 393.0,
-      "episode": 0,
-      "arm": null,
-      "in_window": false
-    },
-    {
-      "date": "2026-09-15",
-      "value": 324.0,
-      "episode": 0,
-      "arm": null,
-      "in_window": false
-    },
-    {
-      "date": "2026-09-16",
-      "value": 313.0,
-      "episode": 0,
-      "arm": null,
-      "in_window": false
-    },
-    {
-      "date": "2026-09-17",
-      "value": 324.0,
-      "episode": 0,
-      "arm": null,
-      "in_window": false
-    },
-    {
-      "date": "2026-09-18",
-      "value": 332.0,
-      "episode": 0,
-      "arm": null,
-      "in_window": false
-    },
-    {
-      "date": "2026-09-19",
-      "value": 362.0,
-      "episode": 0,
-      "arm": null,
-      "in_window": false
-    },
-    {
-      "date": "2026-09-20",
-      "value": 376.0,
-      "episode": 0,
-      "arm": null,
-      "in_window": false
-    },
-    {
-      "date": "2026-09-21",
-      "value": 332.0,
-      "episode": 0,
-      "arm": null,
-      "in_window": false
-    },
-    {
-      "date": "2026-09-22",
-      "value": 373.0,
-      "episode": 0,
-      "arm": null,
-      "in_window": false
-    },
-    {
-      "date": "2026-09-23",
-      "value": 387.0,
-      "episode": 0,
-      "arm": null,
-      "in_window": false
-    },
-    {
-      "date": "2026-09-24",
-      "value": 374.0,
-      "episode": 0,
-      "arm": null,
-      "in_window": false
-    },
-    {
-      "date": "2026-09-25",
-      "value": 333.0,
-      "episode": 0,
-      "arm": null,
-      "in_window": false
-    },
-    {
-      "date": "2026-09-26",
-      "value": 338.0,
-      "episode": 0,
-      "arm": null,
-      "in_window": false
-    },
-    {
-      "date": "2026-09-27",
-      "value": 405.0,
-      "episode": 0,
-      "arm": null,
-      "in_window": false
-    },
-    {
-      "date": "2026-09-28",
-      "value": 348.0,
-      "episode": 0,
-      "arm": null,
-      "in_window": false
     }
   ],
-  "model": null
+  "model": null,
+  "collected_until": null
 }

@@ -7,6 +7,8 @@ schedule preview, and results (the stats in app/stats.py).
 
 Run: uvicorn app.main:app --reload --port 8000
 """
+from datetime import date, timedelta
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -64,25 +66,42 @@ def _allowed_patient_ids(account):
 
 
 def _window_df(plan):
-    """Patient daily rows restricted to the plan window (honors the plan scope in time)."""
+    """Patient daily rows restricted to the plan window, and cut at `collected_until` if the plan
+    was stopped early (stopping keeps only data already collected — CLAUDE.md §2)."""
     df = DAILY.get(plan["patient_id"])
     if df is None:
         return None
     win = plan.get("window") or {}
     start, end = win.get("start"), win.get("end")
+    cutoff = plan.get("collected_until")
+    if cutoff:
+        end = min(end, cutoff) if end else cutoff
     if start and end:
         df = df[(df["date"] >= start) & (df["date"] <= end)].reset_index(drop=True)
     return df
 
 
+def _window_midpoint(plan):
+    """Demo stand-in for 'when the patient stopped': the middle date of the plan window."""
+    win = plan.get("window") or {}
+    start, end = win.get("start"), win.get("end")
+    if not (start and end):
+        return None
+    s = date.fromisoformat(start[:10])
+    e = date.fromisoformat(end[:10])
+    return (s + timedelta(days=(e - s).days // 2)).isoformat()
+
+
 def _compute_results(plan, incomplete=False):
     df = _window_df(plan)
+    win_end = (plan.get("window") or {}).get("end")
+    collected_until = plan.get("collected_until") or win_end
     if df is None or df.empty:
         result = {"plan_id": plan["id"], "type": plan["type"], "complete": False,
                   "verdict": "not_enough_data", "headline": "No data for this patient.",
                   "patient_headline": "There isn't any data to analyze yet.",
                   "effect_pct": 0.0, "p_value": 1.0, "n_permutations": 0,
-                  "n_episodes": 0, "n_days": 0, "warnings": ["missing_data"],
+                  "n_episodes": 0, "n_days": 0, "n_missing_days": 0, "warnings": ["missing_data"],
                   "observational": None, "intervention": None,
                   "null_distribution": [], "series": [], "model": None}
     else:
@@ -92,6 +111,9 @@ def _compute_results(plan, incomplete=False):
             result["model"] = fit_risk_model(df, plan, verdict=result.get("verdict"))
         except Exception:
             result["model"] = None
+    # collected_until tells the frontend where real data ends so it can shade the rest of the
+    # window as "not collected (plan stopped)". null means the full window was collected.
+    result["collected_until"] = plan.get("collected_until") or (collected_until if incomplete else None)
     if incomplete:
         result["complete"] = False
         if "incomplete_plan" not in result["warnings"]:
@@ -233,6 +255,9 @@ def _event_endpoint(plan_id, event):
     if error == "invalid_transition":
         return err(409, "invalid_transition")
     if event == "stop":
+        # keep only data collected up to the stop point (demo: midpoint of the window)
+        plan["collected_until"] = _window_midpoint(plan)
+        STORE.save()
         _compute_results(plan, incomplete=True)
     return plan
 

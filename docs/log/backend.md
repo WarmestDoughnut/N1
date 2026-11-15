@@ -122,3 +122,21 @@ Format:
   scoping, add-by-code→pending→accept→active, all error codes, not_connected, delete keeps data).
 - Next: none required. Optional MDE/preview-power (#5) remains if time before 14:30 freeze.
 - Blockers / needs from frontend: none. v1.2 live; you can drop the mock fallback for /api/auth + /api/connections.
+
+### 12:40 — Data-honesty fixes (frontend review, 6 items)
+- Done: Addressed all 6 points in the frontend's to-backend review (honesty is the product):
+  1. `n_missing_days` field; both test types count missing **days**; `missing_data` warning at **≥5%**
+     (so James's 5% case warns), 40% still the not_enough_data cutoff.
+  2. Intervention periods need **≥50% day coverage** or the mean is treated as missing; sufficiency and
+     `n_blocks` now count only usable periods.
+  3. Stopped-early plans are **cut at `collected_until`** (window midpoint demo stand-in); new result
+     field `collected_until`; series cut there (post-stop days omitted); still labeled `incomplete_plan`.
+  4. Intervention `series` now carries the real `episode` values (was hardcoded 0).
+  5. Regenerated the 3 results fixtures from live `run_plan` (now window-filtered + model + new fields),
+     so sample-data mode matches the live API.
+  6. Confirmed out-of-period in-window days (`arm:null`) and washout days are excluded from period means.
+- Files: backend/app/stats.py, backend/app/main.py, shared/fixtures/results_*.json, docs/CONTRACT.md (§5),
+  docs/messages/to-frontend.md (FYI #4)
+- Contract impact: additive v1.2 (`n_missing_days`, `collected_until`, documented missing/coverage rules).
+- Verified: 11 ground-truth tests pass; demo verdicts unchanged; stopped-plan cut + warnings verified via API.
+- Next: optional MDE/preview-power (#5) if we want it.

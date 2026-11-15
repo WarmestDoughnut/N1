@@ -149,6 +149,8 @@ Endpoints:
   "n_permutations": 2000,
   "n_episodes": 14,
   "n_days": 120,
+  "n_missing_days": 7,
+  "collected_until": null,
   "warnings": [],
   "observational": {
     "best_lag_days": 2,
@@ -193,6 +195,16 @@ p is 1/2^k, so k < 5 can never reach p < 0.05 → `not_enough_data` + `too_few_p
 
 `null_distribution`: sampled ≤ 500 values, in the **same sign convention as `effect_pct`** (so the
 observed `effect_pct` can be marked directly on the histogram).
+
+Missing data (v1.2, both test types count **days**): `n_missing_days` = outcome-signal days with no
+reading (observational: over the window; intervention: over scheduled non-washout period days).
+`missing_data` warning when ≥ 5% of those days are missing; ≥ 40% → `not_enough_data`. Intervention:
+a period needs ≥ 50% of its scheduled days covered, else its mean is treated as missing (so a sparse
+period can't carry the trial). Washout days and days outside any period are excluded from period means.
+
+`collected_until` (v1.2): `YYYY-MM-DD` date where real collected data ends, or `null` when the full
+window was collected. For a plan stopped early, analysis + `series` are cut at this date (stopping keeps
+only data already collected); the frontend can shade `(collected_until, window.end]` as "not collected".
 
 `warnings[]` possible values: `incomplete_plan`, `missing_data`, `few_episodes`,
 `multiple_lags_tested` (p-values corrected via max-statistic permutation), `too_few_periods` (v1.1).
@@ -252,7 +264,10 @@ Active: Rivera ↔ P01,P02,P03,P04,P07,REAL-P07 · Okafor ↔ P01,P05,P06. Pendi
 ## Changelog
 - v1.2 (12:05) — additive demo auth: accounts, `/api/auth/login|me`, `/api/connections` (+accept,
   delete), `/api/accounts/demo`; Bearer-token scoping on `/api/patients`, `/api/plans`, `POST /api/plans`
-  (`not_connected`). Existing endpoints unchanged without a token.
+  (`not_connected`). Existing endpoints unchanged without a token. Data-honesty (12:40): results add
+  `n_missing_days` + `collected_until`; `missing_data` warning at ≥5% days (both test types count days);
+  intervention periods need ≥50% day coverage; stopped-early plans are cut at `collected_until`;
+  intervention `series` now carries the patient's real `episode` values.
 - v1.1 (11:45) — additive: 6 new daily signals (`skin_temp_dev, resp_rate, spo2, systolic_bp,
   glucose_tir, walking_speed`); device fields `category, availability, access, notes` and merged
   catalog (vision 17 + compact ids patients reference); patient fields `condition, story,

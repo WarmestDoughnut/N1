@@ -84,6 +84,34 @@ chance patterns the univariate screen correctly ignores — fitting it would be 
 model's AUC uses circular shifts (preserves episode autocorrelation), same as the observational test.
 Please show a short "No candidate signal from the screening test" note when `reason == "no_primary_signal"`.
 The results fixtures now include this `model` field so offline mode matches live.
+<<<<<<< Updated upstream
 Reply 11:07 (frontend): Confirmed on the live API. I ran your server locally and `npm run e2e -- --live` passes the demo script end to end: Maria likely_real (lag 2, model AUC 0.909 renders in the risk-model tab), James probably_chance, Aisha A/B likely_real. The device catalog merge works: iPhone-only grays out Sleep and adding Fitbit unlocks it. I'll remove the mock's legacy-device fill (it's a no-op now that the fixtures include those ids).
 Reply (frontend, re: 11:55 update): Agreed, that's the honest choice. The risk-model tab now shows "No candidate signal from the screening test, so no risk model was fit" for `no_primary_signal`, and an explanation for `too_few_episodes`. The sample-data mock follows the same rule.
 Status: DONE
+=======
+Status: OPEN
+
+### #4 [FYI] 12:40 — Data-honesty review (your to-backend list): all done + fixtures regenerated
+Great catches — all fixed and live (CONTRACT.md §5 updated, v1.2 changelog). Regenerated the 3 results fixtures to match live exactly.
+1. **Missing days now counted the same for both test types, warning at ≥5%.** New result field
+   `n_missing_days` (days with no reading). Observational counts over the window; intervention counts
+   scheduled non-washout period days (matches the contract's "days"). `missing_data` warns at **≥5%**
+   (I used `≥` so James's exactly-5% case fires — he showed gaps with no warning before); **40%** stays
+   the `not_enough_data` cutoff. Please match `≥5%` in the mock.
+2. **Intervention periods need ≥50% day coverage** or the period mean is treated as missing (a 6-day
+   period with 1 reading no longer counts). Sufficiency now counts only usable periods.
+3. **Stopped-early plans are cut at `collected_until`.** New result field `collected_until`
+   (`YYYY-MM-DD` or `null`). On stop I set it to the window midpoint (demo stand-in for "today"),
+   cut the analysis + `series` there, and label `incomplete_plan`. Post-stop days are **omitted** from
+   `series` (not null) — null still means "no reading that day". Shade `(collected_until, window.end]`
+   as "not collected (plan stopped)". (Happy to switch the stop point to a real elapsed-time mapping
+   if you prefer — midpoint was the simplest honest default and matches your mock's "first half".)
+4. **Intervention `series` now carries the patient's real `episode`** values (was hardcoded 0).
+5. **Fixtures regenerated from live `run_plan`:** now window-filtered (so e.g. Aisha's series is exactly
+   her trial window 06-08…09-11, no stray out-of-window days), with `model`, `n_missing_days`,
+   `collected_until`, and correct warnings. Sample-data mode and live now agree.
+6. **Confirmed:** in-window days outside any period come back `arm:null` with real values and are
+   **excluded** from period means; washout days are excluded too. (For the demo plans the window equals
+   the schedule span, so there usually aren't any out-of-period days — but the behavior is as you expect.)
+Status: OPEN
+>>>>>>> Stashed changes
