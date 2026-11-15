@@ -1,4 +1,4 @@
-# API & Data Contract — v1.0
+# API & Data Contract — v1.1
 
 Source of truth for both instances. Change only via the protocol in CLAUDE.md §7.
 Bump the version above on every change and note it in the changelog at the bottom.
@@ -14,20 +14,39 @@ Dates are `YYYY-MM-DD`. Times are ISO 8601. IDs are strings.
 | `resting_hr` | bpm | resting heart rate |
 | `hrv` | ms | heart rate variability (may be null for some sources) |
 | `steps` | count | daily steps |
+| `skin_temp_dev` | °C | skin temperature deviation vs personal baseline (v1.1) |
+| `resp_rate` | breaths/min | respiratory rate (v1.1) |
+| `spo2` | % | blood oxygen saturation (v1.1) |
+| `systolic_bp` | mmHg | systolic blood pressure (v1.1) |
+| `glucose_tir` | % | glucose time-in-range 70–180 mg/dL (v1.1) |
+| `walking_speed` | m/s | walking speed (v1.1) |
 | `episode` | 0/1 | patient-logged or derived episode that day (not a sensor; from logs) |
 
-Daily table: one row per patient per day: `patient_id, date, sleep_min, resting_hr, hrv, steps, episode`.
+Daily table: one row per patient per day: `patient_id, date, sleep_min, resting_hr, hrv, steps,
+skin_temp_dev, resp_rate, spo2, systolic_bp, glucose_tir, walking_speed, episode`.
 Missing values are `null`, never 0.
 
 ## 2. Device catalog — `GET /api/devices`
 
+Serves the full catalog (v1.1): the 17-device "vision" list plus the compact device ids that
+patients/plans actually reference (`fitbit`, `smart_ring`, `cgm`, `bp_wearable`), so every id in
+`patient.devices` / `plan.devices` resolves. Each entry:
+
 ```json
 [
-  {"id": "iphone", "name": "iPhone", "signals": ["steps", "episode"]},
-  {"id": "apple_watch", "name": "Apple Watch", "signals": ["sleep_min", "resting_hr", "hrv", "steps"]},
-  {"id": "fitbit", "name": "Fitbit", "signals": ["sleep_min", "resting_hr", "hrv", "steps"]}
+  {"id": "iphone", "name": "iPhone", "category": "phone", "availability": "now",
+   "access": "HealthKit (Health export / Shortcuts / iOS app)",
+   "signals": ["steps", "walking_speed", "episode"], "notes": "Every patient has one."},
+  {"id": "fitbit", "name": "Fitbit", "category": "smartwatch", "availability": "now",
+   "access": "Google Health API / Health Connect",
+   "signals": ["sleep_min", "resting_hr", "hrv", "steps", "spo2", "skin_temp_dev"],
+   "notes": "Affordable sleep/HR/steps — strong equity option."},
+  {"id": "bp_wearable", "name": "Cuffless BP wearable", "category": "emerging", "availability": "emerging",
+   "access": "TBD", "signals": ["systolic_bp"], "notes": "Emerging continuous BP; demo patient P04."}
 ]
 ```
+Fields (v1.1): `id, name, category, availability ("now"|"emerging"), access, signals, notes`.
+Signals a device lists that aren't in the daily table render as "supported soon".
 `episode` logging is always available via the app itself; frontend may treat it as always-on.
 
 ## 3. Patients
@@ -35,11 +54,16 @@ Missing values are `null`, never 0.
 `GET /api/patients`
 ```json
 [
-  {"id": "SYN-PATTERN", "display_name": "Patient A (synthetic)", "source": "synthetic",
-   "devices": ["iphone", "fitbit"], "date_range": ["2026-01-01", "2026-04-30"],
-   "n_days": 120, "n_episodes": 14}
+  {"id": "P01-MARIA", "display_name": "Maria, 68", "condition": "Migraine",
+   "story": "Neurologist suspects short sleep triggers her migraines…",
+   "source": "synthetic", "devices": ["iphone", "fitbit"],
+   "date_range": ["2026-06-01", "2026-09-28"], "n_days": 120, "n_episodes": 13,
+   "signals_present": ["sleep_min", "resting_hr", "hrv", "steps", "walking_speed"]}
 ]
 ```
+Fields (v1.1): `id, display_name, condition, story, source ("synthetic"|"real"), citation (optional,
+required when source=="real"), devices, date_range, n_days, n_episodes, signals_present`.
+Real participants (PMData) carry a `citation` that MUST be shown in the UI.
 
 `GET /api/patients/{id}/series?signals=sleep_min,episode&plan_id=PLAN-1`
 Scope-enforced: returns ONLY signals in the given plan's scope, and only if the plan status is
@@ -155,15 +179,23 @@ Intervention results use `"observational": null` and:
 for observational plots.
 
 `verdict` rules (backend implements, frontend just displays):
-- `not_enough_data`: < 5 episodes (observational) or < 2 periods per arm (intervention),
-  or > 40% missing outcome values.
+- `not_enough_data`: < 5 episodes (observational); or < 2 periods per arm **or fewer than 5 AB/BA
+  blocks / 10 periods** (intervention, v1.1); or > 40% missing outcome values.
 - `likely_real`: p < 0.05 and |effect_pct| ≥ 5 and direction matches hypothesis.
 - `suggestive`: p < 0.15 and direction matches.
 - `probably_chance`: otherwise.
-Incomplete plans (stopped early) add warning `"incomplete_plan"`.
+Incomplete plans (stopped early) add warning `"incomplete_plan"` and set `complete: false`.
+
+Intervention permutation (v1.1): re-randomize arm labels within each AB/BA block; enumerate all
+2^k schedules exactly when k ≤ 12 (so the p-value is exact). With k blocks the smallest achievable
+p is 1/2^k, so k < 5 can never reach p < 0.05 → `not_enough_data` + `too_few_periods`.
+`n_permutations` = the number of schedules enumerated (2^k) for intervention, 2000 for observational.
+
+`null_distribution`: sampled ≤ 500 values, in the **same sign convention as `effect_pct`** (so the
+observed `effect_pct` can be marked directly on the histogram).
 
 `warnings[]` possible values: `incomplete_plan`, `missing_data`, `few_episodes`,
-`multiple_lags_tested` (p-values corrected via max-statistic permutation).
+`multiple_lags_tested` (p-values corrected via max-statistic permutation), `too_few_periods` (v1.1).
 
 `model` (optional, added later, null until then):
 ```json
@@ -173,7 +205,17 @@ Incomplete plans (stopped early) add warning `"incomplete_plan"`.
 ```
 
 ## 6. Health
-`GET /api/health` → `{"ok": true, "contract_version": "1.0"}`
+`GET /api/health` → `{"ok": true, "contract_version": "1.1"}`
+
+## 7. Schedule preview — `GET /api/schedule/preview`
+`?n_periods=12&period_days=6&washout_days=2&seed=42&start=2026-06-01`
+→ `{"schedule": [...], "smallest_possible_p": 0.0156}` (balanced randomized AB/BA blocks + washout;
+`smallest_possible_p` = 1/2^(n_periods/2), the permutation p-value floor, for the wizard helper).
 
 ## Changelog
+- v1.1 (11:45) — additive: 6 new daily signals (`skin_temp_dev, resp_rate, spo2, systolic_bp,
+  glucose_tir, walking_speed`); device fields `category, availability, access, notes` and merged
+  catalog (vision 17 + compact ids patients reference); patient fields `condition, story,
+  signals_present, source, citation`; intervention sufficiency `< 5 blocks → not_enough_data +
+  too_few_periods`; clarified `n_permutations`, `null_distribution`, `schedule/preview`.
 - v1.0 (09:30) — initial contract.

@@ -72,3 +72,16 @@ Format:
 - Verified: 11 ground-truth tests pass; no server errors.
 - Next: bump CONTRACT.md to v1.1 on ACK of #2; MDE/preview-power only if time before 14:30 freeze.
 - Blockers / needs from frontend: ACK #2 (contract v1.1). Posted FYI #3 (device fix + model).
+
+### 11:50 — CONTRACT.md bumped to v1.1 (frontend ACK'd #2) + replied to blocker #2
+- Done: Frontend ACK'd CHANGE-REQUEST #2, so bumped `docs/CONTRACT.md` → v1.1: 6 new daily signals,
+  device fields + merged-catalog note, patient fields (condition/story/signals_present/source/citation),
+  intervention sufficiency (<5 blocks → not_enough_data + too_few_periods) + permutation/n_permutations
+  clarification, null_distribution sign convention, and documented `GET /api/schedule/preview`.
+  Health now reports contract_version "1.1". Replied DONE to frontend's device-id BLOCKER #2 (fixed
+  via merged catalog) and to #1.
+- Files: docs/CONTRACT.md, docs/messages/*
+- Contract impact: implemented v1.1 (additive).
+- How to try it: `curl localhost:8000/api/health` → contract_version 1.1.
+- Next: optional minimum-detectable-effect (GET /api/plans/preview-power) if time before 14:30 freeze; else polish.
+- Blockers / needs from frontend: none open. Live API ready at :8000 with real IDs.
