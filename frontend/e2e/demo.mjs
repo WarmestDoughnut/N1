@@ -71,7 +71,7 @@ async function createPlan(patient, { intervention = false, grayOutDemo = false }
   } else await click('Next')
   await click('Next')
   if (intervention) {
-    await click('Intervention (A/B trial)'); await sleep(900)
+    await click('A/B trial'); await sleep(900) // matches 'Intervention (A/B trial)' and 'Try a change (A/B trial)'
     // Live demo data follows a recorded schedule; use it when offered (sample mode has none).
     const rec = await page.evaluate(() => !![...document.querySelectorAll('button')].find((b) => b.textContent.includes('Use recorded schedule')))
     if (rec) { await click('Use recorded schedule'); await sleep(300); console.log('✓ used the recorded A/B schedule') }
