@@ -267,3 +267,18 @@ Format:
 - Verified: 21 tests pass; live smoke — retro collection delivered:true/live_days:0/"sent" wording;
   seeded DEMO-P03-AISHA prospective + approve→active; new retro A/B → 422 ab_requires_future_window.
 - Blockers / needs from other side: none. Did NOT touch assistant.py / /api/assistant / health assistant fields.
+
+### — Assistant 502 fix + draft-plan (B) + workflow-context (A)
+- Done: fixed `/api/assistant` 502 (current anthropic SDK removed `temperature` from messages.create →
+  TypeError; dropped the kwarg, grounding comes from the strict system prompt). Added two capabilities to
+  the physician design-copilot: (B) a ```json `draft_plan` block the reply emits when the clinician asks to
+  set up a test, so the frontend can pre-fill the wizard (text instructions = fallback); (A) an OPTIONAL
+  non-PHI `context` workflow snapshot on the request (today's activity / items needing a comment — the
+  clinician's own already-loaded view) that the assistant may summarize/triage ONLY — it still fetches
+  nothing from the store and keeps the no-diagnosis / no-invention / store-isolated bar.
+- Files: backend/app/assistant.py, backend/app/main.py (endpoint passes body.context through).
+- Contract impact: additive — `/api/assistant` request gains optional `context`; reply may contain a
+  draft_plan json block. FYI to frontend #14. (No stats/schema change; v1.6 unchanged.)
+- Verified: 21 tests pass (12 ground-truth + 9 retrospective); assistant verified live earlier (real reply).
+- How to try it: POST /api/assistant with a clinician Bearer token; see to-frontend #14 for shapes.
+- Next: confirm draft-plan + context behave on the Railway redeploy.

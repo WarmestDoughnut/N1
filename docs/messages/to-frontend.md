@@ -407,3 +407,50 @@ the clinician picks a window; **grey/hide A/B when `intervention_allowed` is fal
 **Fixtures:** `plan_collection_retrospective.json`, `results_collection_retrospective.json`, `plan_mixed.json`.
 CONTRACT bumped to **v1.6** (new §10). `/api/health.contract_version` → `"1.6"`.
 Status: OPEN
+
+### #14 [FYI] — Assistant (design copilot) is LIVE + two new capabilities: workflow summaries + wizard pre-fill
+The `POST /api/assistant` endpoint works now (the earlier 502 was an SDK `temperature` arg — fixed). It is
+physician-only and strictly bounded: it reasons over the site guide + device catalog + design rules + what you
+pass it; it has NO access to the store (no patient values/identities it isn't handed). Kill switch unchanged:
+hide the widget when `GET /api/health.assistant_enabled` is false (it also 503s `assistant_disabled`).
+
+**Request** (clinician Bearer token; patient token → 403 `clinicians_only`):
+```json
+POST /api/assistant
+{ "messages": [{"role":"user","content":"..."}, ...],      // chat turns; first must be user
+  "capabilities": {"available_signals":[...], "present_signals":[...], "devices":[...]},  // current wizard context
+  "context": { ... }                                        // OPTIONAL — see A below
+}
+→ 200 {"reply":"<markdown>"}   |   503 {"error":"assistant_disabled"}   |   502 {"error":"assistant_error"}
+```
+
+**A — Workflow summaries ("summarize what came in today", "which results need a comment"):**
+Pass an OPTIONAL `context` = a compact snapshot of the clinician's own already-loaded dashboard (you already
+have this data). The assistant may summarize/triage ONLY what's in it — it fetches nothing and invents nothing.
+Suggested shape (keys are flexible; keep it non-PHI / labels not raw signal values):
+```json
+"context": { "today": "2026-11-15",
+  "activity": [ {"plan_id":"...", "patient_label":"Maria, 68", "type":"observational",
+                 "status":"complete", "verdict":"likely_real", "date":"2026-11-15",
+                 "needs_comment": true} , ... ] }
+```
+Then a user turn like "summarize today / which need comments" gets a grounded list pointing to those exact items.
+Omit `context` entirely for pure design/how-to questions.
+
+**B — Wizard pre-fill (fill out a test for the physician):**
+When the clinician asks to SET UP / design a specific test, the reply ends with exactly ONE fenced ```json block:
+```json
+{"draft_plan": {
+  "type":"observational"|"intervention"|"collection", "title":"...",
+  "devices":["<id>"...], "signals":["<id>"...],
+  "observational": {"signal":"...", "direction":"lower"|"higher", "min_lag_days":1, "max_lag_days":3},
+  "intervention":  {"arm_a":"...", "arm_b":"...", "outcome_signal":"...", "better":"higher"|"lower",
+                    "period_days":6, "washout_days":2, "n_periods":12},
+  "collection":    {"instructions":"..."} }}
+```
+Parse the FIRST ```json block out of `reply`, pre-fill the create wizard from `draft_plan`, and render the rest
+of the reply as the explanation. If there's no block / it won't parse, just show the text — that's the fallback.
+Notes: the draft intentionally has **no window dates** (you fill them from the patient's data range); it only
+uses catalog signals/devices; it respects design rules; and it will never choose `intervention` for a past-only
+window (A/B is future-only, per v1.6).
+Status: OPEN
