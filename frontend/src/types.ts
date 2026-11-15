@@ -185,7 +185,11 @@ export interface ModelResult {
   kind: string
   auc: number | null
   auc_null_p: number | null
-  coefficients: { feature: string; weight: number }[]
+  /** v1.4 plain-language fields so the UI needn't show raw AUC / feature names */
+  quality?: 'strong' | 'moderate' | 'weak'
+  beats_chance?: boolean
+  plain?: string
+  coefficients: { feature: string; weight: number; label?: string }[]
   risk_tomorrow: number | null
   trained: boolean
   reason: string | null

@@ -166,6 +166,12 @@ const p2 = await createPlan('James'); await approveAndRun('James', p2)
 expect.push(['P02-JAMES observational', await clinicianVerdict(p2, '03-james'), 'Probably chance'])
 const p3 = await createPlan('Aisha', { intervention: true }); await approveAndRun('Aisha', p3)
 expect.push(['P03-AISHA A/B', await clinicianVerdict(p3, '04-aisha'), 'Likely real'])
+// Live only: the seeded phone-only patient (backend v1.4, P08-SAM). Late-night screen time precedes migraines.
+if (LIVE) {
+  const sam = 'DEMO-P08-SAM'
+  await approveAndRun('Sam', sam)
+  expect.push(['P08-SAM late-night screen time (phone only)', await clinicianVerdict(sam, '04b-sam'), 'Likely real'])
+}
 await page.evaluate(() => { location.hash = '/' }); await sleep(1500); await shot('05-overview')
 
 let failed = errors.length > 0
