@@ -9,6 +9,7 @@ import { PatientTests } from './PatientTests'
 import { PatientPlan } from './PatientPlan'
 import { CareTeam } from './CareTeam'
 import { PatientSymptoms } from './PatientSymptoms'
+import { PatientDevices } from './PatientDevices'
 
 export interface PatientData {
   patient?: Patient
@@ -44,6 +45,7 @@ export function PatientApp({ session, route, patients }: { session: Session; rou
     { label: 'Home', icon: 'grid', href: '#/', match: (r) => r.length === 0 },
     { label: 'My tests', icon: 'clipboard', href: '#/tests', badge: pending || undefined, match: (r) => r[0] === 'tests' || r[0] === 'plans' },
     { label: 'My symptoms', icon: 'heart', href: '#/symptoms', match: (r) => r[0] === 'symptoms' },
+    { label: 'My devices', icon: 'watch', href: '#/devices', match: (r) => r[0] === 'devices' },
     { label: 'Care team', icon: 'stethoscope', href: '#/care-team', match: (r) => r[0] === 'care-team' },
   ]
   const searchItems: SearchItem[] = useMemo(
@@ -55,6 +57,7 @@ export function PatientApp({ session, route, patients }: { session: Session; rou
   if (route[0] === 'plans' && route[1]) page = <PatientPlan planId={route[1]} data={data} />
   else if (route[0] === 'tests') page = <PatientTests data={data} />
   else if (route[0] === 'symptoms') page = <PatientSymptoms patientId={pid} />
+  else if (route[0] === 'devices') page = <PatientDevices patient={data.patient} />
   else if (route[0] === 'care-team') page = <CareTeam connections={data.connections} loading={connQ.loading} />
   else page = <PatientHome session={session} data={data} />
 

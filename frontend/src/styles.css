@@ -712,3 +712,24 @@ input:focus, select:focus, textarea:focus { border-color: #a9a3f5; box-shadow: 0
 .result-item-title small { font-size: 13.5px; color: #8d8d98; margin-top: 2px; }
 .result-item-body { padding: 4px 2px 18px 28px; }
 @media (max-width: 600px) { .result-item-body { padding-left: 2px; } .notes-add { flex-direction: column; align-items: stretch; } }
+/* FE-3: patient My devices (PatientDevices.tsx) */
+.dev-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
+.dev-card { display: flex; flex-direction: column; gap: 10px; padding: 16px; border: 1px solid #e5e5eb; border-radius: 14px; background: #fff; }
+.dev-card.on { border-color: #cfe9e1; background: #fbfefd; }
+.dev-card.soon { opacity: 0.7; }
+.dev-head { display: flex; align-items: center; gap: 12px; }
+.dev-head .summary-icon { margin: 0; flex: none; }
+.dev-head strong { display: block; font-size: 16.5px; color: var(--text-strong); }
+.dev-head small { display: inline-flex; align-items: center; gap: 4px; font-size: 13.5px; color: var(--green); font-weight: 600; }
+.dev-card.soon .dev-head small { color: #8d8d98; }
+.dev-signals { margin: 0; font-size: 14.5px; line-height: 1.45; color: #5d5e6b; flex: 1; }
+.dev-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.dev-flow { max-width: 540px; }
+.dev-steps { list-style: none; display: flex; gap: 6px; margin: 4px 0 18px; padding: 0; flex-wrap: wrap; }
+.dev-steps li { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px 6px 6px; border-radius: 999px; background: #f1f1f5; color: #7d7d88; font-size: 13.5px; font-weight: 600; }
+.dev-steps li b { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: #fff; font-size: 12px; }
+.dev-steps li.cur { background: var(--accent-soft); color: var(--accent-ink); }
+.dev-steps li.ok { background: var(--green-bg); color: var(--green); }
+.dev-lead { font-size: 16.5px; line-height: 1.5; color: #33333e; margin: 0 0 14px; }
+.dev-qr-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.dev-qr { width: 120px; height: 120px; display: grid; place-items: center; text-align: center; border: 2px dashed #c9c9d3; border-radius: 12px; color: #8d8d98; font-size: 12.5px; flex: none; }
