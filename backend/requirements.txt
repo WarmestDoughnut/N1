@@ -4,3 +4,4 @@ pandas
 numpy
 scikit-learn
 pytest
+psycopg2-binary   # only used when DATABASE_URL is set (Supabase Postgres)

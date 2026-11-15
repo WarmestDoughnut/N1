@@ -45,6 +45,23 @@ python -m pytest -q            # test_ground_truth.py: every demo plan -> its ex
 - `GET /api/plans/{id}/results`
 - `GET /api/schedule/preview?n_periods=12&period_days=6&washout_days=2&seed=42&start=2026-06-01`
 
+## Deployment (Vercel + container + Supabase)
+
+Architecture: **frontend → Vercel**, **this API → a container host** (Railway/Render/Fly), **data →
+Supabase Postgres**. The stats stay in Python; only the datastore moves. Everything is env-gated, so
+with no `DATABASE_URL` the app runs exactly as the local demo on `data/store.json`.
+
+1. **Supabase:** create a project, grab the Postgres connection string (Settings → Database → URI).
+   Tables are auto-created on startup (`app/persistence.py`); `db/schema.sql` is the same schema to
+   preview in the SQL editor. Static data (patients/devices/daily CSVs) stays in the repo.
+2. **Container host (Railway/Render):** build `backend/Dockerfile`. Render: use `render.yaml`
+   (Blueprint). Railway: `cd backend && railway up`. Set env `DATABASE_URL` (Supabase). Optional
+   `ALLOWED_ORIGINS`; any `*.vercel.app` origin is already allowed via regex.
+3. **Frontend (Vercel):** set `VITE_API_URL` to the container URL. Keep localhost as a 1-command backup.
+
+Check `GET /api/health` → `{"ok": true, "contract_version": "1.2", "store": "postgres"}` to confirm
+it's using Supabase. `POST /api/demo/reset` restores the seed state (demo plans + accounts/connections).
+
 ## Notes
 
 - Datasets are historical; `simulate-complete` is the "run it now" demo path.

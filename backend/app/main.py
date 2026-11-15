@@ -7,6 +7,7 @@ schedule preview, and results (the stats in app/stats.py).
 
 Run: uvicorn app.main:app --reload --port 8000
 """
+import os
 from datetime import date, timedelta
 
 from fastapi import FastAPI, Request
@@ -21,9 +22,15 @@ from app.store import Store, build_patient_summary
 CONTRACT_VERSION = "1.2"
 
 app = FastAPI(title="N1 Hub API", version=CONTRACT_VERSION)
+# Local dev by default; ALLOWED_ORIGINS (comma-separated) overrides. Any *.vercel.app deploy
+# (preview or prod) is allowed via regex so the hosted frontend works without reconfiguring.
+_origins = os.environ.get("ALLOWED_ORIGINS")
+ALLOWED_ORIGINS = ([o.strip() for o in _origins.split(",") if o.strip()]
+                   if _origins else ["http://localhost:5173", "http://127.0.0.1:5173"])
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -35,9 +42,13 @@ DEVICES = data_loader.load_devices()
 DEVICE_NAME = {d["id"]: d["name"] for d in DEVICES}
 DEVICE_SIGNALS = {d["id"]: set(d.get("signals", [])) for d in DEVICES}
 
+SEED_PLANS = data_loader.load_seed_plans(DAILY)
+for _p in SEED_PLANS:
+    _p["seeded"] = True   # mark the recorded demo plans so the wizard needn't key off the id prefix
+
 STORE = Store()
 STORE.load()
-STORE.seed(data_loader.load_seed_plans(DAILY))
+STORE.seed(SEED_PLANS)
 STORE.seed_auth(PATIENTS)
 
 # statuses in which a plan's data may be read / results exist
@@ -127,7 +138,19 @@ def _compute_results(plan, incomplete=False):
 # --------------------------------------------------------------------------- #
 @app.get("/api/health")
 def health():
-    return {"ok": True, "contract_version": CONTRACT_VERSION}
+    return {"ok": True, "contract_version": CONTRACT_VERSION, "store": STORE.backend_kind}
+
+
+@app.post("/api/demo/reset")
+def demo_reset():
+    """Restore the seed state: demo plans back to pending_approval, no extra plans/results/episodes,
+    accounts and connections back to the v1.2 seed. (Demo convenience; v1.3.)"""
+    global DAILY
+    DAILY = data_loader.load_daily()          # undo any episodes logged into the in-memory table
+    STORE.clear()
+    STORE.seed(SEED_PLANS)
+    STORE.seed_auth(PATIENTS)
+    return {"ok": True}
 
 
 @app.get("/api/devices")

@@ -140,3 +140,25 @@ Format:
 - Contract impact: additive v1.2 (`n_missing_days`, `collected_until`, documented missing/coverage rules).
 - Verified: 11 ground-truth tests pass; demo verdicts unchanged; stopped-plan cut + warnings verified via API.
 - Next: optional MDE/preview-power (#5) if we want it.
+
+### 13:20 — Supabase/Vercel migration prep (data layer) + demo reset + seeded flag
+- Done (human decision: Vercel frontend + container-hosted Python API + Supabase Postgres for data; stats stay Python):
+  - **Env-gated persistence (`app/persistence.py`):** `JsonBackend` (local, unchanged) and
+    `PostgresBackend` (used when `DATABASE_URL`/`SUPABASE_DB_URL` is set). `store.py` now round-trips a
+    single snapshot dict through the backend; all in-memory logic unchanged. Flat queryable tables for
+    accounts/connections/episodes; jsonb for plan/result bodies. Auto-creates schema on startup.
+  - **`POST /api/demo/reset`** (v1.3, frontend ask #1): wipes runtime plans/results/episodes, reloads the
+    daily table (undo logged episodes), re-seeds the 8 demo plans + v1.2 accounts/connections.
+  - **`seeded: true`** on the 8 `DEMO-*` plans (ask #2) — wizard can stop keying off the id prefix.
+  - **CORS** now reads `ALLOWED_ORIGINS` and allows any `*.vercel.app` via regex (hosted frontend works).
+  - **`GET /api/health`** now reports `"store": "json"|"postgres"`.
+  - Deploy files: `backend/Dockerfile`, `.dockerignore`, `db/schema.sql`, `render.yaml`, `.env.example`;
+    `psycopg2-binary` added to requirements (only imported when DATABASE_URL set).
+- Files: backend/app/{persistence.py,store.py,main.py}, backend/{Dockerfile,.dockerignore,.env.example,
+  requirements.txt,README.md}, backend/db/schema.sql, render.yaml
+- Contract impact: additive v1.3 (`/api/demo/reset`, `plan.seeded`, `health.store`). FYI to frontend next.
+- How to try it: local unchanged (`store:json`). With Supabase: set `DATABASE_URL`, redeploy, health shows `store:postgres`.
+- Verified: 11 ground-truth tests pass; local JSON mode identical; reset + seeded verified via API.
+  NOTE: Postgres path not yet run against a real DB — will verify the moment we have the Supabase string.
+- Next: wire Supabase string when human provides it; frontend owns Vercel deploy + VITE_API_URL + dropping the mock data source.
+- Blockers / needs: Supabase `DATABASE_URL` (from human) to validate the Postgres backend; frontend to deploy to Vercel.

@@ -1,0 +1,15 @@
+# Render blueprint for the N1 Hub Python backend (stats/API).
+# Render dashboard → New → Blueprint → pick this repo. Then set DATABASE_URL (Supabase) in the
+# service's Environment. (Railway alternative: `cd backend && railway up`, set DATABASE_URL there.)
+services:
+  - type: web
+    name: n1-hub-backend
+    runtime: docker
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL        # Supabase Postgres connection string (set in dashboard; do not commit)
+        sync: false
+      - key: ALLOWED_ORIGINS     # optional; *.vercel.app is already allowed by regex
+        sync: false

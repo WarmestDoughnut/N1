@@ -3,10 +3,11 @@ In-memory store for plans, results and logged episodes, persisted to
 `backend/data/store.json`. No DB, no auth (CLAUDE.md §4). Seeded from the demo data
 on first run. Enforces the plan status machine from CONTRACT §4.
 """
-import json
 import os
 import threading
 from datetime import datetime
+
+from app import persistence
 
 HERE = os.path.dirname(__file__)
 STORE_PATH = os.path.abspath(os.path.join(HERE, "..", "data", "store.json"))
@@ -65,13 +66,25 @@ class Store:
         self.connections = {} # conn_id -> connection dict (v1.2)
         self._counter = 0
         self._conn_counter = 0
+        # JSON file locally, Supabase Postgres when DATABASE_URL is set (see app/persistence.py)
+        self._backend = persistence.get_backend(STORE_PATH)
+
+    @property
+    def backend_kind(self):
+        return self._backend.kind
+
+    def _snapshot(self):
+        return {
+            "plans": self.plans, "results": self.results, "episodes": self.episodes,
+            "accounts": self.accounts, "connections": self.connections,
+            "counter": self._counter, "conn_counter": self._conn_counter,
+        }
 
     # ----- persistence -----
     def load(self):
-        if not os.path.exists(STORE_PATH):
+        data = self._backend.load()
+        if data is None:
             return False
-        with open(STORE_PATH) as f:
-            data = json.load(f)
         self.plans = data.get("plans", {})
         self.results = data.get("results", {})
         self.episodes = data.get("episodes", [])
@@ -82,16 +95,19 @@ class Store:
         return True
 
     def save(self):
-        os.makedirs(os.path.dirname(STORE_PATH), exist_ok=True)
-        tmp = STORE_PATH + ".tmp"
-        with open(tmp, "w") as f:
-            json.dump({
-                "plans": self.plans, "results": self.results,
-                "episodes": self.episodes, "accounts": self.accounts,
-                "connections": self.connections,
-                "counter": self._counter, "conn_counter": self._conn_counter,
-            }, f, indent=2)
-        os.replace(tmp, STORE_PATH)
+        self._backend.save(self._snapshot())
+
+    def clear(self):
+        """Wipe all runtime state (for POST /api/demo/reset). Caller re-seeds afterwards."""
+        with self._lock:
+            self.plans = {}
+            self.results = {}
+            self.episodes = []
+            self.accounts = {}
+            self.connections = {}
+            self._counter = 0
+            self._conn_counter = 0
+            self.save()
 
     # ----- seeding -----
     def seed(self, seed_plans):
