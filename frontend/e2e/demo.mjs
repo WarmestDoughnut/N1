@@ -69,7 +69,7 @@ async function createPlan(patient, { intervention = false, grayOutDemo = false }
     console.log('✓ iPhone only → Sleep grayed out')
     await shot('01-grayed')
     await click('Back'); await click('Fitbit', '.option'); await click('Next')
-    const sel = await page.evaluate(() => [...document.querySelectorAll('.option.selected .title')].map((e) => e.textContent))
+    const sel = await page.evaluate(() => [...document.querySelectorAll('.option:not(.unavailable) .title')].map((e) => e.textContent))
     if (!sel.includes('Sleep')) throw new Error('Sleep should unlock after adding Fitbit')
     console.log('✓ add Fitbit → Sleep unlocks')
   } else await click('Next')
@@ -79,6 +79,15 @@ async function createPlan(patient, { intervention = false, grayOutDemo = false }
     // Live demo data follows a recorded schedule; use it when offered (sample mode has none).
     const rec = await page.evaluate(() => !![...document.querySelectorAll('button')].find((b) => b.textContent.includes('Use recorded schedule')))
     if (rec) { await click('Use recorded schedule'); await sleep(300); console.log('✓ used the recorded A/B schedule') }
+    else {
+      // Nothing is pre-filled: choose the outcome and name both options (slot 1 opens by itself).
+      await click('Sleep', '.td-editor .td-chip'); await click('higher', '.td-editor .seg button'); await click('Done')
+      await click('What you are trying', '.td-slot')
+      await page.type('#b', 'Melatonin 3mg'); await page.type('#a', 'No melatonin'); await click('Done')
+    }
+  } else {
+    // Pattern test: nothing is pre-filled. Pick the signal and the direction (slot 2 opens by itself).
+    await click('Sleep', '.td-chip'); await click('lower', '.td-editor .seg button'); await click('Done')
   }
   await click('Next'); await click('Send to patient'); await sleep(700)
   return planIdFromUrl()
