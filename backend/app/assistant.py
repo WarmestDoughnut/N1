@@ -22,7 +22,9 @@ import os
 PROVIDER = os.environ.get("ASSISTANT_PROVIDER", "anthropic_api")  # "anthropic_api" | "agent_sdk"
 MODEL = os.environ.get("ASSISTANT_MODEL", "claude-sonnet-4-6")
 MAX_TOKENS = 700
-TEMPERATURE = 0.2   # low: we want consistent, grounded answers, not creativity
+# Note: we deliberately do NOT pass `temperature`. The current anthropic SDK / model era
+# removed sampling params from messages.create() (passing one raises TypeError / 400).
+# We get consistent, grounded answers from the strict system prompt instead.
 
 
 def _credential_present():
@@ -141,7 +143,7 @@ def answer(messages, devices_catalog, capabilities):
         from anthropic import Anthropic           # lazy: only needed when enabled
         client = Anthropic()                      # reads ANTHROPIC_API_KEY from env
         resp = client.messages.create(model=MODEL, system=system, max_tokens=MAX_TOKENS,
-                                       temperature=TEMPERATURE, messages=clean)
+                                       messages=clean)
         return "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
 
     if PROVIDER == "agent_sdk":
