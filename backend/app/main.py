@@ -201,7 +201,8 @@ def _compute_results(plan, incomplete=False):
 @app.get("/api/health")
 def health():
     return {"ok": True, "contract_version": CONTRACT_VERSION, "store": STORE.backend_kind,
-            "assistant_enabled": assistant_mod.is_enabled()}
+            "assistant_enabled": assistant_mod.is_enabled(),
+            "assistant": assistant_mod.status()}
 
 
 @app.post("/api/assistant")

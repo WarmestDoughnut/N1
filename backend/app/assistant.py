@@ -32,11 +32,19 @@ def _credential_present():
     return bool(os.environ.get("ANTHROPIC_API_KEY"))
 
 
+def _flag_on():
+    return os.environ.get("ASSISTANT_ENABLED", "false").lower() in ("1", "true", "yes")
+
+
 def is_enabled():
     """Master gate + kill switch. False => endpoint should 503 and the frontend should hide the widget."""
-    if os.environ.get("ASSISTANT_ENABLED", "false").lower() not in ("1", "true", "yes"):
-        return False
-    return _credential_present()
+    return _flag_on() and _credential_present()
+
+
+def status():
+    """Non-secret diagnostic for /api/health: which gate is satisfied (never the key itself)."""
+    return {"enabled": is_enabled(), "flag": _flag_on(),
+            "credential": _credential_present(), "provider": PROVIDER}
 
 
 # --------------------------------------------------------------------------- #
