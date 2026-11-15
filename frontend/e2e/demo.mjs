@@ -84,10 +84,15 @@ async function createPlan(patient, { intervention = false, grayOutDemo = false }
       await click('Sleep', '.td-editor .td-chip'); await click('higher', '.td-editor .seg button'); await click('Done')
       await click('What you are trying', '.td-slot')
       await page.type('#b', 'Melatonin 3mg'); await page.type('#a', 'No melatonin'); await click('Done')
+      await click('How it alternates', '.td-slot')
+      await page.type('[aria-label="Days per period"]', '6'); await page.type('[aria-label="Break days"]', '2'); await click('Done')
+      await click('How long', '.td-slot'); await click('Standard', '.td-preset'); await click('Done'); await sleep(600)
     }
   } else {
     // Pattern test: nothing is pre-filled. Pick the signal and the direction (slot 2 opens by itself).
     await click('Sleep', '.td-chip'); await click('lower', '.td-editor .seg button'); await click('Done')
+    await click('How far back', '.td-slot'); await page.type('[aria-label="Last day of the range"]', '3'); await click('Done')
+    await click('Over what dates', '.td-slot'); await click('Use all', 'button'); await click('Done')
   }
   await click('Next'); await click('Send to patient'); await sleep(700)
   return planIdFromUrl()
