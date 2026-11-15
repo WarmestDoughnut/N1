@@ -188,3 +188,20 @@ Format:
 - Contract impact: v1.4 (additive). health.contract_version now 1.4.
 - Verified: pytest 11/11; API 422 on bad lag range; valid range 2..7 → likely_real lag 2; catalog lists new signals.
 - Next: push auto-redeploys Railway + Vercel; then optional MDE / capability-gate enforcement / post-freeze data plant.
+
+### 14:55 — P08-SAM: screen-time data plant (equity beat) + screen cols on all synthetic patients
+- Done: Added `screen_time_min` + `late_screen_min` to P01–P07 as a null control (appended via an
+  independent RNG — existing columns' values untouched, so all prior verdicts are identical). Created
+  new phone-only patient **P08-SAM** (17, migraine, iPhone only) with a planted late-night screen spike
+  1–2 days before migraines → `DEMO-P08-SAM` observational (late_screen_min/higher) = **likely_real,
+  lag 1** (risk model AUC 0.909). screen_time (total) is correctly `probably_chance` (only late-night
+  matters); P01 screen_time null control = `probably_chance`. REAL-P07 deliberately gets NO screen data
+  (PMData has none) → gate shows "no data yet". Seeded account `sam@n1hub.demo` + Rivera↔Sam connection.
+  Equity story: a phone-only patient who DOES get a real answer, next to Grace's honest not_enough_data.
+- Files: backend/data/synthetic/{daily/*.csv (+P08-SAM.csv), patients.json, demo_plans.json, ground_truth.json},
+  backend/app/store.py (Rivera↔Sam), shared/fixtures/{patients,devices}.json
+- Contract impact: none beyond v1.4 signals (already documented). ground-truth tests now 12/12.
+- Verified: pytest 12/12 (existing 11 unchanged + P08); local JSON-mode API: Sam patient/account/connection,
+  simulate → likely_real lag 1. Did NOT touch the shared Supabase DB (used DATABASE_URL="" locally).
+- Next: HOLDING the push until the two usability agents finish their live runs (a Railway redeploy would
+  interrupt them). After they report: push → Railway redeploys with P08 → reset Supabase to reseed incl Sam.

@@ -58,5 +58,16 @@
       "DEMO-P07-GRACE": "not_enough_data"
     },
     "showcases": "sufficiency check; device selector greys out sleep/HR for phone-only; equity (works with what she has, tells you what's missing)"
+  },
+  "P08-SAM": {
+    "planted": "late_screen_min +85 at lag1, +45 at lag2 before 12 migraines; phone-only (iPhone)",
+    "expected": {
+      "DEMO-P08-SAM": "likely_real",
+      "best_lag_days": 1
+    },
+    "also_try": {
+      "screen_time_min/higher": "probably_chance (only late-night screen matters, not total)"
+    },
+    "showcases": "phone-only patient who gets a REAL answer (equity beat alongside Grace's not_enough_data); screen time as a universal phone signal"
   }
 }

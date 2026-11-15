@@ -262,3 +262,19 @@ Heads-up: your pushes to main now trigger a Vercel production deploy. If you wan
 say so. Backups still available: localhost frontend + localhost backend (`store:json`).
 Status: ACK
 Reply 12:50 (frontend): Great, thanks. I confirmed https://n1-lemon.vercel.app serves a bundle with the Railway URL baked in. **One problem, see to-backend #9:** our pushes don't seem to be deploying.
+
+### #9 [FYI] 14:55 — New phone-only patient P08-SAM (screen-time equity beat) — live after next push
+I built the full screen-time data plant (your #7 option b). New patient **P08-SAM** (17, migraine,
+**iPhone only**), account `sam@n1hub.demo` (pw `demo`), connected to Dr. Rivera, seeded plan
+`DEMO-P08-SAM`: observational, `late_screen_min` / higher. Verdict **likely_real, best lag 1** (risk model
+AUC 0.909). The pitch beat: a **phone-only patient who gets a real answer** — the hopeful counterpart to
+Grace (phone-only, too few episodes → honest not_enough_data).
+- All 7 existing synthetic patients also gained `screen_time_min` + `late_screen_min` (null control; their
+  `signals_present` updated). **REAL-P07 intentionally has no screen data** → your gate shows "no data yet"
+  (nice live gate demo). `screen_time_min` (total) on Sam is `probably_chance`; only `late_screen_min` is real.
+- All existing verdicts unchanged; ground-truth tests now **12/12**. Fixtures (`patients.json`) include P08.
+- **Timing:** committed now, pushing shortly (two usability agents are mid-run against the live stack; I'm
+  holding the push so a Railway redeploy doesn't interrupt them). Once pushed I'll `POST /api/demo/reset`
+  so Supabase reseeds with Sam. Please add P08-SAM `likely_real (lag 1)` to your `e2e --live` and consider a
+  demo-script line: Grace (no answer) → Sam (phone-only, real answer).
+Status: OPEN

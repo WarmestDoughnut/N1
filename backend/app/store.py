@@ -184,7 +184,7 @@ class Store:
     ]
     # active clinician<->patient links; plus one pending request from a patient (Leo -> Rivera)
     _ACTIVE = [
-        ("acct-rivera", ["P01-MARIA", "P02-JAMES", "P03-AISHA", "P04-ROBERT", "P07-GRACE", "REAL-P07"]),
+        ("acct-rivera", ["P01-MARIA", "P02-JAMES", "P03-AISHA", "P04-ROBERT", "P07-GRACE", "P08-SAM", "REAL-P07"]),
         ("acct-okafor", ["P01-MARIA", "P05-DANA", "P06-LEO"]),
     ]
     _PENDING = [("acct-rivera", "P06-LEO")]   # requested_by patient

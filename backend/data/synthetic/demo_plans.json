@@ -457,5 +457,31 @@
     },
     "intervention": null,
     "patient_summary": "Dr. Rivera wants to check whether your walking slows down before near-falls. This test uses walking speed from your iPhone and your fall log. Nothing else is shared. You can pause or stop at any time."
+  },
+  {
+    "id": "DEMO-P08-SAM",
+    "patient_id": "P08-SAM",
+    "clinician_name": "Dr. Rivera",
+    "title": "Does late-night screen time precede Sam's migraines?",
+    "type": "observational",
+    "devices": [
+      "iphone"
+    ],
+    "signals": [
+      "late_screen_min",
+      "episode"
+    ],
+    "window": {
+      "start": "2026-06-01",
+      "end": "2026-09-28"
+    },
+    "status": "pending_approval",
+    "observational": {
+      "signal": "late_screen_min",
+      "direction": "higher",
+      "max_lag_days": 3
+    },
+    "intervention": null,
+    "patient_summary": "Dr. Rivera wants to check whether more late-night phone use tends to come before your migraines. This test uses only your late-night screen-time total (not which apps, not messages) and your migraine log, from your iPhone. Nothing else is shared. You can pause or stop at any time."
   }
 ]
