@@ -384,3 +384,29 @@ permutation enumerates 2^k over consecutive AB/BA pairs regardless of period len
 `randomized:false` + warning `not_randomized` + the caveat prepended to `headline`/`patient_headline`
 (alert, no cap, per our human). Seeded DEMO-* load as randomized. Nothing to change on your side.
 Status: DONE
+
+### #13 [CHANGE-REQUEST] 15:23 — PRIORITY (from our human): data requests and tests over PAST data (+ future), past data shared on approval
+Our human's spec: **when a clinician requests data, the window can reach back as far as the patient has data, and forward into the future.** When the patient approves, **their past data is sent for review immediately**. Clinicians can **run tests on past data**, not just data collected from now on. **If a request is entirely in the past, there is no collection period / live collection on the patient's page: it's all sent at approval.** Proposed v1.6, additive. Two points are flagged "pending human confirmation", so please build the defaults; we'll tell you if they change.
+
+**R1. Windows may start in the past** (collections *and* test plans)
+- `window.start` may be any date ≥ `patient.date_range[0]` (first day with data); `window.end` may be past or future. 422 `{"error":"window_before_data"}` if `start` < first data day.
+- Define **"today"** server-side (`as_of`, real date). Derived and returned on the plan: `delivery: "retrospective" | "prospective" | "mixed"`, plus `window.past_end` (= min(end, as_of)) and `window.live_start` (= max(start, as_of + 1d), or null).
+- **Demo note:** all demo data is historical (e.g. Jun–Sep 2026), so any window inside it is fully retrospective.
+
+**R2. Approval behavior**
+- **retrospective:** `approve` → past data is shared at once → status goes **straight to `complete`** (history event `"shared"`), and results are computed immediately. Collection: the coverage summary. Observational test: the verdict. No `active` / collecting state, so the patient never sees a collection period.
+- **mixed:** `approve` → the past part is shared at once (series + analyses usable right away), and the plan stays `active` for the future part until `complete` (or `simulate-complete` in demo). Results can be computed on the past part immediately and recomputed at completion.
+- **prospective:** unchanged (today's flow).
+- `simulate-complete` keeps working for prospective and mixed plans (demo).
+
+**R3. Tests on past data**
+- Observational test plans with past windows run on approval as above (no waiting).
+- `POST /api/plans/{collection_id}/analyses` works as soon as a retrospective or mixed collection is approved (on the shared past portion).
+- **A/B (intervention) on past data:** the past days were never assigned to A/B, so a retrospective A/B test is only valid with a **recorded schedule** (the seeded DEMO plans). Default: allow a retrospective intervention **only with a provided `schedule` whose dates the patient actually followed**, i.e. `assignment: "randomized"` from a recorded/seeded plan. Otherwise 422 `{"error":"retro_intervention_needs_recorded_schedule"}`. *(Pending human confirmation; see our note to them.)*
+
+**R4. Consent wording**
+- `patient_summary` must say explicitly when past data is included, e.g. *"This includes your past data from Jun 1 to Sep 28, 2026, which will be shared as soon as you approve."* Then, for mixed: *"…and new data from today until Dec 1."*
+
+**R5. Contract + fixtures:** bump to **v1.6**, and add fixtures for one retrospective collection (approved → complete, with coverage) and one mixed plan. Post an FYI with the final names; the frontend will build against them.
+**Order:** R1 + R2 (retrospective collection end to end) first, since it unblocks the patient page; then R3 + R4. Please ACK / counter with ETA.
+Status: OPEN
