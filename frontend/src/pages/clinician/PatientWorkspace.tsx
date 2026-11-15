@@ -7,7 +7,7 @@ import { StatusChip } from '../../components/Verdict'
 import { formatDate, signalLabel, ALL_SIGNALS } from '../../lib/util'
 import type { ClinicianData } from './ClinicianApp'
 import { PlanDetail } from './PlanDetail'
-import { PlanWizard } from './PlanWizard'
+import { PlanWizard } from '../../components/PlanWizard'
 import { NotesPanel } from '../../components/NotesPanel'
 import { ReviewBox } from '../../components/ReviewBox'
 import { useAsync } from '../../lib/hooks'
@@ -78,8 +78,8 @@ export function PatientWorkspace({ patient, data, catalog, tab: rawTab, sub }: {
         {tab === 'collection' && <ComingSoon icon="watch" title="Data collection" body="Collection plans for this patient, and the tests run on the data they gather, will appear here." />}
         {tab === 'data' && <ComingSoon icon="activity" title="Data & graphs" body="Charts of this patient's consented signals and logged symptoms will appear here." />}
         {tab === 'new' && (sub === 'test'
-          ? <PlanWizard patients={[patient]} />
-          : <NewTab patient={patient} base={base} />)}
+          ? <PlanWizard patient={patient} kind="test" onDone={(id) => navigate(`${base}/tests/${encodeURIComponent(id)}`)} />
+          : <NewTab base={base} />)}
       </div>
     </>
   )
@@ -199,7 +199,7 @@ function OpenTest({ planId, base, data }: { planId: string; base: string; data: 
       <PlanDetail planId={planId} data={data} />
       <div className="bottom-grid mt">
         <NotesPanel planId={planId} role="clinician" />
-        {data.results[planId] ? <ReviewBox key={planId} planId={planId} results={data.results[planId]} /> : <span />}
+        {data.results[planId] ? <ReviewBox key={planId} planId={planId} results={data.results[planId]} onChange={() => data.reload()} /> : <span />}
       </div>
     </>
   )
@@ -207,10 +207,10 @@ function OpenTest({ planId, base, data }: { planId: string; base: string; data: 
 
 // ---------- New tab ----------
 
-function NewTab({ patient, base }: { patient: Patient; base: string }) {
+function NewTab({ base }: { base: string }) {
   return (
     <section className="ws-new">
-      <button className="ws-new-card" onClick={() => navigate(`${base}/new/test?patient=${encodeURIComponent(patient.id)}`)}>
+      <button className="ws-new-card" onClick={() => navigate(`${base}/new/test`)}>
         <span className="summary-icon tone-purple"><Icon name="flask" /></span>
         <strong>New test</strong>
         <small>Check a pattern before episodes, or compare two options (A/B).</small>

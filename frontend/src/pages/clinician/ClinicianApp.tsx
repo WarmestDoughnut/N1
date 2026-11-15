@@ -22,6 +22,8 @@ export interface ClinicianData {
   /** connections have loaded, so `patients` is the real scoped list (not the empty pre-load one) */
   ready: boolean
   error: string | null
+  /** refetch plans and results, e.g. after a result is marked reviewed */
+  reload: () => void
 }
 
 /** Loads plans + results once for the whole clinician app; refetches after any write. */
@@ -45,7 +47,7 @@ function useClinicianData(patients: Patient[]): ClinicianData {
   return {
     patients: scoped, plans: scopedPlans, results, connections,
     requests: connections.filter((c) => c.status === 'pending' && c.requested_by === 'patient'),
-    loading: plansQ.loading && !plansQ.data, ready: !!connQ.data, error: plansQ.error ?? connQ.error,
+    loading: plansQ.loading && !plansQ.data, ready: !!connQ.data, error: plansQ.error ?? connQ.error, reload: plansQ.reload,
   }
 }
 

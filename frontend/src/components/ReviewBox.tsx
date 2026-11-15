@@ -14,7 +14,9 @@ export function ReviewBox({ planId, results, onChange }: { planId: string; resul
     setBusy(kind); setErr(null)
     try {
       const next = kind === 'comment' ? await v15.comment(planId, text.trim()) : await v15.markReviewed(planId)
-      setR(next); onChange?.(next)
+      // review returns only {ok, reviewed_at}; comment returns the whole result. Merge either onto what we have.
+      const merged = { ...r, ...next } as ResultsV15
+      setR(merged); onChange?.(merged)
     } catch {
       // The mock has no store for these yet, and a v1.4 server answers 404.
       setErr(kind === 'comment' ? "Comments can't be saved on this server yet." : "Review status can't be saved on this server yet.")
