@@ -1,0 +1,62 @@
+{
+  "P01-MARIA": {
+    "planted": "sleep -55 min at lag1, -75 min at lag2; hrv -6 ms at lag1-2; steps -2200 on episode days",
+    "expected": {
+      "DEMO-P01-MARIA": "likely_real",
+      "best_lag_days": 2
+    },
+    "also_try": {
+      "hrv/lower": "likely_real",
+      "resting_hr/higher": "probably_chance (nothing planted)",
+      "steps/lower": "probably_chance: steps drop ON migraine days, not before (symptom, not warning sign)"
+    },
+    "showcases": "core observational test, lag scan, equity (older adult, recall bias)"
+  },
+  "P02-JAMES": {
+    "planted": "nothing (episodes independent of all signals)",
+    "expected": {
+      "DEMO-P02-JAMES": "probably_chance"
+    },
+    "showcases": "the tool can say NO; protects against confirmation bias"
+  },
+  "P03-AISHA": {
+    "planted": "+45 min sleep on B (melatonin) days (strong individual responder); washout days unaffected",
+    "expected": {
+      "DEMO-P03-AISHA": "likely_real"
+    },
+    "showcases": "n-of-1 trial: randomized AB/BA blocks with washout (Lillie et al. 2011)"
+  },
+  "P04-ROBERT": {
+    "planted": "nothing (dose timing has no effect on systolic_bp)",
+    "expected": {
+      "DEMO-P04-ROBERT": "probably_chance"
+    },
+    "showcases": "intervention that doesn't help is correctly identified; emerging cuffless BP sensing"
+  },
+  "P05-DANA": {
+    "planted": "+9 points glucose time-in-range and +2400 steps on B days",
+    "expected": {
+      "DEMO-P05-DANA": "likely_real"
+    },
+    "showcases": "multi-device fusion (CGM + Fitbit); lifestyle intervention; steps confirm adherence"
+  },
+  "P06-LEO": {
+    "planted": "sleep -95/-80/-50 min at lag 1/2/3; steps +2500 at lag1-3, +3500 on episode day",
+    "expected": {
+      "DEMO-P06-LEO": "likely_real",
+      "best_lag_days": "1-2 (near-identical effect)"
+    },
+    "also_try": {
+      "steps/higher": "likely_real (lag 3)",
+      "resting_hr/higher": "probably_chance"
+    },
+    "showcases": "early-warning lag profile; smart ring; patient-controlled consent"
+  },
+  "P07-GRACE": {
+    "planted": "walking_speed -0.06 m/s 1-2 days before 3 near-falls (too few to test)",
+    "expected": {
+      "DEMO-P07-GRACE": "not_enough_data"
+    },
+    "showcases": "sufficiency check; device selector greys out sleep/HR for phone-only; equity (works with what she has, tells you what's missing)"
+  }
+}

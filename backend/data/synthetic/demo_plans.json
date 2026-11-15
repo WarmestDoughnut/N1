@@ -1,0 +1,461 @@
+[
+  {
+    "id": "DEMO-P01-MARIA",
+    "patient_id": "P01-MARIA",
+    "clinician_name": "Dr. Rivera",
+    "title": "Does short sleep precede Maria's migraines?",
+    "type": "observational",
+    "devices": [
+      "iphone",
+      "fitbit"
+    ],
+    "signals": [
+      "sleep_min",
+      "episode"
+    ],
+    "window": {
+      "start": "2026-06-01",
+      "end": "2026-09-28"
+    },
+    "status": "pending_approval",
+    "observational": {
+      "signal": "sleep_min",
+      "direction": "lower",
+      "max_lag_days": 3
+    },
+    "intervention": null,
+    "patient_summary": "Dr. Rivera wants to check whether shorter sleep tends to come before your migraines. This test uses sleep from your Fitbit and your migraine log. Nothing else is shared. You can pause or stop at any time."
+  },
+  {
+    "id": "DEMO-P02-JAMES",
+    "patient_id": "P02-JAMES",
+    "clinician_name": "Dr. Rivera",
+    "title": "Does short sleep precede James's headaches?",
+    "type": "observational",
+    "devices": [
+      "iphone",
+      "apple_watch"
+    ],
+    "signals": [
+      "sleep_min",
+      "episode"
+    ],
+    "window": {
+      "start": "2026-06-01",
+      "end": "2026-09-28"
+    },
+    "status": "pending_approval",
+    "observational": {
+      "signal": "sleep_min",
+      "direction": "lower",
+      "max_lag_days": 3
+    },
+    "intervention": null,
+    "patient_summary": "Dr. Rivera wants to check whether shorter sleep tends to come before your headaches. This test uses sleep from your Apple Watch and your headache log. Nothing else is shared. You can pause or stop at any time."
+  },
+  {
+    "id": "DEMO-P03-AISHA",
+    "patient_id": "P03-AISHA",
+    "clinician_name": "Dr. Rivera",
+    "title": "Does melatonin improve Aisha's sleep?",
+    "type": "intervention",
+    "devices": [
+      "iphone",
+      "apple_watch"
+    ],
+    "signals": [
+      "sleep_min"
+    ],
+    "window": {
+      "start": "2026-06-08",
+      "end": "2026-09-11"
+    },
+    "status": "pending_approval",
+    "observational": null,
+    "intervention": {
+      "arm_a": "No melatonin",
+      "arm_b": "Melatonin 3 mg",
+      "outcome_signal": "sleep_min",
+      "better": "higher",
+      "period_days": 6,
+      "washout_days": 2,
+      "n_periods": 12,
+      "seed": 2026,
+      "schedule": [
+        {
+          "period": 1,
+          "arm": "A",
+          "start": "2026-06-08",
+          "end": "2026-06-13",
+          "washout_end": "2026-06-15"
+        },
+        {
+          "period": 2,
+          "arm": "B",
+          "start": "2026-06-16",
+          "end": "2026-06-21",
+          "washout_end": "2026-06-23"
+        },
+        {
+          "period": 3,
+          "arm": "B",
+          "start": "2026-06-24",
+          "end": "2026-06-29",
+          "washout_end": "2026-07-01"
+        },
+        {
+          "period": 4,
+          "arm": "A",
+          "start": "2026-07-02",
+          "end": "2026-07-07",
+          "washout_end": "2026-07-09"
+        },
+        {
+          "period": 5,
+          "arm": "A",
+          "start": "2026-07-10",
+          "end": "2026-07-15",
+          "washout_end": "2026-07-17"
+        },
+        {
+          "period": 6,
+          "arm": "B",
+          "start": "2026-07-18",
+          "end": "2026-07-23",
+          "washout_end": "2026-07-25"
+        },
+        {
+          "period": 7,
+          "arm": "B",
+          "start": "2026-07-26",
+          "end": "2026-07-31",
+          "washout_end": "2026-08-02"
+        },
+        {
+          "period": 8,
+          "arm": "A",
+          "start": "2026-08-03",
+          "end": "2026-08-08",
+          "washout_end": "2026-08-10"
+        },
+        {
+          "period": 9,
+          "arm": "A",
+          "start": "2026-08-11",
+          "end": "2026-08-16",
+          "washout_end": "2026-08-18"
+        },
+        {
+          "period": 10,
+          "arm": "B",
+          "start": "2026-08-19",
+          "end": "2026-08-24",
+          "washout_end": "2026-08-26"
+        },
+        {
+          "period": 11,
+          "arm": "A",
+          "start": "2026-08-27",
+          "end": "2026-09-01",
+          "washout_end": "2026-09-03"
+        },
+        {
+          "period": 12,
+          "arm": "B",
+          "start": "2026-09-04",
+          "end": "2026-09-09",
+          "washout_end": "2026-09-11"
+        }
+      ]
+    },
+    "patient_summary": "Dr. Rivera suggests a 14-week test: on some weeks you take melatonin and on others you don't, in a random order. This test uses only sleep from your Apple Watch. You can pause or stop at any time."
+  },
+  {
+    "id": "DEMO-P04-ROBERT",
+    "patient_id": "P04-ROBERT",
+    "clinician_name": "Dr. Rivera",
+    "title": "Evening vs morning dosing: Robert's blood pressure",
+    "type": "intervention",
+    "devices": [
+      "iphone",
+      "bp_wearable"
+    ],
+    "signals": [
+      "systolic_bp"
+    ],
+    "window": {
+      "start": "2026-06-08",
+      "end": "2026-09-11"
+    },
+    "status": "pending_approval",
+    "observational": null,
+    "intervention": {
+      "arm_a": "Morning dose",
+      "arm_b": "Evening dose",
+      "outcome_signal": "systolic_bp",
+      "better": "lower",
+      "period_days": 6,
+      "washout_days": 2,
+      "n_periods": 12,
+      "seed": 2026,
+      "schedule": [
+        {
+          "period": 1,
+          "arm": "A",
+          "start": "2026-06-08",
+          "end": "2026-06-13",
+          "washout_end": "2026-06-15"
+        },
+        {
+          "period": 2,
+          "arm": "B",
+          "start": "2026-06-16",
+          "end": "2026-06-21",
+          "washout_end": "2026-06-23"
+        },
+        {
+          "period": 3,
+          "arm": "A",
+          "start": "2026-06-24",
+          "end": "2026-06-29",
+          "washout_end": "2026-07-01"
+        },
+        {
+          "period": 4,
+          "arm": "B",
+          "start": "2026-07-02",
+          "end": "2026-07-07",
+          "washout_end": "2026-07-09"
+        },
+        {
+          "period": 5,
+          "arm": "B",
+          "start": "2026-07-10",
+          "end": "2026-07-15",
+          "washout_end": "2026-07-17"
+        },
+        {
+          "period": 6,
+          "arm": "A",
+          "start": "2026-07-18",
+          "end": "2026-07-23",
+          "washout_end": "2026-07-25"
+        },
+        {
+          "period": 7,
+          "arm": "A",
+          "start": "2026-07-26",
+          "end": "2026-07-31",
+          "washout_end": "2026-08-02"
+        },
+        {
+          "period": 8,
+          "arm": "B",
+          "start": "2026-08-03",
+          "end": "2026-08-08",
+          "washout_end": "2026-08-10"
+        },
+        {
+          "period": 9,
+          "arm": "B",
+          "start": "2026-08-11",
+          "end": "2026-08-16",
+          "washout_end": "2026-08-18"
+        },
+        {
+          "period": 10,
+          "arm": "A",
+          "start": "2026-08-19",
+          "end": "2026-08-24",
+          "washout_end": "2026-08-26"
+        },
+        {
+          "period": 11,
+          "arm": "B",
+          "start": "2026-08-27",
+          "end": "2026-09-01",
+          "washout_end": "2026-09-03"
+        },
+        {
+          "period": 12,
+          "arm": "A",
+          "start": "2026-09-04",
+          "end": "2026-09-09",
+          "washout_end": "2026-09-11"
+        }
+      ]
+    },
+    "patient_summary": "Dr. Rivera suggests alternating the time you take your blood pressure pill week by week, in a random order. This test uses only blood pressure from your wrist monitor. You can pause or stop at any time."
+  },
+  {
+    "id": "DEMO-P05-DANA",
+    "patient_id": "P05-DANA",
+    "clinician_name": "Dr. Rivera",
+    "title": "Does a post-dinner walk improve Dana's glucose time-in-range?",
+    "type": "intervention",
+    "devices": [
+      "iphone",
+      "fitbit",
+      "cgm"
+    ],
+    "signals": [
+      "glucose_tir"
+    ],
+    "window": {
+      "start": "2026-06-08",
+      "end": "2026-09-11"
+    },
+    "status": "pending_approval",
+    "observational": null,
+    "intervention": {
+      "arm_a": "Usual evening",
+      "arm_b": "15-min walk after dinner",
+      "outcome_signal": "glucose_tir",
+      "better": "higher",
+      "period_days": 6,
+      "washout_days": 2,
+      "n_periods": 12,
+      "seed": 2026,
+      "schedule": [
+        {
+          "period": 1,
+          "arm": "A",
+          "start": "2026-06-08",
+          "end": "2026-06-13",
+          "washout_end": "2026-06-15"
+        },
+        {
+          "period": 2,
+          "arm": "B",
+          "start": "2026-06-16",
+          "end": "2026-06-21",
+          "washout_end": "2026-06-23"
+        },
+        {
+          "period": 3,
+          "arm": "B",
+          "start": "2026-06-24",
+          "end": "2026-06-29",
+          "washout_end": "2026-07-01"
+        },
+        {
+          "period": 4,
+          "arm": "A",
+          "start": "2026-07-02",
+          "end": "2026-07-07",
+          "washout_end": "2026-07-09"
+        },
+        {
+          "period": 5,
+          "arm": "B",
+          "start": "2026-07-10",
+          "end": "2026-07-15",
+          "washout_end": "2026-07-17"
+        },
+        {
+          "period": 6,
+          "arm": "A",
+          "start": "2026-07-18",
+          "end": "2026-07-23",
+          "washout_end": "2026-07-25"
+        },
+        {
+          "period": 7,
+          "arm": "B",
+          "start": "2026-07-26",
+          "end": "2026-07-31",
+          "washout_end": "2026-08-02"
+        },
+        {
+          "period": 8,
+          "arm": "A",
+          "start": "2026-08-03",
+          "end": "2026-08-08",
+          "washout_end": "2026-08-10"
+        },
+        {
+          "period": 9,
+          "arm": "B",
+          "start": "2026-08-11",
+          "end": "2026-08-16",
+          "washout_end": "2026-08-18"
+        },
+        {
+          "period": 10,
+          "arm": "A",
+          "start": "2026-08-19",
+          "end": "2026-08-24",
+          "washout_end": "2026-08-26"
+        },
+        {
+          "period": 11,
+          "arm": "A",
+          "start": "2026-08-27",
+          "end": "2026-09-01",
+          "washout_end": "2026-09-03"
+        },
+        {
+          "period": 12,
+          "arm": "B",
+          "start": "2026-09-04",
+          "end": "2026-09-09",
+          "washout_end": "2026-09-11"
+        }
+      ]
+    },
+    "patient_summary": "Dr. Rivera suggests alternating weeks with and without a short walk after dinner, in a random order. This test uses only time-in-range from your glucose monitor. You can pause or stop at any time."
+  },
+  {
+    "id": "DEMO-P06-LEO",
+    "patient_id": "P06-LEO",
+    "clinician_name": "Dr. Rivera",
+    "title": "Does reduced sleep precede Leo's hypomanic episodes?",
+    "type": "observational",
+    "devices": [
+      "iphone",
+      "smart_ring"
+    ],
+    "signals": [
+      "sleep_min",
+      "episode"
+    ],
+    "window": {
+      "start": "2026-06-01",
+      "end": "2026-09-28"
+    },
+    "status": "pending_approval",
+    "observational": {
+      "signal": "sleep_min",
+      "direction": "lower",
+      "max_lag_days": 3
+    },
+    "intervention": null,
+    "patient_summary": "Your psychiatrist wants to check whether shorter sleep comes before your episodes, using sleep from your ring and your episode log. Nothing else is shared. You can pause or stop at any time."
+  },
+  {
+    "id": "DEMO-P07-GRACE",
+    "patient_id": "P07-GRACE",
+    "clinician_name": "Dr. Rivera",
+    "title": "Does slower walking precede Grace's near-falls?",
+    "type": "observational",
+    "devices": [
+      "iphone"
+    ],
+    "signals": [
+      "walking_speed",
+      "episode"
+    ],
+    "window": {
+      "start": "2026-06-01",
+      "end": "2026-09-28"
+    },
+    "status": "pending_approval",
+    "observational": {
+      "signal": "walking_speed",
+      "direction": "lower",
+      "max_lag_days": 3
+    },
+    "intervention": null,
+    "patient_summary": "Dr. Rivera wants to check whether your walking slows down before near-falls. This test uses walking speed from your iPhone and your fall log. Nothing else is shared. You can pause or stop at any time."
+  }
+]

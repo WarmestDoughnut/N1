@@ -1,0 +1,166 @@
+[
+  {
+    "display_name": "Maria, 68",
+    "condition": "Migraine",
+    "devices": [
+      "iphone",
+      "fitbit"
+    ],
+    "story": "Neurologist suspects short sleep triggers her migraines. She struggles to recall what preceded each attack.",
+    "id": "P01-MARIA",
+    "source": "synthetic",
+    "date_range": [
+      "2026-06-01",
+      "2026-09-28"
+    ],
+    "n_days": 120,
+    "n_episodes": 13,
+    "signals_present": [
+      "sleep_min",
+      "resting_hr",
+      "hrv",
+      "steps",
+      "walking_speed"
+    ]
+  },
+  {
+    "display_name": "James, 54",
+    "condition": "Tension headaches",
+    "devices": [
+      "iphone",
+      "apple_watch"
+    ],
+    "story": "James is convinced bad sleep causes his headaches. The data says otherwise.",
+    "id": "P02-JAMES",
+    "source": "synthetic",
+    "date_range": [
+      "2026-06-01",
+      "2026-09-28"
+    ],
+    "n_days": 120,
+    "n_episodes": 12,
+    "signals_present": [
+      "sleep_min",
+      "resting_hr",
+      "hrv",
+      "steps"
+    ]
+  },
+  {
+    "display_name": "Aisha, 41",
+    "condition": "Insomnia",
+    "devices": [
+      "iphone",
+      "apple_watch"
+    ],
+    "story": "Should Aisha keep taking melatonin? Population studies show small average effects; her own response is what matters.",
+    "id": "P03-AISHA",
+    "source": "synthetic",
+    "date_range": [
+      "2026-06-01",
+      "2026-09-28"
+    ],
+    "n_days": 120,
+    "n_episodes": 0,
+    "signals_present": [
+      "sleep_min",
+      "resting_hr",
+      "hrv",
+      "steps"
+    ]
+  },
+  {
+    "display_name": "Robert, 72",
+    "condition": "Hypertension",
+    "devices": [
+      "iphone",
+      "bp_wearable"
+    ],
+    "story": "Does taking his blood pressure pill at night instead of the morning lower Robert's blood pressure? For him, timing makes no difference.",
+    "id": "P04-ROBERT",
+    "source": "synthetic",
+    "date_range": [
+      "2026-06-01",
+      "2026-09-28"
+    ],
+    "n_days": 120,
+    "n_episodes": 0,
+    "signals_present": [
+      "sleep_min",
+      "resting_hr",
+      "steps",
+      "systolic_bp",
+      "walking_speed"
+    ]
+  },
+  {
+    "display_name": "Dana, 35",
+    "condition": "Type 2 diabetes",
+    "devices": [
+      "iphone",
+      "fitbit",
+      "cgm"
+    ],
+    "story": "Does a 15-minute walk after dinner improve Dana's glucose control? Her continuous glucose monitor answers it for her specifically.",
+    "id": "P05-DANA",
+    "source": "synthetic",
+    "date_range": [
+      "2026-06-01",
+      "2026-09-28"
+    ],
+    "n_days": 120,
+    "n_episodes": 0,
+    "signals_present": [
+      "sleep_min",
+      "resting_hr",
+      "hrv",
+      "steps",
+      "glucose_tir"
+    ]
+  },
+  {
+    "display_name": "Leo, 29",
+    "condition": "Bipolar II",
+    "devices": [
+      "iphone",
+      "smart_ring"
+    ],
+    "story": "Leo and his psychiatrist want early warning signs before hypomanic episodes. Leo set up the plan while well and chose who can see it.",
+    "id": "P06-LEO",
+    "source": "synthetic",
+    "date_range": [
+      "2026-06-01",
+      "2026-09-28"
+    ],
+    "n_days": 120,
+    "n_episodes": 9,
+    "signals_present": [
+      "sleep_min",
+      "resting_hr",
+      "hrv",
+      "steps",
+      "skin_temp_dev",
+      "resp_rate"
+    ]
+  },
+  {
+    "display_name": "Grace, 80",
+    "condition": "Fall risk",
+    "devices": [
+      "iphone"
+    ],
+    "story": "Grace only has an iPhone. Sleep-based tests are unavailable, and with only 3 near-falls the suite honestly reports there isn't enough data yet.",
+    "id": "P07-GRACE",
+    "source": "synthetic",
+    "date_range": [
+      "2026-06-01",
+      "2026-09-28"
+    ],
+    "n_days": 120,
+    "n_episodes": 3,
+    "signals_present": [
+      "steps",
+      "walking_speed"
+    ]
+  }
+]

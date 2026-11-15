@@ -1,0 +1,68 @@
+[
+  {
+    "id": "iphone",
+    "name": "iPhone",
+    "availability": "now",
+    "signals": [
+      "steps",
+      "walking_speed",
+      "episode"
+    ]
+  },
+  {
+    "id": "apple_watch",
+    "name": "Apple Watch",
+    "availability": "now",
+    "signals": [
+      "sleep_min",
+      "resting_hr",
+      "hrv",
+      "steps",
+      "resp_rate",
+      "spo2",
+      "skin_temp_dev",
+      "walking_speed"
+    ]
+  },
+  {
+    "id": "fitbit",
+    "name": "Fitbit",
+    "availability": "now",
+    "signals": [
+      "sleep_min",
+      "resting_hr",
+      "hrv",
+      "steps",
+      "spo2",
+      "skin_temp_dev"
+    ]
+  },
+  {
+    "id": "smart_ring",
+    "name": "Smart ring (Oura-class)",
+    "availability": "now",
+    "signals": [
+      "sleep_min",
+      "resting_hr",
+      "hrv",
+      "skin_temp_dev",
+      "resp_rate"
+    ]
+  },
+  {
+    "id": "cgm",
+    "name": "Continuous glucose monitor",
+    "availability": "now",
+    "signals": [
+      "glucose_tir"
+    ]
+  },
+  {
+    "id": "bp_wearable",
+    "name": "Cuffless BP wearable",
+    "availability": "emerging",
+    "signals": [
+      "systolic_bp"
+    ]
+  }
+]

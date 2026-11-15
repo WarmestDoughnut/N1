@@ -52,19 +52,36 @@ dependence on memory and clinic visits. Patients see their own results.
   devices provide; unavailable signals are shown grayed out with a reason.
 - Not diagnostic. Wording everywhere: "worth discussing with your clinician", never "diagnosis".
 
-## 3. Data
+## 3. Data (UPDATED 10:15: use the provided data package, do not generate your own)
 
-- **PMData** (Fitbit Versa 2, 16 people, ~5 months, CC BY-NC 4.0; cite Thambawita et al.,
-  MMSys 2020). Fitbit sleep/HR/steps + daily wellness self-reports (fatigue, mood, stress,
-  readiness, soreness). Episodes are derived from wellness reports (backend defines and
-  documents the rule in its log + CONTRACT).
-- **Synthetic patients** with known ground truth (this is our validation story):
-  - `SYN-PATTERN`: sleep drops ~2 days before episodes → observational test must pass.
-  - `SYN-NULL`: no relationship → must return `probably_chance`.
-  - `SYN-TREAT`: intervention B improves sleep → intervention test must pass.
-  - `SYN-TREAT-NULL`: B does nothing → must return `probably_chance`.
-- Datasets are historical. The demo "runs" a plan instantly over the dataset window
-  (`POST /api/plans/{id}/simulate-complete`). That is expected; label it in the UI as demo mode.
+All demo data lives in `backend/data/synthetic/`; read its `README.md` and `INTEGRATION.md`.
+- **7 synthetic patients** (120 days each) with planted, validated ground truth:
+  | ID | Test | Expected verdict |
+  |---|---|---|
+  | P01-MARIA (68, migraine, iPhone+Fitbit) | short sleep before migraines | likely_real, lag 2 |
+  | P02-JAMES (54, headaches) | same | probably_chance |
+  | P03-AISHA (41, insomnia) | melatonin A/B, 12 periods | likely_real |
+  | P04-ROBERT (72, hypertension, cuffless BP) | evening vs morning dose | probably_chance |
+  | P05-DANA (35, T2 diabetes, CGM+Fitbit) | post-dinner walk on glucose time-in-range | likely_real |
+  | P06-LEO (29, bipolar II, smart ring) | reduced sleep before hypomania | likely_real |
+  | P07-GRACE (80, iPhone only) | slower walking before near-falls | not_enough_data |
+- **1 real participant** `REAL-Pxx` from PMData (Fitbit Versa 2; Thambawita et al., MMSys 2020,
+  CC BY-NC 4.0, must be cited in the UI). Episodes = self-reported low-readiness days
+  (bottom 15% of that person's readiness scores). Its verdict is unknown in advance; that's the point.
+- `demo_plans.json` seeds one plan per patient with the EXACT schedules the data was built on.
+- `devices_full.json`: 17 devices, each `availability: now | emerging`; the vision for
+  "technology 6 months out". Only signals present in the data must be analyzable;
+  others show as "supported soon".
+- Datasets are historical. `POST /api/plans/{id}/simulate-complete` runs a plan instantly; label demo mode.
+
+**Statistical design rules learned from the data (binding):**
+- Intervention plans need ≥ 5 AB/BA blocks (≥ 10 periods): with k blocks the smallest possible
+  p-value is 1/2^k, so 8 periods can never reach p < 0.05. Fewer → `not_enough_data` +
+  warning `too_few_periods`. Default schedule: 12 periods × 6 days + 2 washout days.
+- Enumerate all 2^k block randomizations exactly when k ≤ 12.
+- `backend/tests/test_ground_truth.py` must pass (11 tests).
+- Optional high-value feature: **minimum detectable effect** shown while a clinician builds a plan
+  (from the patient's baseline variability), so they know if the test is long enough before starting.
 
 ## 4. Architecture
 
@@ -146,19 +163,23 @@ Additive optional fields are low-risk but still need an FYI message.
 ## 9. Priorities and cut list
 
 Must work (never cut): plan create → patient approve → simulate-complete → results screen
-showing one pass and one `probably_chance`, for the observational test.
+showing one pass (P01-MARIA) and one `probably_chance` (P02-JAMES), for the observational test.
 
-Then, in order: (1) intervention A/B mode with schedule, (2) device selector gray-out,
-(3) patient pause/stop + patient results view, (4) personal risk model tab,
-(5) Apple Watch live push via iOS Shortcut.
+Then, in order: (1) intervention A/B mode with schedule, (2) device selector gray-out
+(using devices_full.json, emerging tag), (3) patient pause/stop + patient results view,
+(4) real PMData patient, (5) minimum detectable effect on plan creation,
+(6) personal risk model tab, (7) Apple Watch live push via iOS Shortcut.
 Cut from the bottom if behind. Never start a new item after 14:30.
 
 ## 10. Demo script (build toward this)
 
-1. Clinician: new plan for `SYN-PATTERN` → select iPhone only → sleep is grayed out →
-   add Fitbit → sleep unlocks → hypothesis "low sleep precedes episodes" → send.
-2. Switch to Patient: plain-language summary → Approve.
+1. Clinician: new plan for **P01-MARIA** → select iPhone only → sleep is grayed out →
+   add Fitbit → sleep unlocks → hypothesis "short sleep precedes migraines" → send.
+2. Switch to Patient (Maria): plain-language summary → Approve.
 3. Simulate complete → Clinician results: `likely_real`, lag 2 days, chance check passed.
-4. Same plan on `SYN-NULL` → `probably_chance` ("the tool can say no").
-5. Intervention plan on `SYN-TREAT`: show randomized A-B-B-A schedule → result.
-6. Real PMData participant to show it works on real data.
+4. **P02-JAMES**, same question → `probably_chance` ("the tool can say no").
+5. **P03-AISHA** intervention: randomized A/B timeline with washout → `likely_real`.
+   (Optional: **P04-ROBERT** → `probably_chance`: a dosing change that doesn't help.)
+6. **P07-GRACE** (iPhone only, 3 near-falls) → `not_enough_data` + grayed-out devices: equity.
+7. **REAL-Pxx**: real Fitbit data, honest result whatever it is.
+8. Device catalog with "emerging" devices → the 6-months-out vision.
