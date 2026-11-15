@@ -49,27 +49,44 @@ def signal_label(sig):
     return _SIGNAL_LABEL.get(sig, sig)
 
 
+def _retro_sentence(plan):
+    """v1.6: plain-language note about past data being shared on approval, when the window
+    reaches into the past. Appended to the consent summary so approval is informed."""
+    win = plan.get("window", {})
+    delivery = plan.get("delivery")
+    past_end = win.get("past_end")
+    start = win.get("start")
+    if delivery == "retrospective" and start and past_end:
+        return (f" This includes your past data from {start} to {past_end}, which will be shared "
+                f"as soon as you approve.")
+    if delivery == "mixed" and start and past_end:
+        return (f" This includes your past data from {start} to {past_end}, which will be shared "
+                f"as soon as you approve, and new data collected from then until {win.get('end')}.")
+    return ""
+
+
 def build_patient_summary(plan, device_names):
     """Plain-language consent summary from the plan (the plan IS the consent)."""
     devices = ", ".join(device_names) or "your device"
     win = plan.get("window", {})
     window = f"from {win.get('start')} to {win.get('end')}" if win else ""
+    retro = _retro_sentence(plan)
     if plan["type"] == "collection":
         sigs = ", ".join(signal_label(s) for s in plan.get("signals", [])) or "the listed signals"
         return (f"{plan['clinician_name']} would like to collect {sigs} from {devices} {window}, "
-                f"with no test run yet — just gathering your data so it can be looked at later. "
+                f"with no test run yet — just gathering your data so it can be looked at later.{retro} "
                 f"Nothing else is shared. You can pause or stop at any time.")
     if plan["type"] == "observational":
         o = plan["observational"]
         sig = signal_label(o["signal"])
         return (f"{plan['clinician_name']} wants to check whether your {sig} changes before your "
-                f"episodes. This test uses only {sig} from {devices} and your episode log {window}. "
+                f"episodes. This test uses only {sig} from {devices} and your episode log {window}.{retro} "
                 f"Nothing else is shared. You can pause or stop at any time.")
     iv = plan["intervention"]
     sig = signal_label(iv["outcome_signal"])
     return (f"{plan['clinician_name']} suggests alternating between \"{iv['arm_a']}\" and "
             f"\"{iv['arm_b']}\" week by week in a random order, and comparing your {sig}. "
-            f"This test uses only {sig} from {devices} {window}. You can pause or stop at any time.")
+            f"This test uses only {sig} from {devices} {window}.{retro} You can pause or stop at any time.")
 
 
 class Store:

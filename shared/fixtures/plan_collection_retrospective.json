@@ -1,0 +1,45 @@
+{
+  "id": "DEMO-COLLECT-RETRO-MARIA",
+  "patient_id": "P01-MARIA",
+  "clinician_name": "Dr. Rivera",
+  "title": "Pull Maria's past sleep for review",
+  "type": "collection",
+  "devices": [
+    "fitbit"
+  ],
+  "signals": [
+    "sleep_min"
+  ],
+  "window": {
+    "start": "2026-06-01",
+    "end": "2026-09-28",
+    "past_end": "2026-09-28",
+    "live_start": null
+  },
+  "delivery": "retrospective",
+  "status": "complete",
+  "observational": null,
+  "intervention": null,
+  "seeded": false,
+  "instructions": "Nothing to do — this just shares the sleep data you already have.",
+  "patient_summary": "Dr. Rivera would like to collect sleep from your Fitbit from 2026-06-01 to 2026-09-28, with no test run yet — just gathering your data so it can be looked at later. This includes your past data from 2026-06-01 to 2026-09-28, which will be shared as soon as you approve. Nothing else is shared. You can pause or stop at any time.",
+  "created_at": "2026-11-15T10:00:00",
+  "history": [
+    {
+      "at": "2026-11-15T10:00:00",
+      "event": "created"
+    },
+    {
+      "at": "2026-11-15T10:01:00",
+      "event": "approve"
+    },
+    {
+      "at": "2026-11-15T10:01:00",
+      "event": "shared"
+    },
+    {
+      "at": "2026-11-15T10:01:00",
+      "event": "complete"
+    }
+  ]
+}

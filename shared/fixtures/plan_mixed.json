@@ -1,0 +1,46 @@
+{
+  "id": "DEMO-MIXED-MARIA",
+  "patient_id": "P01-MARIA",
+  "clinician_name": "Dr. Rivera",
+  "title": "Share past sleep and keep collecting",
+  "type": "observational",
+  "devices": [
+    "fitbit"
+  ],
+  "signals": [
+    "sleep_min",
+    "episode"
+  ],
+  "window": {
+    "start": "2026-10-01",
+    "end": "2026-12-01",
+    "past_end": "2026-11-15",
+    "live_start": "2026-11-16"
+  },
+  "delivery": "mixed",
+  "status": "active",
+  "observational": {
+    "signal": "sleep_min",
+    "direction": "lower",
+    "min_lag_days": 1,
+    "max_lag_days": 3
+  },
+  "intervention": null,
+  "seeded": false,
+  "patient_summary": "Dr. Rivera wants to check whether your sleep changes before your episodes. This test uses only sleep from your Fitbit and your episode log from 2026-10-01 to 2026-12-01. This includes your past data from 2026-10-01 to 2026-11-15, which will be shared as soon as you approve, and new data collected from then until 2026-12-01. Nothing else is shared. You can pause or stop at any time.",
+  "created_at": "2026-11-15T10:00:00",
+  "history": [
+    {
+      "at": "2026-11-15T10:00:00",
+      "event": "created"
+    },
+    {
+      "at": "2026-11-15T10:01:00",
+      "event": "approve"
+    },
+    {
+      "at": "2026-11-15T10:01:00",
+      "event": "shared"
+    }
+  ]
+}

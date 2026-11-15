@@ -40,7 +40,7 @@ from app.model import fit_risk_model
 from app.schedule import generate_schedule, smallest_possible_p
 from app.store import Store, build_patient_summary, _now
 
-CONTRACT_VERSION = "1.5"
+CONTRACT_VERSION = "1.6"
 
 app = FastAPI(title="N1 Hub API", version=CONTRACT_VERSION)
 # Local dev by default; ALLOWED_ORIGINS (comma-separated) overrides. Any *.vercel.app deploy
@@ -98,9 +98,52 @@ def _allowed_patient_ids(account):
     return STORE.active_patient_ids(account["id"])  # clinician: active connections only
 
 
-def _window_df(plan):
-    """Patient daily rows restricted to the plan window, and cut at `collected_until` if the plan
-    was stopped early (stopping keeps only data already collected — CLAUDE.md §2)."""
+def _as_of():
+    """Server-side 'today' (v1.6). Real date — the demo data is historical (Jun–Sep 2026), so
+    every demo window ends well before this and is therefore fully retrospective."""
+    return date.today().isoformat()
+
+
+def _delivery(plan):
+    """v1.6: classify a plan/collection window against 'today' into
+    retrospective | prospective | mixed, and return the past/live split.
+    Past data exists at approval time; live data is still to be collected."""
+    win = plan.get("window") or {}
+    start, end = win.get("start"), win.get("end")
+    if not (start and end):
+        return {"delivery": "prospective", "past_end": None, "live_start": None}
+    as_of = _as_of()
+    has_past = start <= as_of
+    has_future = end > as_of
+    if has_past and has_future:
+        delivery = "mixed"
+    elif has_future:
+        delivery = "prospective"
+    else:
+        delivery = "retrospective"
+    past_end = (min(end, as_of) if has_past else None)
+    if has_future:
+        next_day = (date.fromisoformat(as_of) + timedelta(days=1)).isoformat()
+        live_start = max(start, next_day)
+    else:
+        live_start = None
+    return {"delivery": delivery, "past_end": past_end, "live_start": live_start}
+
+
+def _apply_delivery(plan):
+    """Stamp delivery classification onto the plan (top-level `delivery` + window.past_end/live_start)."""
+    d = _delivery(plan)
+    plan["delivery"] = d["delivery"]
+    win = plan.setdefault("window", {})
+    win["past_end"] = d["past_end"]
+    win["live_start"] = d["live_start"]
+    return d
+
+
+def _window_df(plan, until=None):
+    """Patient daily rows restricted to the plan window, cut at `collected_until` if the plan
+    was stopped early (CLAUDE.md §2), and optionally clipped to `until` (v1.6: the past portion
+    of a mixed plan, so results can be computed on shared past data before the live part finishes)."""
     df = DAILY.get(plan["patient_id"])
     if df is None:
         return None
@@ -109,6 +152,8 @@ def _window_df(plan):
     cutoff = plan.get("collected_until")
     if cutoff:
         end = min(end, cutoff) if end else cutoff
+    if until:
+        end = min(end, until) if end else until
     if start and end:
         df = df[(df["date"] >= start) & (df["date"] <= end)].reset_index(drop=True)
     return df
@@ -161,10 +206,10 @@ def _collection_summary(plan, df):
             "null_distribution": [], "series": [], "model": None}
 
 
-def _compute_results(plan, incomplete=False):
-    df = _window_df(plan)
+def _compute_results(plan, incomplete=False, until=None):
+    df = _window_df(plan, until=until)
     win_end = (plan.get("window") or {}).get("end")
-    collected_until = plan.get("collected_until") or win_end
+    collected_until = plan.get("collected_until") or until or win_end
 
     if plan.get("type") == "collection":
         result = _collection_summary(plan, df)
@@ -344,6 +389,17 @@ async def create_plan(request: Request):
         lo, hi = o.get("min_lag_days", 1), o.get("max_lag_days", 3)
         if not (isinstance(lo, int) and isinstance(hi, int) and 1 <= lo <= hi <= 30):
             return err(422, "invalid_lag_range")
+    # v1.6: window may reach into the past, but not before the patient's first day of data
+    meta = PATIENTS.get(body.get("patient_id"))
+    first_day = (meta or {}).get("date_range", [None])[0]
+    win_start = (plan.get("window") or {}).get("start")
+    if first_day and win_start and win_start < first_day:
+        return err(422, "window_before_data")
+    # v1.6: A/B (intervention) requires a FUTURE window — you cannot randomize arms over data that
+    # already happened. Valid only when delivery is prospective or mixed; past-only is rejected.
+    delivery = _delivery(plan).get("delivery")
+    if plan.get("type") == "intervention" and delivery == "retrospective":
+        return err(422, "intervention_requires_future")
     plan["id"] = STORE.next_id()
     plan["status"] = "pending_approval"
     from app.store import _now
@@ -361,6 +417,7 @@ async def create_plan(request: Request):
                 iv.get("washout_days", 2), iv.get("seed", 42),
                 plan.get("window", {}).get("start"))
 
+    _apply_delivery(plan)   # v1.6: delivery + window.past_end/live_start, read by build_patient_summary
     device_names = [DEVICE_NAME.get(d, d) for d in plan.get("devices", [])]
     plan["patient_summary"] = body.get("patient_summary") or build_patient_summary(plan, device_names)
     return JSONResponse(status_code=201, content=STORE.add_plan(plan))
@@ -372,6 +429,8 @@ def list_plans(request: Request, patient_id: str = ""):
     allowed = _allowed_patient_ids(current_account(request))
     if allowed is not None:
         plans = [p for p in plans if p["patient_id"] in allowed]
+    for p in plans:
+        _apply_delivery(p)   # v1.6: ensure delivery/past_end/live_start present (incl. seeded + pre-v1.6 plans)
     return plans
 
 
@@ -380,6 +439,7 @@ def get_plan(plan_id: str):
     plan = STORE.get_plan(plan_id)
     if plan is None:
         return err(404, "not_found")
+    _apply_delivery(plan)
     return plan
 
 
@@ -399,7 +459,26 @@ def _event_endpoint(plan_id, event):
 
 @app.post("/api/plans/{plan_id}/approve")
 def approve(plan_id: str):
-    return _event_endpoint(plan_id, "approve")
+    """Approve a plan. v1.6: if the window reaches into the past, that past data is 'shared' at
+    once — a retrospective plan jumps straight to `complete` with results computed immediately
+    (so the patient never sees a collection period); a mixed plan shares the past part now and
+    stays `active` for the live part."""
+    plan, error = STORE.transition(plan_id, "approve")
+    if error == "not_found":
+        return err(404, "not_found")
+    if error == "invalid_transition":
+        return err(409, "invalid_transition")
+    d = _apply_delivery(plan)
+    if d["delivery"] == "retrospective":
+        plan.setdefault("history", []).append({"at": _now(), "event": "shared"})
+        STORE.transition(plan_id, "complete")   # active -> complete; all data already exists
+        _compute_results(plan, incomplete=False)
+    elif d["delivery"] == "mixed":
+        plan.setdefault("history", []).append({"at": _now(), "event": "shared"})
+        STORE.save()
+        # past portion is usable immediately; the live part completes later (or via simulate-complete)
+        _compute_results(plan, incomplete=True, until=d["past_end"])
+    return plan
 
 
 @app.post("/api/plans/{plan_id}/decline")
@@ -428,9 +507,18 @@ def simulate_complete(plan_id: str):
     plan = STORE.get_plan(plan_id)
     if plan is None:
         return err(404, "not_found")
-    # allow from active/paused; if still pending, auto-approve first (demo convenience)
+    # v1.6: a retrospective plan auto-completes on approve, so a caller that still chains
+    # approve → simulate-complete finds it already complete — treat that as an idempotent no-op
+    # (recompute + return), never a 409.
+    if plan["status"] == "complete":
+        _compute_results(plan, incomplete=False)
+        return plan
+    # allow from active/paused; if still pending, approve first (which itself completes retrospective)
     if plan["status"] == "pending_approval":
-        STORE.transition(plan_id, "approve")
+        approve(plan_id)
+        plan = STORE.get_plan(plan_id)
+        if plan["status"] == "complete":   # retrospective — approve already finished it
+            return plan
     plan, error = STORE.transition(plan_id, "complete")
     if error == "invalid_transition":
         return err(409, "invalid_transition")
@@ -457,6 +545,19 @@ def schedule_preview(n_periods: int = 12, period_days: int = 6, washout_days: in
                      seed: int = 42, start: str = "2026-06-01"):
     sched = generate_schedule(n_periods, period_days, washout_days, seed, start)
     return {"schedule": sched, "smallest_possible_p": round(smallest_possible_p(n_periods), 4)}
+
+
+@app.get("/api/delivery/preview")
+def delivery_preview(start: str = "", end: str = "", patient_id: str = ""):
+    """v1.6: classify a window the clinician is picking in the wizard BEFORE a plan exists, so the
+    UI can split past/live and grey out A/B for a past-only (retrospective) request. Also reports
+    whether the window starts before the patient's data (`window_before_data`)."""
+    d = _delivery({"window": {"start": start, "end": end}})
+    first_day = (PATIENTS.get(patient_id) or {}).get("date_range", [None])[0]
+    return {**d, "as_of": _as_of(),
+            "intervention_allowed": d["delivery"] in ("prospective", "mixed"),
+            "window_before_data": bool(first_day and start and start < first_day),
+            "first_data_day": first_day}
 
 
 # --------------------------------------------------------------------------- #
@@ -655,9 +756,14 @@ async def create_analysis(collection_id: str, request: Request):
         return err(404, "not_found")
     if coll.get("type") != "collection":
         return err(422, "not_a_collection")
+    # v1.6: analyses run only once the collection's data has been shared (approved). A pending or
+    # declined collection has nothing to analyze yet.
+    if coll["status"] not in SCOPE_OK:
+        return err(409, "not_in_scope")
     body = await request.json()
     signals = set(coll.get("signals", []))
     window = coll.get("window")
+    coll_delivery = _delivery(coll).get("delivery")
     if body.get("observational"):
         o = body["observational"]
         if o.get("signal") not in signals:
@@ -673,6 +779,10 @@ async def create_analysis(collection_id: str, request: Request):
             return err(422, "signal_not_in_collection")
         if not iv.get("schedule"):
             return err(422, "window_too_short")
+        # v1.6: A/B requires a future window — past days were never randomized to arms. Only
+        # observational + predictive modeling are valid on past data; A/B is not.
+        if coll_delivery == "retrospective":
+            return err(422, "intervention_requires_future")
         adhoc = {"id": collection_id, "patient_id": coll["patient_id"], "type": "intervention",
                  "window": window, "signals": [iv["outcome_signal"]], "intervention": iv}
     else:
