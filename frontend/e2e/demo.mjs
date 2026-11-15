@@ -19,7 +19,9 @@ page.on('pageerror', (e) => errors.push('pageerror: ' + e.message))
 // "Failed to load resource" console lines carry no URL, so track HTTP failures via responses instead.
 const EXPECTED = (r) =>
   (r.status() === 401 && /\/api\/auth\/login$/.test(r.url())) || // the deliberate wrong-password check
-  (r.status() === 404 && /\/results$/.test(r.url())) // results not computed yet
+  (r.status() === 404 && /\/results$/.test(r.url())) || // results not computed yet
+  // v1.5 endpoints the frontend calls before the backend ships them (handled: falls back to the mock)
+  (r.status() === 404 && /\/api\/(patients\/[^/]+\/symptoms|plans\/[^/]+\/(notes|analyses|results\/(comment|review)))/.test(r.url()))
 page.on('response', (r) => { if (r.status() >= 400 && !EXPECTED(r)) errors.push(`http ${r.status()}: ${r.url()}`) })
 page.on('console', (m) => {
   const t = m.text()
