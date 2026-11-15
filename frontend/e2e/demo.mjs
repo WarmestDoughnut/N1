@@ -107,7 +107,7 @@ async function createPlan(patient, { intervention = false, grayOutDemo = false }
     await click('What might come first', '.td-slot')
     await click('Sleep', '.td-chip'); await click('lower', '.td-editor .seg button'); await click('Done')
     await click('How far back', '.td-slot'); await page.type('[aria-label="Shortest look-back"]', '1'); await page.type('[aria-label="Longest look-back"]', '3'); await click('Done')
-    await click('Over what dates', '.td-slot'); await click('Use all', 'button'); await click('Done')
+    await click('Over what dates', '.td-slot'); await click('All past data', '.td-editor button'); await click('Done')
   }
   await click('Next'); await click('Send to patient'); await sleep(700)
   return planIdFromUrl()
@@ -115,8 +115,10 @@ async function createPlan(patient, { intervention = false, grayOutDemo = false }
 async function approveAndRun(patient, id) {
   await signInAs('patient', patient)
   await page.evaluate((id) => { location.hash = '/plans/' + encodeURIComponent(id) }, id); await sleep(800)
-  await click('Approve'); await sleep(500)
-  await click('Simulate complete'); await sleep(1800)
+  await click('Approve'); await sleep(900)
+  // v1.6: a past-only window is shared (and analysed) at approval; prospective/mixed plans still use the demo button.
+  const canSimulate = await page.evaluate(() => [...document.querySelectorAll('button')].some((b) => b.textContent.includes('Simulate complete') && !b.disabled))
+  if (canSimulate) { await click('Simulate complete'); await sleep(1800) } else await sleep(1500)
 }
 async function clinicianVerdict(id, name) {
   await signInAs('clinician', 'Dr. Rivera')
@@ -175,7 +177,8 @@ const p1 = await createPlan('Maria', { grayOutDemo: true }); await approveAndRun
 expect.push(['P01-MARIA observational', await clinicianVerdict(p1, '02-maria'), 'Likely real'])
 const p2 = await createPlan('James'); await approveAndRun('James', p2)
 expect.push(['P02-JAMES observational', await clinicianVerdict(p2, '03-james'), 'Probably chance'])
-const p3 = await createPlan('Aisha', { intervention: true }); await approveAndRun('Aisha', p3)
+// Amendment fe-main #14: A/B tests are future-only; the demo approves the seeded, recorded A/B plan.
+const p3 = 'DEMO-P03-AISHA'; await approveAndRun('Aisha', p3)
 expect.push(['P03-AISHA A/B', await clinicianVerdict(p3, '04-aisha'), 'Likely real'])
 // Live only: the seeded phone-only patient (backend v1.4, P08-SAM). Late-night screen time precedes migraines.
 if (LIVE) {
