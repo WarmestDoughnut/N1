@@ -185,18 +185,18 @@ export const api = {
     ),
   results: (planId: string) => call<Results>('GET', `/api/plans/${enc(planId)}/results`, undefined, () => mock.results(planId)),
 
-  // ---------- v1.2 (proposed): accounts & connections ----------
-  demoAccounts: () => call<DemoAccount[]>('GET', '/api/accounts/demo', undefined, mockAccounts.demoAccounts, true),
+  // ---------- v1.2: accounts & connections ----------
+  demoAccounts: () => call<DemoAccount[]>('GET', '/api/accounts/demo', undefined, mockAccounts.demoAccounts),
   login: (email: string, password: string) =>
-    call<LoginResponse>('POST', '/api/auth/login', { email, password }, () => mockAccounts.login(email, password), true),
-  me: () => call<Account>('GET', '/api/auth/me', undefined, () => mockAccounts.me(token()), true),
-  connections: () => call<Connection[]>('GET', '/api/connections', undefined, () => mockAccounts.connections(token()), true),
+    call<LoginResponse>('POST', '/api/auth/login', { email, password }, () => mockAccounts.login(email, password)),
+  me: () => call<Account>('GET', '/api/auth/me', undefined, () => mockAccounts.me(token())),
+  connections: () => call<Connection[]>('GET', '/api/connections', undefined, () => mockAccounts.connections(token())),
   /** patient adds a clinician by their connect code → pending */
   requestConnection: (code: string) =>
-    call<Connection>('POST', '/api/connections', { clinician_code: code }, () => mockAccounts.requestConnection(token(), code), true),
+    call<Connection>('POST', '/api/connections', { clinician_code: code }, () => mockAccounts.requestConnection(token(), code)),
   acceptConnection: (id: string) =>
-    call<Connection>('POST', `/api/connections/${enc(id)}/accept`, undefined, () => mockAccounts.accept(token(), id), true),
+    call<Connection>('POST', `/api/connections/${enc(id)}/accept`, undefined, () => mockAccounts.accept(token(), id)),
   /** decline a pending request, or remove an active connection (either side) */
   removeConnection: (id: string) =>
-    call<{ ok: true }>('DELETE', `/api/connections/${enc(id)}`, undefined, () => mockAccounts.remove(token(), id), true),
+    call<{ ok: true }>('DELETE', `/api/connections/${enc(id)}`, undefined, () => mockAccounts.remove(token(), id)),
 }

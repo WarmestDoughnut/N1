@@ -17,10 +17,10 @@ const page = await browser.newPage()
 const errors = []
 page.on('pageerror', (e) => errors.push('pageerror: ' + e.message))
 // "Failed to load resource" console lines carry no URL, so track HTTP failures via responses instead.
-const OPTIONAL = /\/api\/(auth|accounts|connections)\b/ // v1.2, falls back to the mock until the backend ships it
-page.on('response', (r) => {
-  if (r.status() >= 400 && !OPTIONAL.test(r.url()) && !(r.status() === 404 && /\/results$/.test(r.url()))) errors.push(`http ${r.status()}: ${r.url()}`)
-})
+const EXPECTED = (r) =>
+  (r.status() === 401 && /\/api\/auth\/login$/.test(r.url())) || // the deliberate wrong-password check
+  (r.status() === 404 && /\/results$/.test(r.url())) // results not computed yet
+page.on('response', (r) => { if (r.status() >= 400 && !EXPECTED(r)) errors.push(`http ${r.status()}: ${r.url()}`) })
 page.on('console', (m) => {
   const t = m.text()
   if (m.type() === 'error' && !t.includes('ERR_CONNECTION_REFUSED') && !t.startsWith('Failed to load resource')) errors.push('console: ' + t)
@@ -92,9 +92,20 @@ async function clinicianVerdict(id, name) {
   return verdictOnPage()
 }
 
+// Live backend persists state between runs: reset Dana ↔ Dr. Rivera so the add-by-code flow is repeatable.
+if (LIVE) {
+  const API = process.env.API_URL ?? 'http://localhost:8000'
+  const conns = await (await fetch(`${API}/api/connections`, { headers: { Authorization: 'Bearer acct-p05-dana' } })).json()
+  for (const c of conns.filter((c) => c.clinician_id === 'acct-rivera')) {
+    await fetch(`${API}/api/connections/${encodeURIComponent(c.id)}`, { method: 'DELETE', headers: { Authorization: 'Bearer acct-p05-dana' } })
+  }
+}
+
 await page.goto(URL + '/#/')
 await page.evaluate((live) => { localStorage.clear(); localStorage.setItem('n1.dataSource', live ? 'live' : 'fixtures') }, LIVE)
-await page.goto(URL + '/#/'); await sleep(1000)
+await page.reload(); await sleep(1000) // a same-URL goto doesn't reload, and the data source is read at load
+const mode = await page.evaluate(() => localStorage.getItem('n1.dataSource'))
+console.log(`mode: ${mode === 'live' ? 'LIVE API' : 'sample data'}`)
 
 // ---- login + connections ----
 await signOut()

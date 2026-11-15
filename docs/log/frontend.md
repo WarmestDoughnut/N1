@@ -125,3 +125,29 @@ Format:
 - How to try it: `source .venv/bin/activate && cd backend && uvicorn app.main:app --port 8000`, then `cd frontend && npm run dev` and `npm run e2e -- --live`.
 - Next: demo steps 6–8 (Grace not_enough_data + equity framing, the REAL participant, an "emerging devices" catalog view). Then remove the legacy-device mock fill.
 - Blockers / needs from backend: ACK #3 (v1.2 login/connections) and answer #4 (explicit recorded schedule).
+
+### Chart gaps — honest missing-data rendering
+- Done:
+  - `SignalChart` / `ArmSeriesChart`: missing days stay as breaks in the solid line but get a faint dotted bridge, with a legend entry "No reading that day". The gradient fill no longer runs under missing days.
+  - A/B chart: days outside the schedule (`arm: null`) are drawn as a gray "Outside trial" line instead of being dropped. A→washout→B transitions get a neutral connector, so no arm color is painted on another arm's day. Period bands now touch, with no white slivers.
+  - Stopped-early results (`complete: false`): the uncollected tail is shaded "Not collected (plan stopped)".
+  - `ArmSeriesChart` owns its legend now (props `armA`/`armB`), and the duplicate legend was removed from ResultsView.
+  - Mock: a stopped observational plan now keeps only the first half of the window, matching the intervention mock and the CLAUDE.md rule. Its missing fraction counts collected days only.
+- Files: frontend/src/components/{charts,ResultsView}.tsx, pages/clinician/Overview.tsx, pages/patient/PatientHome.tsx, lib/mockServer.ts, styles.css
+- Contract impact: none. Backend concerns (missing_data threshold, stop truncation, collected_until) are being sent to backend separately.
+- How to try it: Overview, or any results page (Aisha A/B, Maria observational).
+
+### 11:17 — v1.2 live: real login and connections against the backend
+- Done:
+  - Backend shipped v1.2 (to-backend #3 ACK/DONE). I removed the frontend's mock fallback for the auth and connection paths, so live mode now uses real backend login, scoped patient lists, and add-by-code → pending → accept.
+  - Handled the backend's 11:55 rule: the risk-model tab explains `no_primary_signal` and `too_few_episodes`, and the mock follows the same rule.
+  - e2e:
+    - The live run first resets the Dana ↔ Rivera connection, since the backend persists state between runs.
+    - A 401 from the deliberate wrong-password check is expected.
+    - Fixed a test bug: a same-URL `goto` didn't reload, so "sample mode" runs were silently hitting the live API.
+- Verified: `npm run e2e` (sample) and `npm run e2e -- --live` both pass all checks: login, connections, demo steps 1–5, no HTTP or page errors.
+- Note: uncommitted edits to frontend/src/components/{charts,ResultsView}.tsx, mockServer.ts, Overview.tsx, PatientHome.tsx and styles.css (stopped-early "not collected" shading, missing-day bridges) are **not mine**. They appear to come from a parallel session (`n1-d3`). I left them untouched and didn't commit them. Tests pass with them in place.
+- Files: frontend/src/api.ts, frontend/e2e/demo.mjs
+- Contract impact: v1.2 implemented by the backend; the frontend now uses it live.
+- Next: demo steps 6–8 (Grace not_enough_data + equity framing, the REAL participant, emerging-devices catalog view).
+- Blockers / needs from backend: answer to-backend #4 (an explicit recorded A/B schedule instead of the `DEMO-` id prefix).
