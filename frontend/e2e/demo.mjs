@@ -28,12 +28,18 @@ async function click(text, sel = 'button, a') {
   if (!ok) throw new Error(`nothing clickable with text "${text}" (${sel})`)
   await sleep(400)
 }
-async function signInAs(role, account) {
+async function signOut() {
   const out = await page.$('button[aria-label="Sign out"]')
   if (out) { await out.click(); await sleep(500) }
-  await click(role === 'clinician' ? "I'm a clinician" : "I'm a patient", '.role-card')
-  await click(account, '.account'); await click('Continue as'); await sleep(900)
 }
+async function signInAs(role, account) {
+  await signOut()
+  await click(role === 'clinician' ? 'Clinicians' : 'Patients', '.seg button')
+  await click(account, '.account')
+  await click('Sign in', 'button[type="submit"]'); await sleep(900)
+  if (await page.$('button[aria-label="Sign out"]') == null) throw new Error(`sign-in as ${account} failed`)
+}
+const bodyText = () => page.evaluate(() => document.body.innerText)
 const verdictOnPage = async () => {
   const t = await page.evaluate(() => document.body.innerText)
   return ['Likely real', 'Suggestive', 'Probably chance', 'Not enough data'].find((v) => t.includes(v))
@@ -76,6 +82,36 @@ async function clinicianVerdict(id, name) {
 await page.goto(URL + '/#/')
 await page.evaluate((live) => { localStorage.clear(); localStorage.setItem('n1.dataSource', live ? 'live' : 'fixtures') }, LIVE)
 await page.goto(URL + '/#/'); await sleep(1000)
+
+// ---- login + connections ----
+await signOut()
+await page.type('#email', 'rivera@n1hub.demo'); await page.type('#pw', 'wrong')
+await click('Sign in', 'button[type="submit"]'); await sleep(500)
+if (!(await bodyText()).includes("don't match")) throw new Error('bad password should show an error')
+console.log('✓ wrong password rejected')
+
+await signInAs('patient', 'Dana')
+await page.evaluate(() => { location.hash = '/care-team' }); await sleep(600)
+await page.type('#code', 'RIV-482'); await click('Send request'); await sleep(600)
+if (!(await bodyText()).includes('Waiting for approval')) throw new Error('Dana request should be pending')
+console.log('✓ patient adds clinician by code → pending')
+await shot('00-care-team')
+
+await signInAs('clinician', 'Dr. Rivera')
+await page.evaluate(() => { location.hash = '/patients' }); await sleep(800)
+if (!(await bodyText()).includes('Connection requests')) throw new Error('Rivera should see requests')
+const beforeHasDana = (await page.evaluate(() => [...document.querySelectorAll('.patient-row strong')].map((e) => e.textContent))).some((t) => t.startsWith('Dana'))
+if (beforeHasDana && !(await bodyText()).includes('Wants to add you')) throw new Error('Dana listed before accepting')
+await shot('00-requests')
+await page.evaluate(() => {
+  const row = [...document.querySelectorAll('.patient-row')].find((r) => r.textContent.includes('Dana'))
+  ;[...row.querySelectorAll('button')].find((b) => b.textContent.includes('Accept')).click()
+}); await sleep(1200)
+await page.evaluate(() => { location.hash = '/new' }); await sleep(800)
+const opts = await page.evaluate(() => [...document.querySelectorAll('.option .title')].map((e) => e.textContent))
+if (!opts.some((t) => t.startsWith('Dana'))) throw new Error('Dana should be selectable after accepting, got ' + opts)
+if (opts.some((t) => t.startsWith('Leo'))) throw new Error('Leo (pending) must not be selectable')
+console.log('✓ clinician accepts → patient appears in wizard; pending patient does not')
 
 const expect = []
 const p1 = await createPlan('Maria', { grayOutDemo: true }); await approveAndRun('Maria', p1)

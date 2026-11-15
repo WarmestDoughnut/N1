@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { Role } from '../types'
+import type { Account, Role } from '../types'
 
 /** Demo sign-in (no real auth in this build — CLAUDE.md §4). Persisted in localStorage. */
 export interface Session {
@@ -8,6 +8,18 @@ export interface Session {
   name: string
   /** patient id when role === 'patient' */
   patientId?: string
+  accountId: string
+  email: string
+  token: string
+  specialty?: string | null
+  connectCode?: string | null
+}
+
+export function sessionFrom(account: Account, token: string): Session {
+  return {
+    role: account.role, name: account.name, patientId: account.patient_id ?? undefined, accountId: account.id,
+    email: account.email, token, specialty: account.specialty, connectCode: account.connect_code,
+  }
 }
 
 const KEY = 'n1.session'
@@ -16,7 +28,8 @@ const listeners = new Set<() => void>()
 export function getSession(): Session | null {
   try {
     const raw = localStorage.getItem(KEY)
-    return raw ? (JSON.parse(raw) as Session) : null
+    const s = raw ? (JSON.parse(raw) as Session) : null
+    return s && s.token ? s : null // sessions from the pre-login build had no token
   } catch {
     return null
   }
@@ -45,11 +58,11 @@ export function useSession(): Session | null {
 }
 
 export function initials(name: string): string {
-  const clean = name.replace(/^dr\.?\s+/i, '').replace(/\(.*\)/, '').trim()
+  const clean = name.replace(/^dr\.?\s+/i, '').replace(/\(.*\)/, '').replace(/,.*$/, '').trim() // "Maria, 68" → "Maria"
   const parts = clean.split(/\s+/).filter(Boolean)
   return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase() || '?'
 }
 
 export function firstName(name: string): string {
-  return name.replace(/\s*\(.*\)$/, '')
+  return name.replace(/\s*\(.*\)$/, '').replace(/,.*$/, '')
 }

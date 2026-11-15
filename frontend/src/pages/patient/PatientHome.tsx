@@ -94,6 +94,8 @@ export function PatientHome({ session, data }: { session: Session; data: Patient
         </aside>
       </section>
 
+      <CareTeamStrip data={data} />
+
       <div className="section-title"><h2>My tests</h2><span>{plans.length} total</span></div>
       {data.loading && <div className="spinner">Loading your tests…</div>}
       {!data.loading && plans.length === 0 && (
@@ -114,6 +116,28 @@ function LatestChart({ plan, r }: { plan: Plan; r: Results }) {
   if (r.type === 'observational') return <SignalChart series={r.series} signal={signal} height={210} showWindows={false} />
   const iv = r.intervention
   return iv ? <ABMeansChart meanA={iv.mean_a} meanB={iv.mean_b} signal={signal} armA={plan.intervention?.arm_a ?? 'A'} armB={plan.intervention?.arm_b ?? 'B'} height={120} /> : null
+}
+
+function CareTeamStrip({ data }: { data: PatientData }) {
+  const active = data.connections.filter((c) => c.status === 'active')
+  const pending = data.connections.filter((c) => c.status === 'pending')
+  return (
+    <article className="card mt">
+      <div className="row-between">
+        <div className="row" style={{ gap: 14 }}>
+          <span className="summary-icon tone-purple" style={{ margin: 0 }}><Icon name="stethoscope" /></span>
+          <div>
+            <h3 style={{ fontSize: 18 }}>My care team</h3>
+            <span className="muted" style={{ fontSize: 15 }}>
+              {active.length ? active.map((c) => c.clinician_name).join(', ') : 'No clinicians yet'}
+              {pending.length ? ` · ${pending.length} waiting to accept` : ''}
+            </span>
+          </div>
+        </div>
+        <a className="button secondary" href="#/care-team">{active.length ? 'Manage' : <><Icon name="plus" /> Add a clinician</>}</a>
+      </div>
+    </article>
+  )
 }
 
 export function TestTile({ plan }: { plan: Plan }) {

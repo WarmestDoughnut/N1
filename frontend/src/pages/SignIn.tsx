@@ -1,27 +1,34 @@
-import { useState } from 'react'
-import { api } from '../api'
-import type { Patient, Role } from '../types'
+import { useState, type FormEvent } from 'react'
+import { api, friendlyError } from '../api'
+import type { DemoAccount, Role } from '../types'
 import { useAsync } from '../lib/hooks'
-import { initials, signIn } from '../lib/session'
+import { initials, sessionFrom, signIn } from '../lib/session'
 import { Icon } from '../components/Icon'
 
-const CLINICIANS = [
-  { name: 'Dr. Rivera', specialty: 'Internal medicine' },
-  { name: 'Dr. Okafor', specialty: 'Neurology' },
-]
-
 export function SignIn() {
-  const patients = useAsync<Patient[]>(() => api.patients(), [])
-  const [role, setRole] = useState<Role>('clinician')
-  const [clinician, setClinician] = useState(CLINICIANS[0].name)
-  const [patientId, setPatientId] = useState('')
-  const pid = patientId || patients.data?.[0]?.id || ''
-  const patient = patients.data?.find((p) => p.id === pid)
+  const demo = useAsync<DemoAccount[]>(() => api.demoAccounts(), [])
+  const [tab, setTab] = useState<Role>('clinician')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [showPw, setShowPw] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
 
-  const go = () => {
-    if (role === 'clinician') signIn({ role, name: clinician })
-    else if (patient) signIn({ role, name: patient.display_name, patientId: patient.id })
+  const submit = async (e?: FormEvent) => {
+    e?.preventDefault()
+    if (!email.trim() || !password) { setErr('Enter your email and password.'); return }
+    setBusy(true); setErr(null)
+    try {
+      const { account, token } = await api.login(email, password)
+      signIn(sessionFrom(account, token)) // the account decides: clinician app or patient app
+    } catch (ex) {
+      setErr(friendlyError(ex))
+      setBusy(false)
+    }
   }
+
+  const pick = (a: DemoAccount) => { setEmail(a.email); setPassword('demo'); setErr(null) }
+  const list = (demo.data ?? []).filter((a) => a.role === tab)
 
   return (
     <div className="signin">
@@ -32,8 +39,8 @@ export function SignIn() {
           <p>N1 Hub runs structured n-of-1 tests on one patient's own phone and wearable data, then says plainly whether a pattern is likely real or probably chance.</p>
           <ul>
             <li><span><Icon name="shield" size={17} /></span><div><strong>The test plan is the consent.</strong> Patients approve exactly which signals are shared, and for how long.</div></li>
+            <li><span><Icon name="people" size={17} /></span><div><strong>Patients choose their care team.</strong> A clinician only sees patients who added them.</div></li>
             <li><span><Icon name="shuffle" size={17} /></span><div><strong>Honest statistics.</strong> Every result is checked against thousands of random shuffles.</div></li>
-            <li><span><Icon name="watch" size={17} /></span><div><strong>Devices patients already own.</strong> Works with phone-only or low-cost wearables.</div></li>
           </ul>
         </div>
         <div className="cite">Based on n-of-1 trial methodology: Lillie EO et al., Personalized Medicine 2011;8(2):161–173.</div>
@@ -41,49 +48,51 @@ export function SignIn() {
 
       <main className="signin-main">
         <div className="signin-panel">
-          <p className="eyebrow">Welcome</p>
+          <p className="eyebrow">Welcome back</p>
           <h2>Sign in to N1 Hub</h2>
-          <p className="muted" style={{ marginTop: 6 }}>Demo build: choose an account, no password needed.</p>
+          <p className="muted" style={{ marginTop: 6 }}>Clinicians go to their workspace. Patients go to their own health page.</p>
 
-          <div className="role-cards" role="radiogroup" aria-label="I am a">
-            <button role="radio" aria-checked={role === 'clinician'} className={`role-card ${role === 'clinician' ? 'selected' : ''}`} onClick={() => setRole('clinician')}>
-              <span className="summary-icon tone-purple" style={{ margin: 0 }}><Icon name="stethoscope" /></span>
-              <strong>I'm a clinician</strong>
-              <span className="sub">Design test plans and review results.</span>
+          <form onSubmit={submit} className="card" style={{ marginTop: 20 }} noValidate>
+            <div className="field">
+              <label htmlFor="email">Email</label>
+              <input id="email" type="email" autoComplete="username" placeholder="you@example.com" value={email}
+                onChange={(e) => { setEmail(e.target.value); setErr(null) }} />
+            </div>
+            <div className="field">
+              <label htmlFor="pw">Password</label>
+              <div style={{ position: 'relative' }}>
+                <input id="pw" type={showPw ? 'text' : 'password'} autoComplete="current-password" value={password} style={{ width: '100%', paddingRight: 70 }}
+                  onChange={(e) => { setPassword(e.target.value); setErr(null) }} />
+                <button type="button" className="link-btn" style={{ position: 'absolute', right: 12, top: 12 }} onClick={() => setShowPw((v) => !v)}>
+                  {showPw ? 'Hide' : 'Show'}
+                </button>
+              </div>
+            </div>
+            {err && <div className="alert alert-error mb" role="alert"><Icon name="info" />{err}</div>}
+            <button type="submit" className="button primary lg" style={{ width: '100%' }} disabled={busy}>
+              {busy ? 'Signing in…' : <>Sign in <Icon name="chevron" size={16} /></>}
             </button>
-            <button role="radio" aria-checked={role === 'patient'} className={`role-card ${role === 'patient' ? 'selected' : ''}`} onClick={() => setRole('patient')}>
-              <span className="summary-icon tone-green" style={{ margin: 0 }}><Icon name="user" /></span>
-              <strong>I'm a patient</strong>
-              <span className="sub">Review requests, control sharing, see results.</span>
-            </button>
-          </div>
+          </form>
 
-          <div className="field"><span className="label">Account</span></div>
-          <div className="account-list" style={{ marginTop: -6 }}>
-            {role === 'clinician'
-              ? CLINICIANS.map((c) => (
-                  <button key={c.name} className={`account ${clinician === c.name ? 'selected' : ''}`} onClick={() => setClinician(c.name)}>
-                    <span className="avatar">{initials(c.name)}</span>
-                    <span className="meta"><strong>{c.name}</strong><small>{c.specialty}</small></span>
-                    {clinician === c.name && <Icon name="check" />}
-                  </button>
-                ))
-              : patients.loading && !patients.data
-                ? <div className="spinner">Loading accounts…</div>
-                : (patients.data ?? []).map((p) => (
-                    <button key={p.id} className={`account ${pid === p.id ? 'selected' : ''}`} onClick={() => setPatientId(p.id)}>
-                      <span className="avatar" style={{ background: '#e4f5f0', color: '#119274' }}>{initials(p.display_name)}</span>
-                      <span className="meta"><strong>{p.display_name}</strong><small>{p.id} · {(p.source === 'real' || p.source === 'pmdata') ? 'PMData (real data)' : 'Synthetic'}</small></span>
-                      {pid === p.id && <Icon name="check" />}
-                    </button>
-                  ))}
+          <div className="row-between" style={{ marginTop: 26, marginBottom: 10 }}>
+            <span className="chart-title">Demo accounts <span className="muted small" style={{ fontWeight: 500 }}>· password "demo"</span></span>
+            <div className="seg" role="tablist">
+              <button type="button" className={tab === 'clinician' ? 'active' : ''} onClick={() => setTab('clinician')}>Clinicians</button>
+              <button type="button" className={tab === 'patient' ? 'active' : ''} onClick={() => setTab('patient')}>Patients</button>
+            </div>
           </div>
-          {patients.error && role === 'patient' && <div className="alert alert-error mb">{patients.error}</div>}
-
-          <button className="button primary lg" style={{ width: '100%' }} onClick={go} disabled={role === 'patient' && !patient}>
-            Continue as {role === 'clinician' ? clinician : patient?.display_name ?? 'patient'} <Icon name="chevron" size={16} />
-          </button>
-          <p className="muted small" style={{ marginTop: 14, textAlign: 'center' }}>Not diagnostic. Results are worth discussing with your clinician.</p>
+          {demo.loading && !demo.data && <div className="spinner">Loading accounts…</div>}
+          {demo.error && <div className="alert alert-error">{demo.error}</div>}
+          <div className="account-list" style={{ maxHeight: 300, overflowY: 'auto', paddingRight: 4 }}>
+            {list.map((a) => (
+              <button key={a.email} type="button" className={`account ${email === a.email ? 'selected' : ''}`} onClick={() => pick(a)}>
+                <span className="avatar" style={a.role === 'patient' ? { background: '#e4f5f0', color: '#119274' } : undefined}>{initials(a.name)}</span>
+                <span className="meta"><strong>{a.name}</strong><small>{a.email} · {a.detail}</small></span>
+                {email === a.email ? <Icon name="check" /> : <span className="muted small">Use</span>}
+              </button>
+            ))}
+          </div>
+          <p className="muted small" style={{ marginTop: 12, textAlign: 'center' }}>Demo build: no real patient data or passwords. Not diagnostic.</p>
         </div>
       </main>
     </div>

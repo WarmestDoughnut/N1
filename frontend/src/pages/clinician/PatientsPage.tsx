@@ -1,4 +1,8 @@
-import { api } from '../../api'
+import { api, friendlyError } from '../../api'
+import { useState } from 'react'
+import { ConnectCodeCard, RequestRow } from '../../components/Connections'
+import { useToast } from '../../components/Shell'
+import { getSession } from '../../lib/session'
 import type { Device } from '../../types'
 import { navigate, useAsync } from '../../lib/hooks'
 import { initials } from '../../lib/session'
@@ -9,6 +13,8 @@ import { PlanRow, toneFor } from './Overview'
 
 export function PatientsPage({ data, selectedId }: { data: ClinicianData; selectedId?: string }) {
   const devicesQ = useAsync<Device[]>(() => api.devices(), [])
+  const toast = useToast()
+  const [removing, setRemoving] = useState(false)
   const { patients, plans } = data
   const sel = patients.find((p) => p.id === selectedId) ?? patients[0]
   const catalog = devicesQ.data ?? []
@@ -19,14 +25,31 @@ export function PatientsPage({ data, selectedId }: { data: ClinicianData; select
         <div>
           <p className="eyebrow">Patients</p>
           <h1>Your patients</h1>
-          <span className="sub">Each patient's own devices decide which signals a test can use.</span>
+          <span className="sub">Patients add you with your connect code. Their own devices decide which signals a test can use.</span>
         </div>
         {sel && <a className="button primary" href={`#/new?patient=${sel.id}`}><Icon name="plus" /> New plan for {sel.display_name.replace(/\s*\(.*\)$/, '')}</a>}
       </section>
 
-      <section className="bottom-grid" style={{ gridTemplateColumns: 'minmax(280px, 0.8fr) minmax(0, 1.6fr)' }}>
+      <div className="mb"><ConnectCodeCard code={getSession()?.connectCode} /></div>
+
+      {data.requests.length > 0 && (
+        <article className="card mb" style={{ borderColor: '#f0dcae' }}>
+          <div className="card-title"><div><h3>Connection requests</h3><p>Patients who want to add you to their care team</p></div><span className="pill pill-yellow">{data.requests.length} new</span></div>
+          {data.requests.map((c) => <RequestRow key={c.id} conn={c} />)}
+        </article>
+      )}
+
+      {patients.length === 0 && (
+        <div className="card empty">
+          <div className="summary-icon tone-purple"><Icon name="people" /></div>
+          <p style={{ fontSize: 16, color: '#4c4c58' }}><strong>No connected patients yet.</strong></p>
+          <p>Share your connect code. Patients appear here once they add you and you accept.</p>
+        </div>
+      )}
+
+      {patients.length > 0 && <section className="bottom-grid" style={{ gridTemplateColumns: 'minmax(280px, 0.8fr) minmax(0, 1.6fr)' }}>
         <article className="card">
-          <div className="card-title"><div><h3>All patients</h3><p>{patients.length} people</p></div></div>
+          <div className="card-title"><div><h3>Connected patients</h3><p>{patients.length} {patients.length === 1 ? 'person' : 'people'}</p></div></div>
           {patients.map((p) => {
             const n = plans.filter((x) => x.patient_id === p.id).length
             return (
@@ -49,11 +72,25 @@ export function PatientsPage({ data, selectedId }: { data: ClinicianData; select
             <article className="card">
               <div className="row" style={{ gap: 14, marginBottom: 16 }}>
                 <span className={`avatar lg ${toneFor(sel.id)}`}>{initials(sel.display_name)}</span>
-                <div>
+                <div style={{ flex: 1 }}>
                   <h2>{sel.display_name}</h2>
                   <span className="muted small">{sel.id} · {sel.condition ? `${sel.condition} · ` : ''}{(sel.source === 'real' || sel.source === 'pmdata') ? `Real data: ${sel.citation ?? 'PMData (Thambawita et al., MMSys 2020, CC BY-NC 4.0)'}` : 'Synthetic patient with known ground truth'}</span>
                 </div>
               </div>
+              {(() => {
+                const conn = data.connections.find((c) => c.patient_id === sel.id && c.status === 'active')
+                if (!conn) return null
+                const remove = async () => {
+                  if (!window.confirm(`Remove ${sel.display_name} from your patients? Existing plans and results stay on record.`)) return
+                  setRemoving(true)
+                  try { await api.removeConnection(conn.id); toast(`${sel.display_name} removed from your patients`) }
+                  catch (e) { toast(friendlyError(e)) } finally { setRemoving(false) }
+                }
+                return <div className="row-between mb" style={{ marginTop: -6 }}>
+                  <span className="pill pill-green">Connected since {formatDate(conn.created_at)}</span>
+                  <button className="button ghost sm" disabled={removing} onClick={remove}><Icon name="x" size={14} /> Remove patient</button>
+                </div>
+              })()}
               <div className="results">
                 <div><span>Data window</span><strong style={{ fontSize: 15 }}>{formatDate(sel.date_range[0])}</strong><small>to {formatDate(sel.date_range[1])}</small></div>
                 <div><span>Days of data</span><strong>{sel.n_days}</strong><small>daily rows</small></div>
@@ -104,7 +141,7 @@ export function PatientsPage({ data, selectedId }: { data: ClinicianData; select
             </article>
           </div>
         )}
-      </section>
+      </section>}
     </>
   )
 }

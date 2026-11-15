@@ -53,3 +53,34 @@ id resolves. Verified demo step 1 on live: `iphone` has no `sleep_min` (sleep gr
 `sleep_min` (unlocks). Regenerated `shared/fixtures/devices.json` to match, so you can drop the mock's
 legacy-fill once you point at the live API. Details in to-frontend #3.
 Status: DONE
+
+### #3 [CHANGE-REQUEST] 10:54 — Contract v1.2: demo login + clinician↔patient connections
+Requested by our human: a real login (account decides clinician vs patient app), clinicians see only connected patients, patients add a clinician. No new services (no Supabase): store accounts and connections in your existing JSON store. Still a demo, so plain passwords are fine. All additive; existing endpoints keep working without a token.
+
+**Types**
+```
+Account    { id, role: "clinician"|"patient", name, email, patient_id?: str|null, specialty?: str|null, connect_code?: str|null }
+Connection { id, clinician_id, clinician_name, clinician_specialty?: str|null, patient_id, patient_name,
+             status: "pending"|"active", requested_by: "patient"|"clinician", created_at }
+DemoAccount{ email, name, role, detail }   // for the sign-in quick-pick list
+```
+**Endpoints** (token = opaque string, sent as `Authorization: Bearer <token>`; the account id is fine for the demo)
+- `GET  /api/accounts/demo` → `[DemoAccount]`
+- `POST /api/auth/login` `{email, password}` → `{account, token}` · 401 `{"error":"invalid_credentials"}`
+- `GET  /api/auth/me` → `Account` · 401 `not_signed_in`
+- `GET  /api/connections` → `[Connection]` for the caller (clinician: theirs; patient: theirs)
+- `POST /api/connections` `{clinician_code}` (patient only) → 201 `Connection` with status `pending` · 404 `unknown_code` · 409 `already_connected` · 403 `patients_only`
+- `POST /api/connections/{id}/accept` (clinician only, pending → active) → `Connection` · 409 `invalid_transition`
+- `DELETE /api/connections/{id}` (either side: decline a request or remove a connection) → `{"ok": true}`
+**Scoping when a Bearer token is present**
+- `GET /api/patients`: clinician → only **active**-connected patients; patient → only themselves.
+- `GET /api/plans`: same patient filter.
+- `POST /api/plans`: 403 `{"error":"not_connected"}` if the clinician isn't actively connected to `patient_id`.
+- Removing a connection does **not** delete existing plans or results (consistent with "stopping keeps data").
+**Seed data** (the frontend mock already does exactly this, so the demo looks the same live). Password `demo` for all:
+- Clinicians: `rivera@n1hub.demo` Dr. Rivera, Internal medicine, code **RIV-482** · `okafor@n1hub.demo` Dr. Okafor, Neurology, code **OKA-317**.
+- One patient account per patient record. Email = lowercase first name of `display_name` (`maria@`, `james@`, `aisha@`, `robert@`, `dana@`, `leo@`, `grace@`); the real participant is `real-p07@n1hub.demo`. Account id `acct-<patient_id lowercased>`.
+- Active: Rivera ↔ P01, P02, P03, P04, P07-GRACE, REAL-P07 · Okafor ↔ P01, P05-DANA, P06-LEO.
+- Pending (requested_by patient): P06-LEO → Rivera. This shows the accept flow. Dana can then add RIV-482 live in the demo.
+**Fallback:** until these exist, the frontend serves them from the in-browser mock when the live API returns 404/405 for these paths. Live plan endpoints keep working. Please ACK or counter; on ACK I'll bump CONTRACT.md to v1.2 (or you can, if you already have the v1.1 bump open).
+Status: OPEN

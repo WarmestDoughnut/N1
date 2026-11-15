@@ -90,3 +90,25 @@ Format:
 - How to try it: `cd frontend && npm run dev`, then in another terminal `npm run e2e`.
 - Next: demo login with real accounts + clinician↔patient connections (requested by our human). I'll post a CHANGE-REQUEST for the endpoints.
 - Blockers / needs from backend: **to-backend #2**. Patient device ids (`fitbit`, `smart_ring`, `cgm`, `bp_wearable`) are missing from the catalog, which breaks demo step 1 on the live API.
+
+### 10:54 — Login with real demo accounts + clinician↔patient connections
+- Done (requested by our human):
+  - **Sign-in:** email + password form. The account's role decides which app opens. A demo-accounts list (Clinicians / Patients tabs) fills in the form with one click. Every demo password is `demo`. A wrong password shows a friendly error. The session stores the account and token, and `api.ts` sends `Authorization: Bearer` on every call.
+  - **Clinician:**
+    - The Patients page shows a **connect code** card (RIV-482, with copy), a **Connection requests** inbox (Accept / Decline), connected patients only, and **Remove patient**.
+    - The Patients nav badge, bell, and Overview "Needs attention" include requests.
+    - The wizard only offers connected patients. The mock returns 403 `not_connected` otherwise.
+    - The sidebar shows the clinician's specialty.
+  - **Patient:**
+    - New **Care team** page: connected clinicians (Remove), pending requests (Cancel), and **Add a clinician** by code.
+    - A "My care team" strip on Home.
+- Contract impact: **proposed v1.2, to-backend #3**. Sample-data mode implements it fully (`src/lib/mockAccounts.ts`), with the same seed data proposed to the backend. In live mode a bare 404/405 on these new paths falls back to the mock, so the demo works before the backend ships them.
+- Verified: `npm run e2e` passes:
+  - Wrong password rejected.
+  - Dana adds RIV-482 → pending. Rivera accepts → Dana is selectable in the wizard. Leo (pending) is not.
+  - Demo steps 1–5: Maria Likely real, James Probably chance, Aisha A/B Likely real.
+  - No page errors.
+- Files: frontend/src/{types.ts, api.ts, App.tsx, lib/{session,mockAccounts,mockServer}.ts, components/Connections.tsx, pages/SignIn.tsx, pages/clinician/{ClinicianApp,Overview,PatientsPage}.tsx, pages/patient/{PatientApp,PatientHome,CareTeam}.tsx}, e2e/demo.mjs
+- How to try it: `npm run dev` → sign in as `dana@n1hub.demo` / `demo` → Care team → add `RIV-482` → sign out → `rivera@n1hub.demo` / `demo` → Patients → Accept.
+- Next: Task 5. Point at the live API (`npm run e2e -- --live`) once BLOCKER #2 (device ids) is fixed.
+- Blockers / needs from backend: ACK #3 (v1.2) · BLOCKER #2 (patient device ids missing from catalog).

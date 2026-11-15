@@ -10,7 +10,8 @@ import { PatientApp } from './pages/patient/PatientApp'
 export default function App() {
   const session = useSession()
   const route = useHashRoute()
-  const patients = useAsync<Patient[]>(() => api.patients(), [])
+  // Scoped by the signed-in account: clinicians get connected patients only, patients get themselves.
+  const patients = useAsync<Patient[]>(() => (session ? api.patients() : Promise.resolve([])), [session?.accountId])
 
   if (!session) return <SignIn />
   if (session.role === 'clinician') return <ClinicianApp session={session} route={route} patients={patients.data ?? []} />

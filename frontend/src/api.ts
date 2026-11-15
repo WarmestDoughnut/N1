@@ -18,8 +18,14 @@ import type {
   SchedulePeriod,
   SchedulePreviewParams,
   SignalId,
+  Account,
+  Connection,
+  DemoAccount,
+  LoginResponse,
 } from './types'
 import { mock, MockHttpError, resetMock } from './lib/mockServer'
+import { isConnected, mockAccounts, resetConnections } from './lib/mockAccounts'
+import { getSession } from './lib/session'
 
 export const API_URL: string = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:8000'
 
@@ -43,7 +49,7 @@ export function setDataSource(s: DataSource) {
   listeners.forEach((l) => l())
 }
 export function onDataSourceChange(fn: () => void) { listeners.add(fn); return () => { listeners.delete(fn) } }
-export function resetMockData() { resetMock(); listeners.forEach((l) => l()) }
+export function resetMockData() { resetMock(); resetConnections(); listeners.forEach((l) => l()) }
 
 export class ApiError extends Error {
   constructor(public status: number, public code: string, message: string) {
@@ -56,6 +62,12 @@ const FRIENDLY: Record<string, string> = {
   invalid_transition: "That action isn't available for this plan right now. It may have already changed — try refreshing.",
   no_results: "Results aren't ready yet. They appear once the plan is complete or stopped.",
   not_found: "We couldn't find that item. It may have been removed.",
+  invalid_credentials: "That email and password don't match. Demo accounts use the password \"demo\".",
+  not_signed_in: 'Your session has ended. Please sign in again.',
+  unknown_code: "No clinician has that code. Check it with your clinician's office and try again.",
+  already_connected: "You're already connected with this clinician (or a request is waiting).",
+  not_connected: "You can only create plans for patients you're connected with.",
+  patients_only: 'Only patients can add a clinician.',
 }
 
 export function friendlyError(e: unknown): string {
@@ -79,13 +91,19 @@ function notifyMutation(method: string) {
   if (method !== 'GET') setTimeout(() => listeners.forEach((l) => l()), 0)
 }
 
-async function call<T>(method: string, path: string, body: unknown, viaMock: () => Promise<T>): Promise<T> {
-  const out = await callRaw<T>(method, path, body, viaMock)
+const token = () => getSession()?.token ?? null
+
+async function call<T>(method: string, path: string, body: unknown, viaMock: () => Promise<T>, optional = false): Promise<T> {
+  const out = await callRaw<T>(method, path, body, viaMock, optional)
   notifyMutation(method)
   return out
 }
 
-async function callRaw<T>(method: string, path: string, body: unknown, viaMock: () => Promise<T>): Promise<T> {
+/**
+ * `optional` marks v1.2 endpoints (accounts/connections) the backend may not serve yet:
+ * a bare 404/405 from the live API falls back to the in-browser mock for that call only.
+ */
+async function callRaw<T>(method: string, path: string, body: unknown, viaMock: () => Promise<T>, optional = false): Promise<T> {
   const runMock = async () => {
     try {
       return await viaMock()
@@ -100,7 +118,10 @@ async function callRaw<T>(method: string, path: string, body: unknown, viaMock: 
   try {
     res = await fetch(API_URL + path, {
       method,
-      headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+      headers: {
+        ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+        ...(token() ? { Authorization: `Bearer ${token()}` } : {}),
+      },
       body: body !== undefined ? JSON.stringify(body) : undefined,
     })
   } catch {
@@ -116,6 +137,7 @@ async function callRaw<T>(method: string, path: string, body: unknown, viaMock: 
       const j = await res.json()
       code = typeof j?.error === 'string' ? j.error : ''
     } catch { /* not JSON */ }
+    if (optional && (res.status === 405 || (res.status === 404 && (code === '' || code === 'Not Found')))) return runMock()
     throw toApiError(res.status, code)
   }
   return (await res.json()) as T
@@ -126,7 +148,8 @@ const enc = encodeURIComponent
 export const api = {
   health: () => call<Health>('GET', '/api/health', undefined, mock.health),
   devices: () => call<Device[]>('GET', '/api/devices', undefined, mock.devices),
-  patients: () => call<Patient[]>('GET', '/api/patients', undefined, mock.patients),
+  /** With a clinician token: only actively connected patients. With a patient token: only themselves. */
+  patients: () => call<Patient[]>('GET', '/api/patients', undefined, async () => (await mock.patients()).filter((p) => isConnected(token(), p.id))),
   series: (patientId: string, signals: SignalId[], planId: string) =>
     call<PatientSeries>(
       'GET',
@@ -137,9 +160,13 @@ export const api = {
   logEpisode: (body: EpisodeCreate) => call<{ ok: true }>('POST', '/api/episodes', body, () => mock.logEpisode(body)),
 
   listPlans: (patientId?: string) =>
-    call<Plan[]>('GET', `/api/plans${patientId ? `?patient_id=${enc(patientId)}` : ''}`, undefined, () => mock.listPlans(patientId)),
+    call<Plan[]>('GET', `/api/plans${patientId ? `?patient_id=${enc(patientId)}` : ''}`, undefined,
+      async () => (await mock.listPlans(patientId)).filter((p) => isConnected(token(), p.patient_id))),
   getPlan: (id: string) => call<Plan>('GET', `/api/plans/${enc(id)}`, undefined, () => mock.getPlan(id)),
-  createPlan: (body: PlanCreate) => call<Plan>('POST', '/api/plans', body, () => mock.createPlan(body)),
+  createPlan: (body: PlanCreate) => call<Plan>('POST', '/api/plans', body, () => {
+    if (!isConnected(token(), body.patient_id)) throw new MockHttpError(403, { error: 'not_connected' })
+    return mock.createPlan(body)
+  }),
   planAction: (id: string, action: PlanAction) =>
     call<Plan>('POST', `/api/plans/${enc(id)}/${action}`, undefined, () => mock.action(id, action)),
   approve: (id: string) => api.planAction(id, 'approve'),
@@ -157,4 +184,19 @@ export const api = {
       () => mock.schedulePreview(q),
     ),
   results: (planId: string) => call<Results>('GET', `/api/plans/${enc(planId)}/results`, undefined, () => mock.results(planId)),
+
+  // ---------- v1.2 (proposed): accounts & connections ----------
+  demoAccounts: () => call<DemoAccount[]>('GET', '/api/accounts/demo', undefined, mockAccounts.demoAccounts, true),
+  login: (email: string, password: string) =>
+    call<LoginResponse>('POST', '/api/auth/login', { email, password }, () => mockAccounts.login(email, password), true),
+  me: () => call<Account>('GET', '/api/auth/me', undefined, () => mockAccounts.me(token()), true),
+  connections: () => call<Connection[]>('GET', '/api/connections', undefined, () => mockAccounts.connections(token()), true),
+  /** patient adds a clinician by their connect code → pending */
+  requestConnection: (code: string) =>
+    call<Connection>('POST', '/api/connections', { clinician_code: code }, () => mockAccounts.requestConnection(token(), code), true),
+  acceptConnection: (id: string) =>
+    call<Connection>('POST', `/api/connections/${enc(id)}/accept`, undefined, () => mockAccounts.accept(token(), id), true),
+  /** decline a pending request, or remove an active connection (either side) */
+  removeConnection: (id: string) =>
+    call<{ ok: true }>('DELETE', `/api/connections/${enc(id)}`, undefined, () => mockAccounts.remove(token(), id), true),
 }

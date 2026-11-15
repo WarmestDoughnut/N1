@@ -71,7 +71,7 @@ function mk(id: string, name: string, source: string, devices: string[], n_days:
   return { id, display_name: name, source, devices, date_range: [start, addDays(start, n_days - 1)], n_days, n_episodes }
 }
 
-const PATIENTS: Patient[] = fixturePatients ?? SPECS.map((s) => s.patient)
+export const PATIENTS: Patient[] = fixturePatients ?? SPECS.map((s) => s.patient)
 
 // ---------- data generation ----------
 const seriesCache = new Map<string, SeriesRow[]>()

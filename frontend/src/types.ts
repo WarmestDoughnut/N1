@@ -211,3 +211,46 @@ export interface Health {
 }
 
 export type Role = 'clinician' | 'patient'
+
+// ---------- Accounts & clinician↔patient connections (proposed v1.2, see to-backend #3) ----------
+
+export interface Account {
+  id: string
+  role: Role
+  name: string
+  email: string
+  /** patient accounts: the patient record this account owns */
+  patient_id?: string | null
+  /** clinician accounts */
+  specialty?: string | null
+  /** clinician accounts: short code patients enter to add this clinician */
+  connect_code?: string | null
+}
+
+export interface LoginResponse {
+  account: Account
+  /** opaque; send as `Authorization: Bearer <token>` */
+  token: string
+}
+
+export type ConnectionStatus = 'pending' | 'active'
+
+export interface Connection {
+  id: string
+  clinician_id: string
+  clinician_name: string
+  clinician_specialty?: string | null
+  patient_id: string
+  patient_name: string
+  status: ConnectionStatus
+  requested_by: Role
+  created_at: string
+}
+
+/** GET /api/accounts/demo — quick-pick list on the sign-in page (demo build only) */
+export interface DemoAccount {
+  email: string
+  name: string
+  role: Role
+  detail: string
+}

@@ -1,17 +1,19 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api, ApiError } from '../../api'
-import type { Patient, Plan, Results } from '../../types'
+import type { Connection, Patient, Plan, Results } from '../../types'
 import { navigate, useAsync } from '../../lib/hooks'
 import type { Session } from '../../lib/session'
 import { Shell, type NavItem, type SearchItem } from '../../components/Shell'
 import { PatientHome } from './PatientHome'
 import { PatientTests } from './PatientTests'
 import { PatientPlan } from './PatientPlan'
+import { CareTeam } from './CareTeam'
 
 export interface PatientData {
   patient?: Patient
   plans: Plan[]
   results: Record<string, Results>
+  connections: Connection[]
   loading: boolean
   error: string | null
 }
@@ -19,6 +21,7 @@ export interface PatientData {
 export function PatientApp({ session, route, patients }: { session: Session; route: string[]; patients: Patient[] }) {
   const pid = session.patientId!
   const plansQ = useAsync<Plan[]>(() => api.listPlans(pid), [pid])
+  const connQ = useAsync<Connection[]>(() => api.connections(), [pid])
   const [results, setResults] = useState<Record<string, Results>>({})
   useEffect(() => {
     const finished = (plansQ.data ?? []).filter((p) => p.status === 'complete' || p.status === 'stopped')
@@ -30,6 +33,7 @@ export function PatientApp({ session, route, patients }: { session: Session; rou
     patient: patients.find((p) => p.id === pid),
     plans: plansQ.data ?? [],
     results,
+    connections: connQ.data ?? [],
     loading: plansQ.loading && !plansQ.data,
     error: plansQ.error,
   }
@@ -38,6 +42,7 @@ export function PatientApp({ session, route, patients }: { session: Session; rou
   const nav: NavItem[] = [
     { label: 'Home', icon: 'grid', href: '#/', match: (r) => r.length === 0 },
     { label: 'My tests', icon: 'clipboard', href: '#/tests', badge: pending || undefined, match: (r) => r[0] === 'tests' || r[0] === 'plans' },
+    { label: 'Care team', icon: 'stethoscope', href: '#/care-team', match: (r) => r[0] === 'care-team' },
   ]
   const searchItems: SearchItem[] = useMemo(
     () => data.plans.map((p) => ({ label: p.title, sub: `from ${p.clinician_name}`, href: `#/plans/${p.id}`, icon: 'clipboard' as const })),
@@ -47,6 +52,7 @@ export function PatientApp({ session, route, patients }: { session: Session; rou
   let page: JSX.Element
   if (route[0] === 'plans' && route[1]) page = <PatientPlan planId={route[1]} data={data} />
   else if (route[0] === 'tests') page = <PatientTests data={data} />
+  else if (route[0] === 'care-team') page = <CareTeam connections={data.connections} loading={connQ.loading} />
   else page = <PatientHome session={session} data={data} />
 
   return (
