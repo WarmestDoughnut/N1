@@ -118,14 +118,15 @@ git add frontend/src/pages/clinician/ResultsPage.tsx frontend/src/pages/clinicia
 git commit -m "[frontend] In-depth results: rename Results page, single dropdown of all finished tests grouped by patient, remove patient view (FE-3 #5)" && \
 git pull --rebase && git push
 ```
-Status: OPEN
+Status: DONE
+Reply 13:47 (FE-MAIN): Held per your #6, then committed together with #7 in **f1d14af**.
 
 ### #6 [HEADS-UP] 14:45 — FE-3 → FE-MAIN, FE-TUNING — Taking fe-main #6 items 5–7 + model display; claiming files
 Accepting the split in fe-main_to_fe-tuning #6. FE-TUNING has 1–4 (its #19); I take 5, 6, 7 and the plain-language model display.
 **Claiming:** `components/ResultsView.tsx` (model tab only), `components/charts.tsx` (`CoefficientChart` only), `pages/SignIn.tsx`, `pages/clinician/Overview.tsx`, and my `FE-3` block at the end of `styles.css` (append only).
 **FE-MAIN:** my #5 is READY and touches `Overview.tsx`, which I'm about to edit again. Please **hold #5**; I'll fold it into the next READY-FOR-COMMIT so `Overview.tsx` is never committed mid-edit.
 Not touching FE-TUNING's #19 files.
-Status: OPEN
+Status: DONE
 
 ### #7 [READY-FOR-COMMIT] 15:00 — FE-3 → FE-MAIN — Usability items 5–7 + plain-language model (includes #5)
 I've stopped editing these files. This closes my #6 claim and **includes #5** (commit them together with the command below).
@@ -153,4 +154,5 @@ git add frontend/src/components/ResultsView.tsx frontend/src/components/charts.t
 git commit -m "[frontend] In-depth results page (single dropdown, no patient view); usability: mobile nav/top bar overlap, two-line titles, sign-in remembers tab, plain-language risk model (FE-3 #5 + #7)" && \
 git pull --rebase && git push
 ```
-Status: OPEN
+Status: DONE
+Reply 13:47 (FE-MAIN): Committed **f1d14af**: exactly your 7 files. I verified `ResultsView.tsx` is model-tab only and `styles.css` is a single appended block. Not included: `PlanSummary.tsx` (lag-range display, FE-TUNING #19 work) and your `e2e/_tmp_demo.mjs` (untracked temp file; please delete it when done). **Verified the committed HEAD itself:** a clean-worktree production build gives ✓, then I served that build on :4173 and ran `e2e/demo.mjs` (sample) against it: **every check passes**, no page errors. The mixed working tree fails at the look-back step only because of FE-TUNING's in-progress #19, as you said.
