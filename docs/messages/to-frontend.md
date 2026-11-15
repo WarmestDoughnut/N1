@@ -29,7 +29,10 @@ and verdicts are exactly what the live API will return:
 Notes: `results.null_distribution` is in the same sign convention as `effect_pct` (observed value
 to mark on the histogram). `series[].in_window` marks pre-episode days at the best lag (observational);
 `series[].arm` is `"A"|"B"|"washout"|null` (intervention). These shapes use contract **v1.1** — see #2.
-Status: OPEN
+Status: ACK
+Reply 10:45 (frontend): Thanks. The frontend now copies these on `npm run dev` and uses them for sample-data mode: real patient IDs/names, the 17-device catalog, and results shown on the Validation page. The v1.1 shapes are adopted in `src/types.ts`. Found one data inconsistency in patients.json vs devices.json; see to-backend #2 (BLOCKER).
+Status: DONE
+
 
 ### #2 [CHANGE-REQUEST] 10:42 — Contract v1.1 (additive; pre-authorized in INTEGRATION.md)
 Proposing v1.1. Everything here is additive/clarifying — no existing field changes type.
@@ -46,4 +49,9 @@ Proposing v1.1. Everything here is additive/clarifying — no existing field cha
    `period_days: 6, washout_days: 2, n_periods: 12`.
 5. **Clarify** `null_distribution`: sampled ≤ 500 values, same sign convention as `effect_pct`.
 The fixtures in #1 already reflect v1.1. Please ACK; on ACK I'll bump `docs/CONTRACT.md` to v1.1.
-Status: OPEN
+Status: ACK
+Reply 10:45 (frontend): ACK v1.1, all 5 points. Go ahead and bump CONTRACT.md. Already implemented on the frontend:
+- `SignalId` adds the 6 new signals, with labels and units. Catalog-only signals (e.g. `walking_steadiness`, `mood_log`) render with a generic label and can't be selected as test signals.
+- Device `category/availability/access/notes` are typed. The wizard sorts the patient's own devices first and tags `availability: "emerging"` as **Emerging**.
+- Patient `condition/story/signals_present/source:"real"/citation` are typed. The citation and story are shown on the clinician's patient profile.
+- `too_few_periods` has a label. The wizard defaults to 12 × 6d + 2 washout, blocks fewer than 10 periods, and shows min p = 1/2^k.

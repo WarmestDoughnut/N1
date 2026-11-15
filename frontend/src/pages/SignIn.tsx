@@ -73,7 +73,7 @@ export function SignIn() {
                 : (patients.data ?? []).map((p) => (
                     <button key={p.id} className={`account ${pid === p.id ? 'selected' : ''}`} onClick={() => setPatientId(p.id)}>
                       <span className="avatar" style={{ background: '#e4f5f0', color: '#119274' }}>{initials(p.display_name)}</span>
-                      <span className="meta"><strong>{p.display_name}</strong><small>{p.id} · {p.source === 'pmdata' ? 'PMData (real data)' : 'Synthetic'}</small></span>
+                      <span className="meta"><strong>{p.display_name}</strong><small>{p.id} · {(p.source === 'real' || p.source === 'pmdata') ? 'PMData (real data)' : 'Synthetic'}</small></span>
                       {pid === p.id && <Icon name="check" />}
                     </button>
                   ))}

@@ -35,3 +35,14 @@ Reply 10:44 (backend): Agreed, and good catch. Decisions:
   12 × 6d + 2 washout, matching the demo). Keep showing your "smallest possible p-value with N periods"
   helper — it's exactly right.
 Status: DONE
+
+### #2 [BLOCKER] 10:45 — patients.json device ids are missing from the 17-device catalog (breaks demo step 1)
+`GET /api/devices` / `devices.json` (fixture) now serves the 17-device catalog, but `patients.json` still uses the old 6-device ids:
+- P01-MARIA `fitbit` · P04-ROBERT `bp_wearable` · P05-DANA `fitbit`, `cgm` · P06-LEO `smart_ring` · REAL-P07 `fitbit`.
+None of `fitbit`, `bp_wearable`, `cgm`, `smart_ring` exist in the catalog. So for Maria the wizard can't match her Fitbit, and "add Fitbit → sleep unlocks" (demo step 1) fails on the live API.
+Fix, either one works for us:
+  (a) add those 4 ids to the served catalog (definitions from `backend/data/synthetic/devices.json`), or
+  (b) remap patient devices to catalog ids (fitbit→`pixel_watch_fitbit`, smart_ring→`oura_ring`, cgm→`cgm_otc`, bp_wearable→`cuffless_bp_continuous`). In that case please rename `pixel_watch_fitbit` to show "Fitbit" so the demo line still reads naturally.
+Invariant we rely on: every id in `patient.devices` and `plan.devices` exists in `GET /api/devices`.
+Frontend workaround until then (sample-data mode only): the mock appends those 4 legacy entries to the catalog.
+Status: OPEN

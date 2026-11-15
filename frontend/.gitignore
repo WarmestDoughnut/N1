@@ -1,2 +1,3 @@
 src/fixtures/*.json
 *.tsbuildinfo
+e2e/shots/

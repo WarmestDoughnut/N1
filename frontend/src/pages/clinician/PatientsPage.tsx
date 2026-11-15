@@ -37,7 +37,7 @@ export function PatientsPage({ data, selectedId }: { data: ClinicianData; select
                   <strong>{p.display_name}</strong>
                   <small>{p.id} · {n} plan{n === 1 ? '' : 's'}</small>
                 </span>
-                <span className={`pill no-dot ${p.source === 'pmdata' ? 'pill-green' : 'pill-gray'}`}>{p.source === 'pmdata' ? 'Real data' : 'Synthetic'}</span>
+                <span className={`pill no-dot ${(p.source === 'real' || p.source === 'pmdata') ? 'pill-green' : 'pill-gray'}`}>{(p.source === 'real' || p.source === 'pmdata') ? 'Real data' : 'Synthetic'}</span>
                 <Icon name="chevron" size={15} />
               </button>
             )
@@ -51,7 +51,7 @@ export function PatientsPage({ data, selectedId }: { data: ClinicianData; select
                 <span className={`avatar lg ${toneFor(sel.id)}`}>{initials(sel.display_name)}</span>
                 <div>
                   <h2>{sel.display_name}</h2>
-                  <span className="muted small">{sel.id} · {sel.source === 'pmdata' ? 'PMData participant (Fitbit Versa 2)' : 'Synthetic patient with known ground truth'}</span>
+                  <span className="muted small">{sel.id} · {sel.condition ? `${sel.condition} · ` : ''}{(sel.source === 'real' || sel.source === 'pmdata') ? `Real data: ${sel.citation ?? 'PMData (Thambawita et al., MMSys 2020, CC BY-NC 4.0)'}` : 'Synthetic patient with known ground truth'}</span>
                 </div>
               </div>
               <div className="results">
@@ -90,6 +90,7 @@ export function PatientsPage({ data, selectedId }: { data: ClinicianData; select
                   </div>
                 </div>
               </div>
+              {sel.story && <div className="insight mt"><span><Icon name="info" size={17} /></span><p><strong>Clinical story</strong>{sel.story}</p></div>}
             </article>
 
             <article className="card">

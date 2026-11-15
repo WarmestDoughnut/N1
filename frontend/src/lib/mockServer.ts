@@ -31,7 +31,17 @@ export class MockHttpError extends Error {
   }
 }
 
-const DEVICES: Device[] = fixtureDevices ?? [
+// TEMP (see to-backend #2): patients.json references these ids but the 17-device catalog doesn't
+// include them. Definitions copied from backend/data/synthetic/devices.json. Remove once fixed.
+const LEGACY_DEVICES: Device[] = [
+  { id: 'fitbit', name: 'Fitbit', availability: 'now', signals: ['sleep_min', 'resting_hr', 'hrv', 'steps', 'spo2', 'skin_temp_dev'] },
+  { id: 'smart_ring', name: 'Smart ring (Oura-class)', availability: 'now', signals: ['sleep_min', 'resting_hr', 'hrv', 'skin_temp_dev', 'resp_rate'] },
+  { id: 'cgm', name: 'Continuous glucose monitor', availability: 'now', signals: ['glucose_tir'] },
+  { id: 'bp_wearable', name: 'Cuffless BP wearable', availability: 'emerging', signals: ['systolic_bp'] },
+]
+const withLegacy = (cat: Device[]) => [...cat, ...LEGACY_DEVICES.filter((l) => !cat.some((d) => d.id === l.id))]
+
+const DEVICES: Device[] = fixtureDevices ? withLegacy(fixtureDevices) : [
   { id: 'iphone', name: 'iPhone', signals: ['steps', 'episode'] },
   { id: 'apple_watch', name: 'Apple Watch', signals: ['sleep_min', 'resting_hr', 'hrv', 'steps'] },
   { id: 'fitbit', name: 'Fitbit', signals: ['sleep_min', 'resting_hr', 'hrv', 'steps'] },
@@ -67,10 +77,18 @@ const PATIENTS: Patient[] = fixturePatients ?? SPECS.map((s) => s.patient)
 const seriesCache = new Map<string, SeriesRow[]>()
 const extraEpisodes: Record<string, string[]> = load('n1mock.episodes', {})
 
+/** Backend demo patients → mock generator with the same planted ground truth (CLAUDE.md §3). */
+const ALIASES: Record<string, string> = {
+  'P01-MARIA': 'SYN-PATTERN', 'P02-JAMES': 'SYN-NULL', 'P03-AISHA': 'SYN-TREAT', 'P04-ROBERT': 'SYN-TREAT-NULL',
+  'P06-LEO': 'SYN-PATTERN', 'REAL-P07': 'PMD-P01',
+}
+
 function specFor(pid: string): PatientSpec {
   const known = SPECS.find((s) => s.patient.id === pid)
   if (known) return known
   const p = PATIENTS.find((x) => x.id === pid)!
+  const alias = SPECS.find((s) => s.patient.id === ALIASES[pid])
+  if (alias && p) return { ...alias, patient: p, episodes: p.n_episodes }
   let h = 0
   for (const c of pid) h = (h * 31 + c.charCodeAt(0)) | 0
   return { patient: p, seed: Math.abs(h) || 1, episodes: p.n_episodes }
@@ -292,32 +310,36 @@ function computeIntervention(plan: Plan, incomplete: boolean): Results {
   const b = period_means.filter((x) => x.arm === 'B').map((x) => x.mean)
   const mean_a = mean(a), mean_b = mean(b)
   const eff = ((mean_b - mean_a) / mean_a) * 100
-  // Exact permutation test: every way to relabel the periods with the same A/B counts.
+  // Exact permutation test under the block design (CLAUDE.md §3): each AB/BA block can be
+  // flipped independently, so there are 2^k labelings for k blocks; smallest p = 1/2^k.
   const nulls: number[] = []
-  const pm = period_means.map((x) => x.mean)
-  const nA = a.length
-  const walk = (start: number, chosen: number[]) => {
-    if (chosen.length === nA) {
-      const isA = new Set(chosen)
-      const ma = mean(pm.filter((_, i) => isA.has(i)))
-      const mb = mean(pm.filter((_, i) => !isA.has(i)))
+  const used = period_means
+  const k = Math.floor(used.length / 2)
+  if (k >= 1 && k <= 12) {
+    for (let mask = 0; mask < 1 << k; mask++) {
+      const arms = used.map((pm, i) => {
+        const b = Math.floor(i / 2)
+        const flip = b < k && (mask >> b) & 1
+        return flip ? (pm.arm === 'A' ? 'B' : 'A') : pm.arm
+      })
+      const ma = mean(used.filter((_, i) => arms[i] === 'A').map((x) => x.mean))
+      const mb = mean(used.filter((_, i) => arms[i] === 'B').map((x) => x.mean))
       nulls.push(((mb - ma) / ma) * 100)
-      return
     }
-    for (let i = start; i < pm.length; i++) walk(i + 1, [...chosen, i])
   }
-  if (pm.length <= 20) walk(0, [])
   const N_PERM = nulls.length
   const sign = cfg.better === 'higher' ? 1 : -1
   const p = N_PERM ? nulls.filter((x) => sign * x >= sign * eff - 1e-9).length / N_PERM : 1
-  const enough = a.length >= 2 && b.length >= 2 && missing / Math.max(1, total) <= 0.4
+  const enoughBlocks = k >= 5
+  const enough = a.length >= 2 && b.length >= 2 && enoughBlocks && missing / Math.max(1, total) <= 0.4
   const verdict = verdictFor(p, eff, sign * eff > 0, enough)
   const warnings: string[] = []
   if (incomplete) warnings.push('incomplete_plan')
+  if (!enoughBlocks) warnings.push('too_few_periods')
   const sig = SIGNAL_INFO[cfg.outcome_signal]
   const headline = enough
     ? `${sig.label} was ${Math.abs(eff).toFixed(0)}% ${eff >= 0 ? 'higher' : 'lower'} on "${cfg.arm_b}" than on "${cfg.arm_a}".`
-    : `Only ${Math.min(a.length, b.length)} period(s) per arm — not enough to judge.`
+    : `Only ${k} A/B block${k === 1 ? '' : 's'} — at least 5 are needed to judge.`
   const patient_headline = {
     likely_real: `Your ${sig.plain} was ${eff >= 0 ? 'better' : 'worse'} during "${cfg.arm_b}" periods. Worth discussing with your clinician.`,
     suggestive: `"${cfg.arm_b}" may have made a difference to your ${sig.plain}, but it isn't clear yet. Worth discussing with your clinician.`,
@@ -457,7 +479,7 @@ export function sampleResults(): { name: string; plan: Plan; results: Results }[
   }
   const iv = (pid: string): Plan => {
     const p = pat(pid)
-    const cfg = { arm_a: 'No melatonin', arm_b: 'Melatonin 3mg', outcome_signal: 'sleep_min' as SignalId, better: 'higher' as const, period_days: 7, washout_days: 2, n_periods: 8, seed: 42 }
+    const cfg = { arm_a: 'No melatonin', arm_b: 'Melatonin 3mg', outcome_signal: 'sleep_min' as SignalId, better: 'higher' as const, period_days: 6, washout_days: 2, n_periods: 12, seed: 42 }
     const schedule = makeSchedule({ ...cfg, start: p.date_range[0] })
     return {
       id: `SAMPLE-${pid}`, patient_id: pid, clinician_name: 'Dr. Rivera', title: 'Does melatonin improve sleep?', type: 'intervention',

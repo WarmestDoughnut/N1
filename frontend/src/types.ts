@@ -1,22 +1,34 @@
 // Mirrors docs/CONTRACT.md v1.0 exactly. Do not change without the CHANGE-REQUEST protocol.
 
-export type SignalId = 'sleep_min' | 'resting_hr' | 'hrv' | 'steps' | 'episode'
+// v1.1: daily-table signals that can be analyzed. Device catalogs may list more ("supported soon").
+export type SignalId =
+  | 'sleep_min' | 'resting_hr' | 'hrv' | 'steps' | 'episode'
+  | 'skin_temp_dev' | 'resp_rate' | 'spo2' | 'systolic_bp' | 'glucose_tir' | 'walking_speed'
 export type DeviceId = string // catalog ids, e.g. "iphone" | "apple_watch" | "fitbit"
 
 export interface Device {
   id: DeviceId
   name: string
+  /** may include catalog-only signals that aren't in the daily table yet */
   signals: SignalId[]
+  category?: string
+  availability?: 'now' | 'emerging'
+  access?: string
+  notes?: string
 }
 
 export interface Patient {
   id: string
   display_name: string
-  source: 'synthetic' | 'pmdata' | string
+  source: 'synthetic' | 'real' | string
   devices: DeviceId[]
   date_range: [string, string]
   n_days: number
   n_episodes: number
+  condition?: string
+  story?: string
+  signals_present?: SignalId[]
+  citation?: string
 }
 
 export interface SeriesRow {
@@ -26,6 +38,12 @@ export interface SeriesRow {
   hrv?: number | null
   steps?: number | null
   episode?: number | null
+  skin_temp_dev?: number | null
+  resp_rate?: number | null
+  spo2?: number | null
+  systolic_bp?: number | null
+  glucose_tir?: number | null
+  walking_speed?: number | null
 }
 
 export interface PatientSeries {

@@ -14,7 +14,6 @@ const SENSOR_SIGNALS: SignalId[] = ALL_SIGNALS.filter((s) => s !== 'episode')
 interface ObsForm { signal: SignalId; direction: Direction; max_lag_days: number }
 interface IvForm { arm_a: string; arm_b: string; outcome_signal: SignalId; better: Direction; period_days: number; washout_days: number; n_periods: number; seed: number }
 
-function binom(n: number, k: number) { let r = 1; for (let i = 1; i <= k; i++) r = (r * (n - k + i)) / i; return Math.round(r) }
 
 /** "#/new?from=PLAN-3" pre-fills the wizard from an existing plan (demo: same plan, another patient). */
 function readParam(name: string): string | null {
@@ -34,7 +33,7 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
   const [picked, setSignals] = useState<SignalId[]>([])
   const [type, setType] = useState<PlanType>('observational')
   const [obs, setObs] = useState<ObsForm>({ signal: 'sleep_min', direction: 'lower', max_lag_days: 3 })
-  const [iv, setIv] = useState<IvForm>({ arm_a: 'No melatonin', arm_b: 'Melatonin 3mg', outcome_signal: 'sleep_min', better: 'higher', period_days: 7, washout_days: 2, n_periods: 8, seed: 42 })
+  const [iv, setIv] = useState<IvForm>({ arm_a: 'No melatonin', arm_b: 'Melatonin 3mg', outcome_signal: 'sleep_min', better: 'higher', period_days: 6, washout_days: 2, n_periods: 12, seed: 42 })
   const [title, setTitle] = useState('')
   const [titleTouched, setTitleTouched] = useState(false)
   const [clinician, setClinician] = useState(() => getSession()?.name ?? 'Dr. Rivera')
@@ -71,7 +70,7 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
 
   const reasonFor = (sig: SignalId) => {
     const providers = catalog.filter((d) => d.signals.includes(sig)).map((d) => d.name)
-    const what = SIGNAL_INFO[sig].plain
+    const what = SIGNAL_INFO[sig]?.plain ?? sig
     return providers.length
       ? `Needs a device that tracks ${what} (${providers.join(' or ')})`
       : `No device in the catalog tracks ${what}`
@@ -150,7 +149,8 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
   const droppedSignals = signals.filter((s) => !finalSignals.includes(s))
 
   const scheduleOverruns = !!patient && type === 'intervention' && schedule.length > 0 && window_.end > patient.date_range[1]
-  const minP = type === 'intervention' && iv.n_periods % 2 === 0 ? 1 / binom(iv.n_periods, iv.n_periods / 2) : null
+  // Block randomization: k AB/BA blocks → 2^k equally likely schedules → smallest possible p = 1/2^k.
+  const minP = type === 'intervention' && iv.n_periods % 2 === 0 ? 1 / 2 ** (iv.n_periods / 2) : null
 
   const stepError = (() => {
     if (step === 0 && !patient) return 'Choose a patient.'
@@ -160,7 +160,7 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
       if (type === 'observational' && !chosenSensors.includes(obs.signal)) return 'Pick a signal to test.'
       if (type === 'intervention') {
         if (!iv.arm_a.trim() || !iv.arm_b.trim()) return 'Name both arms.'
-        if (iv.n_periods < 4 || iv.n_periods % 2) return 'Use an even number of periods, at least 4.'
+        if (iv.n_periods < 10 || iv.n_periods % 2) return 'Use an even number of periods, at least 10 (5 A/B blocks). Fewer can never pass the chance check.'
         if (!schedule.length) return 'Waiting for the schedule preview…'
         if (scheduleOverruns) return `The schedule runs past this patient's data (ends ${patient!.date_range[1]}). Use fewer or shorter periods.`
       }
@@ -221,8 +221,8 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
               {patients.map((p) => (
                 <button key={p.id} className={`option ${patientId === p.id ? 'selected' : ''}`} onClick={() => pickPatient(p)}>
                   {patientId === p.id && <span className="check"><Icon name="check" size={14} /></span>}
-                  <span className="head"><span className={`mini-avatar ${p.source === 'pmdata' ? 'tone-green' : 'tone-purple'}`}>{initials(p.display_name)}</span><span className="title">{p.display_name}</span></span>
-                  <span className="sub">{p.id} · {p.source === 'pmdata' ? 'PMData (real)' : 'Synthetic'}</span>
+                  <span className="head"><span className={`mini-avatar ${(p.source === 'real' || p.source === 'pmdata') ? 'tone-green' : 'tone-purple'}`}>{initials(p.display_name)}</span><span className="title">{p.display_name}</span></span>
+                  <span className="sub">{p.id} · {(p.source === 'real' || p.source === 'pmdata') ? 'PMData (real)' : 'Synthetic'}</span>
                   <span className="sub">{p.n_days} days · {p.n_episodes} episodes logged</span>
                   <span className="sub">Owns: {p.devices.map((d) => catalog.find((c) => c.id === d)?.name ?? d).join(', ')}</span>
                 </button>
@@ -237,15 +237,18 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
             <p className="muted">Pre-selected: the devices {patient?.display_name} already owns. Signals depend on the devices you choose.</p>
             {devicesQ.error && <div className="alert alert-error">{devicesQ.error}</div>}
             <div className="option-grid">
-              {catalog.map((d) => {
+              {[...catalog].sort((a, b) => Number(!!patient?.devices.includes(b.id)) - Number(!!patient?.devices.includes(a.id)) || Number(a.availability === 'emerging') - Number(b.availability === 'emerging')).map((d) => {
                 const sel = devices.includes(d.id)
                 const owned = patient?.devices.includes(d.id)
                 return (
                   <button key={d.id} className={`option ${sel ? 'selected' : ''}`} onClick={() => toggleDevice(d.id)} aria-pressed={sel}>
                     {sel && <span className="check"><Icon name="check" size={14} /></span>}
                     <span className="head"><span className="summary-icon tone-purple" style={{ width: 36, height: 36, margin: 0 }}><Icon name={DEVICE_ICON[d.id] ?? 'watch'} size={17} /></span><span className="title">{d.name}</span></span>
-                    <span className="sub">Tracks: {d.signals.map(signalLabel).join(', ')}</span>
-                    <span className="sub">{owned ? 'Patient owns this' : 'Patient would need this device'}</span>
+                    <span className="sub">Tracks: {d.signals.filter((x) => x !== 'episode').map(signalLabel).join(', ')}</span>
+                    <span className="row" style={{ gap: 6, marginTop: 4 }}>
+                      {owned ? <span className="pill pill-green no-dot">Patient owns this</span> : <span className="pill pill-gray no-dot">Patient would need this</span>}
+                      {d.availability === 'emerging' && <span className="pill pill-yellow no-dot">Emerging</span>}
+                    </span>
                   </button>
                 )
               })}
@@ -340,11 +343,11 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
                   <div className="field">
                     <label htmlFor="np">Number of periods</label>
                     <select id="np" value={iv.n_periods} onChange={(e) => setIv({ ...iv, n_periods: Number(e.target.value) })}>
-                      {[4, 6, 8, 10, 12].map((n) => <option key={n} value={n}>{n} ({n / 2} A + {n / 2} B)</option>)}
+                      {[6, 8, 10, 12, 14, 16].map((n) => <option key={n} value={n}>{n} periods ({n / 2} A/B blocks)</option>)}
                     </select>
                     {minP != null && (
                       <span className="hint" style={minP >= 0.05 ? { color: 'var(--yellow)', fontWeight: 600 } : undefined}>
-                        Smallest possible p-value: {minP.toFixed(3)}{minP >= 0.05 ? ', too few periods to ever reach "likely real"' : ''}
+                        Smallest possible p-value: {minP < 0.001 ? minP.toFixed(4) : minP.toFixed(3)}{minP >= 0.05 ? '. Too few blocks: results will be "not enough data". Use at least 10 periods.' : ''}
                       </span>
                     )}
                   </div>

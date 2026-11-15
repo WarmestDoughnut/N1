@@ -53,12 +53,18 @@ export const SIGNAL_INFO: Record<SignalId, { label: string; unit: string; plain:
   hrv: { label: 'Heart rate variability', unit: 'ms', plain: 'heart rate variability', noun: 'HRV' },
   steps: { label: 'Steps', unit: 'steps', plain: 'daily steps', noun: 'activity' },
   episode: { label: 'Episode log', unit: '', plain: 'episode log', noun: 'episodes' },
+  skin_temp_dev: { label: 'Skin temperature', unit: '°C', plain: 'skin temperature', noun: 'temperature' },
+  resp_rate: { label: 'Breathing rate', unit: '/min', plain: 'breathing rate', noun: 'breathing' },
+  spo2: { label: 'Blood oxygen', unit: '%', plain: 'blood oxygen', noun: 'oxygen' },
+  systolic_bp: { label: 'Blood pressure (systolic)', unit: 'mmHg', plain: 'blood pressure', noun: 'blood pressure' },
+  glucose_tir: { label: 'Glucose time in range', unit: '%', plain: 'glucose time in range', noun: 'glucose' },
+  walking_speed: { label: 'Walking speed', unit: 'm/s', plain: 'walking speed', noun: 'walking' },
 }
 
-export const ALL_SIGNALS: SignalId[] = ['sleep_min', 'resting_hr', 'hrv', 'steps', 'episode']
+export const ALL_SIGNALS: SignalId[] = ['sleep_min', 'resting_hr', 'hrv', 'steps', 'walking_speed', 'glucose_tir', 'systolic_bp', 'spo2', 'resp_rate', 'skin_temp_dev', 'episode']
 
 export function signalLabel(s: string): string {
-  return SIGNAL_INFO[s as SignalId]?.label ?? s
+  return SIGNAL_INFO[s as SignalId]?.label ?? s.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase())
 }
 
 export function formatValue(signal: string, v: number | null | undefined): string {
@@ -69,7 +75,8 @@ export function formatValue(signal: string, v: number | null | undefined): strin
     return `${h}h ${m}m`
   }
   const unit = SIGNAL_INFO[signal as SignalId]?.unit ?? ''
-  return `${Math.round(v).toLocaleString()}${unit ? ' ' + unit : ''}`
+  const n = Math.abs(v) < 10 ? v.toFixed(2) : Math.round(v).toLocaleString()
+  return `${n}${unit ? ' ' + unit : ''}`
 }
 
 export const VERDICT_INFO: Record<Verdict, { label: string; patientLabel: string; className: string; blurb: string }> = {
@@ -104,6 +111,7 @@ export const WARNING_INFO: Record<string, string> = {
   missing_data: 'Some days are missing data',
   few_episodes: 'Few episodes recorded',
   multiple_lags_tested: 'Several lags tested (p-value corrected)',
+  too_few_periods: 'Too few A/B blocks (need at least 5)',
 }
 
 export function warningLabel(w: Warning): string {

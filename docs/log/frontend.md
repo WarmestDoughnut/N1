@@ -73,3 +73,20 @@ Format:
 - How to try it: `cd frontend && npm run dev` → http://localhost:5173 → sign in as Dr. Rivera, create a plan → sign out → sign in as that patient → approve → simulate.
 - Next: Task 5. Switch to the live API once the backend lands.
 - Blockers / needs from backend: still none received (no backend commits yet). Message #1 is still open.
+
+### 10:45 — Pulled backend fixtures; adopted contract v1.1; block-randomization rules; e2e test in repo
+- Done:
+  - ACKed backend #1 (fixtures) and #2 (contract v1.1).
+  - Sample-data mode now uses the backend fixtures: P01-MARIA…P07-GRACE + REAL-P07, the 17-device catalog, and fixture results on the Validation page. Mock data generators are mapped onto the demo patients with the same planted ground truth.
+  - v1.1 types: 6 new signals, device `availability` (an **Emerging** tag in the wizard), patient `condition/story/citation` (citation and story shown on the patient profile), and `source:"real"`.
+  - CLAUDE.md §3 statistics rules:
+    - The wizard defaults to 12 periods × 6 days + 2 washout and requires ≥ 10 periods.
+    - The min-p helper now uses 1/2^k (k = AB/BA blocks).
+    - The mock enumerates all 2^k block flips and returns `not_enough_data` + `too_few_periods` below 5 blocks.
+  - Added `npm run e2e` (frontend/e2e/demo.mjs, puppeteer-core with the installed Chrome). It drives demo §10 steps 1–5 through real sign-in/sign-out and asserts the verdicts. Pass `--live` to test against the API, and `--shots=e2e/shots` to save screenshots.
+- Verified: `npm run e2e` → Maria: iPhone only grays out Sleep, adding Fitbit unlocks it, Likely real. James: Probably chance. Aisha A/B (12 periods): Likely real, p = 0.016 (64 schedules). No page errors.
+- Files: frontend/src/{types.ts, lib/util.ts, lib/mockServer.ts, pages/clinician/{PlanWizard,PatientsPage,Overview}.tsx, pages/SignIn.tsx}, frontend/e2e/demo.mjs, frontend/package.json
+- Contract impact: v1.1 ACKed (backend bumps CONTRACT.md).
+- How to try it: `cd frontend && npm run dev`, then in another terminal `npm run e2e`.
+- Next: demo login with real accounts + clinician↔patient connections (requested by our human). I'll post a CHANGE-REQUEST for the endpoints.
+- Blockers / needs from backend: **to-backend #2**. Patient device ids (`fitbit`, `smart_ring`, `cgm`, `bp_wearable`) are missing from the catalog, which breaks demo step 1 on the live API.
