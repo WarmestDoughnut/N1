@@ -130,9 +130,16 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
   // Arriving on the design step with nothing chosen: open the first slot that needs input.
   useEffect(() => {
     if (step !== 3) return
-    if (type === 'observational' && !obsReady) setOpenSlot(2)
-    if (type === 'intervention' && (!iv.outcome_signal || !iv.better)) setOpenSlot(1)
-    else if (type === 'intervention' && !ivReady) setOpenSlot(2)
+    if (type === 'observational') {
+      if (!obsReady) setOpenSlot(2)
+      else if (obs.max_lag_days == null) setOpenSlot(3)
+      else if (!obsWin.start || !obsWin.end) setOpenSlot(4)
+    } else {
+      if (!iv.outcome_signal || !iv.better) setOpenSlot(1)
+      else if (!ivReady) setOpenSlot(2)
+      else if (iv.period_days == null || iv.washout_days == null) setOpenSlot(3)
+      else if (iv.n_periods == null) setOpenSlot(4)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, type])
   const applyRecorded = (p: Plan) => {
@@ -531,7 +538,7 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
                           })}
                         </div>
                         <span className="td-slot-label">Or set the number of periods</span>
-                        <div className="td-inline"><Stepper label="Number of periods" value={iv.n_periods} min={2} max={24} step={2} onChange={(n) => setIv({ ...iv, n_periods: n })} /><span>periods (even numbers, at least 10)</span></div>
+                        <div className="td-inline"><Stepper label="Number of periods" value={iv.n_periods} min={10} max={24} step={2} onChange={(n) => setIv({ ...iv, n_periods: n })} /><span>periods (even numbers, at least 10)</span></div>
                       </SlotEditor>
                     )}
                     <p className="td-reads"><strong>Reads as:</strong>{' '}
@@ -547,6 +554,7 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
                 <section className="td-section">
                   <h3 className="td-h">What gets compared, for one episode</h3>
                   <PatternStrip from={1} to={obs.max_lag_days ?? 3} episodeLabel="Episode day" />
+                  {obs.max_lag_days == null && <p className="td-note">Showing 3 days as an example. Choose how far back in slot 3.</p>}
                   <p className="td-note">Illustration, not {firstName}'s data. Shaded days are compared with normal days; episode days are left out.</p>
                 </section>
               ) : (
@@ -576,7 +584,9 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
                     </div>
                   )}
                   {scheduleErr && <div className="alert alert-error">{scheduleErr}</div>}
-                  {abView === 'timeline'
+                  {!schedule.length && !recorded
+                    ? <div className="td-scroll muted small">The schedule appears here once you choose how it alternates (slot 3) and how long it runs (slot 4).</div>
+                    : abView === 'timeline'
                     ? <ABTimeline schedule={schedule} armA={iv.arm_a.trim() || 'Option A'} armB={iv.arm_b.trim() || 'Option B'} />
                     : <ABCalendar schedule={schedule} armA={iv.arm_a.trim() || 'Option A'} armB={iv.arm_b.trim() || 'Option B'} />}
                   {scheduleOverruns && <div className="alert alert-warn">This schedule ends {formatDate(window_.end)}, after the patient's data ends ({formatDate(patient.date_range[1])}). Use fewer or shorter periods.</div>}

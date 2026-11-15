@@ -34,16 +34,17 @@ export function SlotEditor({ title, onDone, children }: { title: string; onDone:
 }
 
 export function Stepper({ value, min, max, step = 1, onChange, label, disabled = false }: {
-  value: number; min: number; max: number; step?: number; onChange: (n: number) => void; label: string; disabled?: boolean
+  /** null = not chosen yet (input shows empty; + / − start from the minimum) */
+  value: number | null; min: number; max: number; step?: number; onChange: (n: number) => void; label: string; disabled?: boolean
 }) {
   const clamp = (n: number) => Math.max(min, Math.min(max, n))
   return (
     <span className="td-stepper">
-      <button type="button" aria-label={`Decrease ${label}`} disabled={disabled || value <= min} onClick={() => onChange(clamp(value - step))}>−</button>
-      <input type="number" aria-label={label} min={min} max={max} step={step} value={value} disabled={disabled}
-        onChange={(e) => { const n = Number(e.target.value); if (!Number.isNaN(n)) onChange(n) }}
-        onBlur={(e) => onChange(clamp(Number(e.target.value) || min))} />
-      <button type="button" aria-label={`Increase ${label}`} disabled={disabled || value >= max} onClick={() => onChange(clamp(value + step))}>+</button>
+      <button type="button" aria-label={`Decrease ${label}`} disabled={disabled || value == null || value <= min} onClick={() => onChange(clamp((value ?? min) - step))}>−</button>
+      <input type="number" aria-label={label} min={min} max={max} step={step} value={value ?? ''} placeholder="–" disabled={disabled}
+        onChange={(e) => { if (e.target.value === '') return; const n = Number(e.target.value); if (!Number.isNaN(n)) onChange(n) }}
+        onBlur={(e) => { if (e.target.value !== '') onChange(clamp(Number(e.target.value) || min)) }} />
+      <button type="button" aria-label={`Increase ${label}`} disabled={disabled || (value != null && value >= max)} onClick={() => onChange(value == null ? min : clamp(value + step))}>+</button>
     </span>
   )
 }

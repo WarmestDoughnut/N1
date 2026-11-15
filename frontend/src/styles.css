@@ -490,7 +490,6 @@ input:focus, select:focus, textarea:focus { border-color: #a9a3f5; box-shadow: 0
 .td-slot-sub { font-size: 13px; color: #5d5e6b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .td-slot-change { font-size: 13px; font-weight: 700; color: var(--accent-ink); text-decoration: underline; margin-top: 2px; }
 .td-slot.open .td-slot-change { text-decoration: none; }
-.td-tray { border: 1px dashed #c9c9d3; border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; background: #fafafd; }
 .td-tray-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .td-chip { font: inherit; display: inline-flex; align-items: center; gap: 8px; border: 2px solid #c9c9d3; background: #fff; border-radius: 10px; min-height: 44px; padding: 0 14px 0 10px; color: #262633; cursor: pointer; }
 .td-chip.on { border-color: var(--accent); background: var(--accent-soft-2); }
