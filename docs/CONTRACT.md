@@ -1,0 +1,179 @@
+# API & Data Contract — v1.0
+
+Source of truth for both instances. Change only via the protocol in CLAUDE.md §7.
+Bump the version above on every change and note it in the changelog at the bottom.
+
+Base URL: `http://localhost:8000`. All responses JSON. CORS allows `http://localhost:5173`.
+Dates are `YYYY-MM-DD`. Times are ISO 8601. IDs are strings.
+
+## 1. Signals (daily table columns)
+
+| signal id | unit | meaning |
+|---|---|---|
+| `sleep_min` | minutes | total sleep that night (assigned to the morning date) |
+| `resting_hr` | bpm | resting heart rate |
+| `hrv` | ms | heart rate variability (may be null for some sources) |
+| `steps` | count | daily steps |
+| `episode` | 0/1 | patient-logged or derived episode that day (not a sensor; from logs) |
+
+Daily table: one row per patient per day: `patient_id, date, sleep_min, resting_hr, hrv, steps, episode`.
+Missing values are `null`, never 0.
+
+## 2. Device catalog — `GET /api/devices`
+
+```json
+[
+  {"id": "iphone", "name": "iPhone", "signals": ["steps", "episode"]},
+  {"id": "apple_watch", "name": "Apple Watch", "signals": ["sleep_min", "resting_hr", "hrv", "steps"]},
+  {"id": "fitbit", "name": "Fitbit", "signals": ["sleep_min", "resting_hr", "hrv", "steps"]}
+]
+```
+`episode` logging is always available via the app itself; frontend may treat it as always-on.
+
+## 3. Patients
+
+`GET /api/patients`
+```json
+[
+  {"id": "SYN-PATTERN", "display_name": "Patient A (synthetic)", "source": "synthetic",
+   "devices": ["iphone", "fitbit"], "date_range": ["2026-01-01", "2026-04-30"],
+   "n_days": 120, "n_episodes": 14}
+]
+```
+
+`GET /api/patients/{id}/series?signals=sleep_min,episode&plan_id=PLAN-1`
+Scope-enforced: returns ONLY signals in the given plan's scope, and only if the plan status is
+`active`, `paused`, `stopped`, or `complete`. Otherwise `403 {"error": "not_in_scope"}`.
+```json
+{"patient_id": "SYN-PATTERN", "rows": [{"date": "2026-01-01", "sleep_min": 412, "episode": 0}]}
+```
+
+`POST /api/episodes` body `{"patient_id": "...", "date": "2026-03-02", "note": "headache"}`
+→ `201 {"ok": true}`
+
+## 4. Test plans
+
+```json
+{
+  "id": "PLAN-1",
+  "patient_id": "SYN-PATTERN",
+  "clinician_name": "Dr. Rivera",
+  "title": "Does low sleep precede episodes?",
+  "type": "observational",
+  "devices": ["iphone", "fitbit"],
+  "signals": ["sleep_min", "episode"],
+  "window": {"start": "2026-01-01", "end": "2026-04-30"},
+  "status": "pending_approval",
+  "created_at": "2026-11-15T10:00:00",
+  "observational": {"signal": "sleep_min", "direction": "lower", "max_lag_days": 3},
+  "intervention": null,
+  "patient_summary": "Dr. Rivera wants to check whether shorter sleep tends to come before your episodes. This test uses sleep from your Fitbit and your episode log from 2026-01-01 to 2026-04-30. Nothing else is shared. You can pause or stop at any time.",
+  "history": [{"at": "2026-11-15T10:00:00", "event": "created"}]
+}
+```
+
+`type`: `observational | intervention`. `direction`: `lower | higher`.
+
+Intervention block (when `type == "intervention"`, `observational` is null):
+```json
+"intervention": {
+  "arm_a": "No melatonin",
+  "arm_b": "Melatonin 3mg",
+  "outcome_signal": "sleep_min",
+  "better": "higher",
+  "period_days": 7,
+  "washout_days": 2,
+  "n_periods": 6,
+  "seed": 42,
+  "schedule": [
+    {"period": 1, "arm": "A", "start": "2026-01-01", "end": "2026-01-07", "washout_end": "2026-01-09"},
+    {"period": 2, "arm": "B", "start": "2026-01-10", "end": "2026-01-16", "washout_end": "2026-01-18"}
+  ]
+}
+```
+Schedule rule: balanced randomized blocks (each pair of periods is AB or BA, randomized by seed).
+Washout days are excluded from analysis.
+
+**Status machine:** `pending_approval → active → (paused ↔ active) → stopped | complete`;
+`pending_approval → declined`. Only the patient can approve/decline/pause/resume/stop.
+
+Endpoints:
+- `POST /api/plans` body = plan fields minus `id,status,created_at,history,patient_summary`
+  (server generates those; for intervention, server generates `schedule` if absent) → `201` plan
+- `GET /api/plans?patient_id=...` → `[plan]`
+- `GET /api/plans/{id}` → plan
+- `POST /api/plans/{id}/approve | /decline | /pause | /resume | /stop` → updated plan
+  (`409 {"error": "invalid_transition"}` if not allowed)
+- `POST /api/plans/{id}/simulate-complete` → demo only; sets `complete`, computes results → plan
+- `GET /api/schedule/preview?n_periods=6&period_days=7&washout_days=2&seed=42&start=2026-01-01`
+  → `{"schedule": [...]}` (for the clinician wizard preview)
+
+## 5. Results — `GET /api/plans/{id}/results`
+
+`404 {"error": "no_results"}` until computed. Computed on `simulate-complete` or `stop`.
+
+```json
+{
+  "plan_id": "PLAN-1",
+  "type": "observational",
+  "complete": true,
+  "verdict": "likely_real",
+  "headline": "Sleep was 18% lower in the 2 days before episodes.",
+  "patient_headline": "Shorter sleep often came before your episodes. Worth discussing with your clinician.",
+  "effect_pct": -18.2,
+  "p_value": 0.012,
+  "n_permutations": 2000,
+  "n_episodes": 14,
+  "n_days": 120,
+  "warnings": [],
+  "observational": {
+    "best_lag_days": 2,
+    "lag_scan": [
+      {"lag_days": 1, "effect_pct": -9.1, "p_value": 0.21},
+      {"lag_days": 2, "effect_pct": -18.2, "p_value": 0.012},
+      {"lag_days": 3, "effect_pct": -6.0, "p_value": 0.40}
+    ],
+    "pre_episode_mean": 352.4,
+    "baseline_mean": 431.0
+  },
+  "intervention": null,
+  "null_distribution": [-4.1, 2.3, 0.8],
+  "series": [{"date": "2026-01-01", "value": 412, "episode": 0, "arm": null, "in_window": false}],
+  "model": null
+}
+```
+
+Intervention results use `"observational": null` and:
+```json
+"intervention": {
+  "mean_a": 401.2, "mean_b": 438.9, "effect_pct": 9.4,
+  "n_periods_a": 3, "n_periods_b": 3,
+  "period_means": [{"period": 1, "arm": "A", "mean": 398.0}]
+}
+```
+`series[].arm` is `"A" | "B" | "washout" | null`. `series[].in_window` marks pre-episode days
+for observational plots.
+
+`verdict` rules (backend implements, frontend just displays):
+- `not_enough_data`: < 5 episodes (observational) or < 2 periods per arm (intervention),
+  or > 40% missing outcome values.
+- `likely_real`: p < 0.05 and |effect_pct| ≥ 5 and direction matches hypothesis.
+- `suggestive`: p < 0.15 and direction matches.
+- `probably_chance`: otherwise.
+Incomplete plans (stopped early) add warning `"incomplete_plan"`.
+
+`warnings[]` possible values: `incomplete_plan`, `missing_data`, `few_episodes`,
+`multiple_lags_tested` (p-values corrected via max-statistic permutation).
+
+`model` (optional, added later, null until then):
+```json
+"model": {"kind": "logistic_l2", "auc": 0.71, "auc_null_p": 0.04,
+          "coefficients": [{"feature": "sleep_min_lag2", "weight": -0.8}],
+          "risk_tomorrow": 0.32, "trained": true, "reason": null}
+```
+
+## 6. Health
+`GET /api/health` → `{"ok": true, "contract_version": "1.0"}`
+
+## Changelog
+- v1.0 (09:30) — initial contract.

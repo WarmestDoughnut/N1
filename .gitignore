@@ -1,0 +1,9 @@
+node_modules/
+dist/
+__pycache__/
+.venv/
+*.pyc
+.env
+backend/data/pmdata/
+backend/data/store.json
+.DS_Store
