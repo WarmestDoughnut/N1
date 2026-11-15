@@ -329,16 +329,27 @@ both. On approval, past data is shared immediately; a purely-past request has no
 - Every plan/collection now carries derived, read-only fields (returned on create, `GET /api/plans`,
   `GET /api/plans/{id}`):
   - `delivery: "retrospective" | "prospective" | "mixed"`
+  - `delivered: bool` — `true` for retrospective (all data already sent, **no live collection**). The patient
+    view should render this as "sent / ready", **not** a "day X of N" countdown.
   - `window.past_end` = `min(end, as_of)` when the window has a past part, else `null`
   - `window.live_start` = first future day (`max(start, as_of+1d)`) when the window has a future part, else `null`
+  - `window.live_days` = number of days still to be collected (the live portion the patient view counts down);
+    **`0` for retrospective** (nothing to collect). For mixed, the countdown covers only `live_start..end`.
+- **Seeded `DEMO-*` plans are exempt** from the past/future rules (they were prospective trials when they ran):
+  `_delivery` forces `delivery:"prospective"` for `seeded:true` plans, so every demo plan keeps the original
+  approve → active → simulate-complete flow (observational *and* the A/B story).
 
 **Approval behavior** (`POST /api/plans/{id}/approve`):
 - **retrospective:** past data is shared at once → status goes **straight to `complete`** (history gains a
   `"shared"` event before `complete`), and results are computed immediately (collection summary, or the
-  observational verdict). The patient never sees an `active`/collecting state.
+  observational verdict). The patient never sees an `active`/collecting state, and there is **no day-count
+  countdown** — `delivered:true`, `window.live_days:0`.
 - **mixed:** the past part is shared at once (history `"shared"`, results computed on the past portion,
   clipped at `past_end`); the plan stays `active` for the live part until `complete`/`simulate-complete`.
+  Only the live portion (`live_start..end`, `live_days`) shows a countdown.
 - **prospective:** unchanged (today's flow).
+- `simulate-complete` is idempotent if the plan is already `complete` (retrospective auto-completes on approve),
+  so a caller that still chains approve → simulate-complete gets a 200 no-op, never a 409.
 
 **Tests / analyses on past data — observational + predictive modeling only (NOT A/B):**
 - Observational test plans with past windows run on approval as above — no waiting. The engine and the
@@ -348,9 +359,14 @@ both. On approval, past data is shared immediately; a purely-past request has no
   An **observational** analysis on a past collection surfaces the predictive `model` (indicators) alongside the verdict.
 - **A/B (intervention) requires a FUTURE window** — you cannot randomize arms over data that already happened.
   Intervention is valid only when `delivery` is `prospective` or `mixed`; a purely-past (`retrospective`)
-  request is rejected: `POST /api/plans` and `/analyses` return `422 {"error":"intervention_requires_future"}`.
+  request is rejected: `POST /api/plans` and `/analyses` return `422 {"error":"ab_requires_future_window"}`.
   Seeded `DEMO-*` A/B plans were recorded prospectively, so they approve/complete normally (they're seeded,
   not created via `POST /api/plans`).
+
+**Data request vs test request are separate consents (FE #15):** a data request (`type:"collection"`) runs
+**no** test on approval — it just shares the data (coverage summary + series). "Run a test on this data" is its
+own `type:"observational"` plan the patient approves (retrospective → verdict at approval). Optional
+`plan.source_collection_id` is passed through and returned as-is if the frontend sends it.
 
 **Wizard pre-check**: `GET /api/delivery/preview?start=&end=&patient_id=` →
 `{delivery, past_end, live_start, as_of, intervention_allowed, window_before_data, first_data_day}` — lets the
@@ -365,7 +381,7 @@ live-collection range).
   else `422 window_before_data`); derived `delivery` + `window.past_end`/`live_start` on every plan; approve
   shares past data immediately (retrospective → straight to `complete` with a `"shared"` history event; mixed
   → past shared, stays active); analyses require an approved collection (`409 not_in_scope` otherwise);
-  A/B requires a future window (`422 intervention_requires_future` on past-only — observational + predictive
+  A/B requires a future window (`422 ab_requires_future_window` on past-only — observational + predictive
   modeling are the only past-data analyses); `GET /api/delivery/preview` wizard pre-check; consent summary
   names the shared past window. REAL-P07 `display_name` now reads like a person.
 - v1.5 — additive overhaul: symptoms/conditions (+ `observational.symptom_id`, `episodes.symptom_id`),

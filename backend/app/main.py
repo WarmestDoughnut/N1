@@ -112,6 +112,10 @@ def _delivery(plan):
     start, end = win.get("start"), win.get("end")
     if not (start and end):
         return {"delivery": "prospective", "past_end": None, "live_start": None}
+    # v1.6 (FE #15): seeded DEMO-* plans were prospective trials when they ran — exempt them from the
+    # past/future rules so the demo keeps its approve → active → simulate-complete flow (incl. the A/B story).
+    if plan.get("seeded"):
+        return {"delivery": "prospective", "past_end": None, "live_start": start}
     as_of = _as_of()
     has_past = start <= as_of
     has_future = end > as_of
@@ -130,13 +134,26 @@ def _delivery(plan):
     return {"delivery": delivery, "past_end": past_end, "live_start": live_start}
 
 
+def _live_days(win):
+    """Number of days still to be collected (the live/future portion). 0 for a fully-delivered
+    (retrospective) window — drives the patient view so it shows 'sent', not a 'day X of N' countdown."""
+    live_start, end = win.get("live_start"), win.get("end")
+    if not (live_start and end) or live_start > end:
+        return 0
+    return (date.fromisoformat(end[:10]) - date.fromisoformat(live_start[:10])).days + 1
+
+
 def _apply_delivery(plan):
-    """Stamp delivery classification onto the plan (top-level `delivery` + window.past_end/live_start)."""
+    """Stamp delivery classification onto the plan: top-level `delivery` + `delivered` (all data
+    already sent, nothing to collect) and `window.past_end`/`live_start`/`live_days` (the live portion
+    the patient view should count down — 0/none for retrospective). FE #15 patient-progress fix."""
     d = _delivery(plan)
     plan["delivery"] = d["delivery"]
+    plan["delivered"] = (d["delivery"] == "retrospective")   # no live collection: present as 'sent'
     win = plan.setdefault("window", {})
     win["past_end"] = d["past_end"]
     win["live_start"] = d["live_start"]
+    win["live_days"] = _live_days(win)
     return d
 
 
@@ -399,7 +416,7 @@ async def create_plan(request: Request):
     # already happened. Valid only when delivery is prospective or mixed; past-only is rejected.
     delivery = _delivery(plan).get("delivery")
     if plan.get("type") == "intervention" and delivery == "retrospective":
-        return err(422, "intervention_requires_future")
+        return err(422, "ab_requires_future_window")
     plan["id"] = STORE.next_id()
     plan["status"] = "pending_approval"
     from app.store import _now
@@ -782,7 +799,7 @@ async def create_analysis(collection_id: str, request: Request):
         # v1.6: A/B requires a future window — past days were never randomized to arms. Only
         # observational + predictive modeling are valid on past data; A/B is not.
         if coll_delivery == "retrospective":
-            return err(422, "intervention_requires_future")
+            return err(422, "ab_requires_future_window")
         adhoc = {"id": collection_id, "patient_id": coll["patient_id"], "type": "intervention",
                  "window": window, "signals": [iv["outcome_signal"]], "intervention": iv}
     else:

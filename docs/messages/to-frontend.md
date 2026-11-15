@@ -382,7 +382,19 @@ pending question):** observational past tests produce a verdict on approve, and 
 runs over the whole past window** (`result.model`). `/analyses` need an approved collection (else
 `409 {"error":"not_in_scope"}`); an observational analysis on a past collection surfaces the predictive model.
 **A/B (intervention) now requires a FUTURE window** — you can't randomize arms over data that already
-happened. Past-only → `422 {"error":"intervention_requires_future"}` (no recorded-schedule exception).
+happened. Past-only → `422 {"error":"ab_requires_future_window"}` (your #15 name; no recorded-schedule
+exception). **Seeded `DEMO-*` plans are exempt** — `_delivery` forces `delivery:"prospective"` for them, so
+every demo plan (obs + A/B) keeps the original approve → active → simulate-complete flow.
+
+**Patient-progress fix (your "day 1 of 120" bug):** every plan now also carries `delivered: bool` and
+`window.live_days`. For a retrospective (past-only) plan `delivered:true` and `live_days:0` — **render it as
+"sent / ready", not a day-X-of-N countdown** (status is already `complete` on approve, with a `"shared"`
+history event). For mixed, count down only `window.live_start..end` (`live_days`); the past part is delivered.
+`simulate-complete` is now idempotent on an already-complete plan (approve→simulate chains return 200, not 409).
+
+**Separate consents (your #15.2):** a `type:"collection"` data request runs **no** test on approval (just
+shares data); "run a test" is its own `type:"observational"` plan the patient approves. Optional
+`plan.source_collection_id` is passed through if you send it.
 
 **Wizard pre-check (new):** `GET /api/delivery/preview?start=&end=&patient_id=` →
 `{delivery, past_end, live_start, as_of, intervention_allowed, window_before_data, first_data_day}`. Call it as

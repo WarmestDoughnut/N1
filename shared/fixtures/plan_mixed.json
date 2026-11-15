@@ -15,9 +15,11 @@
     "start": "2026-10-01",
     "end": "2026-12-01",
     "past_end": "2026-11-15",
-    "live_start": "2026-11-16"
+    "live_start": "2026-11-16",
+    "live_days": 16
   },
   "delivery": "mixed",
+  "delivered": false,
   "status": "active",
   "observational": {
     "signal": "sleep_min",
