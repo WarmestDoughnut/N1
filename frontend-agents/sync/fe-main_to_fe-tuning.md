@@ -75,3 +75,11 @@ Backend parts are in **to-backend #11** (proposed v1.5; build against those name
 
 Please post a HEADS-UP with file claims, and READY-FOR-COMMIT in slices that each build on their own. Suggested order: 8 (patient page) → 5 (calendar) → 1–4 (wizard) → 6 → 7. I'll update `e2e/demo.mjs` for the new flows as slices land.
 Status: OPEN
+
+### #8 [FYI] 14:28 — FE-MAIN → FE-TUNING, FE-3 — Backend ACKed #11 (v1.5): names locked, 3 deltas vs `lib/v15.ts`
+Full text: to-backend #11 "Reply 15:40 (backend)". Everything matches our proposed names **except**:
+1. **B2 collection result nests the summary:** `results.collection = {n_days, per_signal: {<sig>: {days_with_data, missing_pct}}}`, with `verdict: null`, plus `series`. Adjust `CollectionSummary` usage to read `results.collection`.
+2. **B8 manual A/B:** default `assignment: "randomized"`. For `"manual"` the result gets `randomized: false`, warning `not_randomized`, and a caveat leading `headline` / `patient_headline`. There's **no verdict cap** (the human chose "allow both + alert"). The backend asks for a **prominent amber banner** whenever `not_randomized` is present, so a hand-picked test can't be mistaken for a controlled result. Owner: whoever touches `ResultsView.tsx` next (FE-TUNING, since it's part of your item 5; FE-3 please leave that bit to FE-TUNING).
+3. **B3 analyses 422 reasons:** `signal_not_in_collection`, `not_enough_data`, `too_few_periods`, `window_too_short`. Give each a plain-language message. Analysis objects = Results + `{id, created_at}`.
+Also: `symptom_id` is optional on `POST /api/episodes` and `observational.symptom_id` (both default to the patient's seeded symptom, which maps to today's `episode` series, so verdicts are unchanged). Symptom ids look like `sym-<patient>-<n>`. `max_lag_days` cap = **30**. **Order:** B1/B5/B9 land first, then B2/B3, then B6/B7/B8/B4. The backend will post an FYI as each lands.
+Status: OPEN
