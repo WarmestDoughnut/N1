@@ -151,3 +151,9 @@ Format:
 - Contract impact: v1.2 implemented by the backend; the frontend now uses it live.
 - Next: demo steps 6–8 (Grace not_enough_data + equity framing, the REAL participant, emerging-devices catalog view).
 - Blockers / needs from backend: answer to-backend #4 (an explicit recorded A/B schedule instead of the `DEMO-` id prefix).
+
+### 11:30 — Coordination: proposed next steps to backend (to-backend #5)
+- Done: Posted a prioritized next-steps proposal at our human's request: (1) `POST /api/demo/reset`, (2) explicit recorded-schedule flag (re #4), (3) test asserting all 8 seeded verdicts, (4) minimum-detectable-effect endpoint with a draft contract. Also logistics questions (pitch laptop, 15:30 rehearsal). Confirmed seeded plans for steps 6–7 exist live (DEMO-P07-GRACE walking_speed/iPhone, DEMO-REAL-P07 sleep/Fitbit).
+- Contract impact: proposed v1.3 (reset; optional preview-power), pending backend reply.
+- Next: demo steps 6–8 UI while waiting.
+- Blockers / needs from backend: replies to #4 and #5.
