@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { api } from '../../api'
 import type { Device, Plan } from '../../types'
 import { navigate, useAsync } from '../../lib/hooks'
@@ -16,7 +15,6 @@ const go = (id: string) => navigate(`/results/${encodeURIComponent(id)}`)
 export function ResultsPage({ data, planId }: { data: ClinicianData; planId?: string }) {
   const { plans, patients, results } = data
   const devicesQ = useAsync<Device[]>(() => api.devices(), [])
-  const [aud, setAud] = useState<'clinician' | 'patient'>('clinician')
   const name = (id: string) => patients.find((p) => p.id === id)?.display_name ?? id
 
   const finished = plans.filter((p) => results[p.id]).sort((a, b) => b.created_at.localeCompare(a.created_at))
@@ -26,23 +24,18 @@ export function ResultsPage({ data, planId }: { data: ClinicianData; planId?: st
   // Results load after plans, so "nothing yet" can just mean "still loading".
   const stillLoading = data.loading || (finished.length === 0 && plans.some((p) => p.status === 'complete' || p.status === 'stopped'))
 
-  const withResults = patients.filter((p) => finished.some((x) => x.patient_id === p.id)).sort((a, b) => a.display_name.localeCompare(b.display_name))
-  const patientId = plan?.patient_id ?? requested?.patient_id ?? ''
-  const tests = finished.filter((p) => p.patient_id === patientId)
+  // One dropdown holds every finished test, grouped by patient (A–Z), newest first within a patient.
+  const groups = [...new Set(finished.map((p) => p.patient_id))]
+    .map((id) => ({ id, name: name(id), tests: finished.filter((p) => p.patient_id === id) }))
+    .sort((a, b) => a.name.localeCompare(b.name))
   const deviceName = (id: string) => devicesQ.data?.find((d) => d.id === id)?.name ?? id
 
   const heading = (
     <section className="page-heading">
       <div>
         <p className="eyebrow">Results</p>
-        <h1>Test results</h1>
+        <h1>In-depth results</h1>
       </div>
-      {plan && (
-        <div className="seg">
-          <button className={aud === 'clinician' ? 'active' : ''} onClick={() => setAud('clinician')}>Clinician view</button>
-          <button className={aud === 'patient' ? 'active' : ''} onClick={() => setAud('patient')}>Patient view</button>
-        </div>
-      )}
     </section>
   )
 
@@ -80,18 +73,15 @@ export function ResultsPage({ data, planId }: { data: ClinicianData; planId?: st
     <>
       {heading}
       <section className="workspace results-picker mb">
-        <label>
-          <span>Patient</span>
-          <select aria-label="Patient" value={patientId} onChange={(e) => { const first = finished.find((p) => p.patient_id === e.target.value); if (first) go(first.id) }}>
-            {!withResults.some((p) => p.id === patientId) && <option value={patientId}>{patientId ? name(patientId) : 'Choose a patient'}</option>}
-            {withResults.map((p) => <option key={p.id} value={p.id}>{p.display_name} ({finished.filter((x) => x.patient_id === p.id).length})</option>)}
-          </select>
-        </label>
         <label className="grow">
-          <span>Test</span>
-          <select aria-label="Test" value={plan?.id ?? ''} onChange={(e) => go(e.target.value)}>
+          <span>Test result · {finished.length} available</span>
+          <select aria-label="Test result" value={plan?.id ?? ''} onChange={(e) => go(e.target.value)}>
             {!plan && <option value="">Choose a finished test</option>}
-            {tests.map((p) => <option key={p.id} value={p.id}>{p.title} · {typeLabel(p)} · {formatDate(p.window.start)} – {formatDate(p.window.end)}</option>)}
+            {groups.map((g) => (
+              <optgroup key={g.id} label={g.name}>
+                {g.tests.map((p) => <option key={p.id} value={p.id}>{g.name} · {p.title} · {typeLabel(p)} · {formatDate(p.window.start)} – {formatDate(p.window.end)}</option>)}
+              </optgroup>
+            ))}
           </select>
         </label>
         {plan && <a className="button secondary sm" href={`#/plans/${encodeURIComponent(plan.id)}`}>Open plan <Icon name="chevron" size={14} /></a>}
@@ -102,9 +92,7 @@ export function ResultsPage({ data, planId }: { data: ClinicianData; planId?: st
           {requested ? <>“{requested.title}” has no result yet. </> : <>That test wasn't found. </>}
           {requested && <a href={`#/plans/${encodeURIComponent(requested.id)}`}>Open the plan</a>}
         </span></div>
-      ) : aud === 'patient'
-        ? <div className="patient-app"><ResultsView key={plan.id + aud} results={r} plan={plan} audience="patient" /></div>
-        : <ResultsView key={plan.id + aud} results={r} plan={plan} audience="clinician" aside={facts} />}
+      ) : <ResultsView key={plan.id} results={r} plan={plan} audience="clinician" aside={facts} />}
     </>
   )
 }

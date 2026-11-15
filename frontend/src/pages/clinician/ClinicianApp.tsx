@@ -59,7 +59,7 @@ export function ClinicianApp({ session, route, patients }: { session: Session; r
     { label: 'Overview', icon: 'grid', href: '#/', match: (r) => r.length === 0 },
     { label: 'Patients', icon: 'user', href: '#/patients', match: (r) => r[0] === 'patients' },
     { label: 'Test plans', icon: 'clipboard', href: '#/plans', badge: pending || undefined, match: (r) => r[0] === 'plans' },
-    { label: 'Results', icon: 'flask', href: '#/results', badge: Object.keys(data.results).length || undefined, match: (r) => r[0] === 'results' },
+    { label: 'In-depth results', icon: 'flask', href: '#/results', badge: Object.keys(data.results).length || undefined, match: (r) => r[0] === 'results' },
     { label: 'New test plan', icon: 'plus', href: '#/new', match: (r) => r[0] === 'new' },
     { label: 'Connections', icon: 'people', href: '#/connections', badge: data.requests.length || undefined, match: (r) => r[0] === 'connections' },
   ]

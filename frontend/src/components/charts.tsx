@@ -333,13 +333,14 @@ export function ABMeansChart({ meanA, meanB, signal, armA, armB, height = 150 }:
   )
 }
 
-export function CoefficientChart({ coefficients }: { coefficients: { feature: string; weight: number }[] }) {
-  const data = [...coefficients].sort((a, b) => Math.abs(b.weight) - Math.abs(a.weight))
+export function CoefficientChart({ coefficients }: { coefficients: { feature: string; weight: number; label?: string }[] }) {
+  // v1.4: show the plain-language label ("Sleep, 2 days before") when the backend sends one, not the raw feature id.
+  const data = [...coefficients].sort((a, b) => Math.abs(b.weight) - Math.abs(a.weight)).map((c) => ({ ...c, name: c.label ?? c.feature }))
   return (
     <ResponsiveContainer width="100%" height={Math.max(140, data.length * 44)}>
       <BarChart data={data} layout="vertical" margin={{ top: 4, right: 50, bottom: 4, left: 4 }}>
         <XAxis type="number" {...axisProps} />
-        <YAxis type="category" dataKey="feature" width={160} tick={{ fontSize: 12.5, fill: '#4c4c58' }} axisLine={false} tickLine={false} />
+        <YAxis type="category" dataKey="name" width={170} tick={{ fontSize: 12.5, fill: '#4c4c58' }} axisLine={false} tickLine={false} />
         <ReferenceLine x={0} stroke="#c9c9d3" />
         <Bar dataKey="weight" isAnimationActive={false} radius={4} barSize={22}>
           {data.map((d) => <Cell key={d.feature} fill={d.weight < 0 ? C.a : C.b} />)}

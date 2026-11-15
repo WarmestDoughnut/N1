@@ -7,7 +7,11 @@ import { Icon } from '../components/Icon'
 
 export function SignIn() {
   const demo = useAsync<DemoAccount[]>(() => api.demoAccounts(), [])
-  const [tab, setTab] = useState<Role>('clinician')
+  // Remember the last tab used on this device, so a patient isn't sent back to "Clinicians" every time.
+  const [tab, setTabState] = useState<Role>(() => {
+    try { return localStorage.getItem('n1.signin.tab') === 'patient' ? 'patient' : 'clinician' } catch { return 'clinician' }
+  })
+  const setTab = (r: Role) => { setTabState(r); try { localStorage.setItem('n1.signin.tab', r) } catch { /* private mode */ } }
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPw, setShowPw] = useState(false)

@@ -247,13 +247,21 @@ function ModelPanel({ results }: { results: Results }) {
       </div>
     )
   }
+  const technical = `${m.kind === 'logistic_l2' ? 'L2 logistic regression' : m.kind} · AUC ${m.auc?.toFixed(2) ?? '—'}${m.auc_null_p != null ? ` (vs chance p = ${m.auc_null_p.toFixed(3)})` : ''}`
   return (
     <>
       <ChartHead k="Chance of an episode tomorrow" v={m.risk_tomorrow != null ? `${Math.round(m.risk_tomorrow * 100)}%` : '—'}
-        sub={`${m.kind === 'logistic_l2' ? 'L2 logistic regression' : m.kind} · AUC ${m.auc?.toFixed(2) ?? '—'}${m.auc_null_p != null ? ` (vs chance p = ${m.auc_null_p.toFixed(3)})` : ''}`} />
-      <div className="chart-sub">What drives the prediction. A negative weight means lower values raise episode risk.</div>
+        sub={m.plain ?? technical} />
+      {(m.quality || m.beats_chance != null) && (
+        <div className="row" style={{ gap: 8, margin: '2px 0 12px' }}>
+          {m.quality && <span className={`pill ${m.quality === 'strong' ? 'pill-green' : m.quality === 'moderate' ? 'pill-purple' : 'pill-gray'}`}>{m.quality[0].toUpperCase() + m.quality.slice(1)} model</span>}
+          {m.beats_chance != null && <span className={`pill ${m.beats_chance ? 'pill-green' : 'pill-yellow'}`}>{m.beats_chance ? 'Predicts better than chance' : 'No better than chance'}</span>}
+        </div>
+      )}
+      <div className="chart-sub">What drives the prediction. A bar to the left means lower values raise episode risk.</div>
       <CoefficientChart coefficients={m.coefficients} />
       <p className="muted small">Exploratory. Not validated for clinical use.</p>
+      {m.plain && <details className="tech-details"><summary>Technical details</summary>{technical}</details>}
     </>
   )
 }
