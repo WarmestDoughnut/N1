@@ -91,8 +91,13 @@ async function createPlan(patient, { intervention = false, grayOutDemo = false }
       const day0 = await page.evaluate(() => document.querySelector('.sc-day[data-date]').dataset.date)
       const plus = (n) => new Date(Date.parse(day0 + 'T00:00:00Z') + n * 864e5).toISOString().slice(0, 10)
       const clickDay = async (d) => { const el = await page.$(`[data-date="${d}"]`); await el.scrollIntoView(); const bb = await el.boundingBox(); await page.mouse.click(bb.x + bb.width / 2, bb.y + bb.height / 2); await sleep(250) }
-      await clickDay(day0); await clickDay(plus(5)); await clickDay(plus(8))
-      await click('Fill to 12 periods'); await click('Randomize A/B'); await sleep(400)
+      // Paint A (drag 6 days), then B one click later (same length), repeat that pattern for 12 weeks,
+      // and let the coin decide A/B per pair (optional, gives the full-strength result).
+      const dragDays = async (a, z) => { const box = async (d) => { const el = await page.$(`[data-date="${d}"]`); await el.scrollIntoView(); const bb = await el.boundingBox(); return [bb.x + bb.width / 2, bb.y + bb.height / 2] }; const [x1, y1] = await box(a); const [x2, y2] = await box(z); await page.mouse.move(x1, y1); await page.mouse.down(); await page.mouse.move(x2, y2, { steps: 6 }); await page.mouse.up(); await sleep(250) }
+      await click('A · ', '.sc-toolbar button'); await dragDays(day0, plus(5))
+      await click('B · ', '.sc-toolbar button'); await clickDay(plus(8))
+      await page.type('[aria-label="Weeks"]', '12'); await click('Repeat', '.sc-fill button')
+      await click('Randomize for me'); await sleep(400)
     }
   } else {
     // Pattern test: nothing is pre-filled. Pick the signal and the direction (slot 2 opens by itself).
