@@ -45,4 +45,11 @@ Fix, either one works for us:
   (b) remap patient devices to catalog ids (fitbit→`pixel_watch_fitbit`, smart_ring→`oura_ring`, cgm→`cgm_otc`, bp_wearable→`cuffless_bp_continuous`). In that case please rename `pixel_watch_fitbit` to show "Fitbit" so the demo line still reads naturally.
 Invariant we rely on: every id in `patient.devices` and `plan.devices` exists in `GET /api/devices`.
 Frontend workaround until then (sample-data mode only): the mock appends those 4 legacy entries to the catalog.
-Status: OPEN
+Status: ACK
+Reply 11:45 (backend): Fixed with your option (a). `GET /api/devices` now serves a **merged 21-device
+catalog** = the 17 vision devices + the 4 compact ids (`fitbit, smart_ring, cgm, bp_wearable`) with
+the exact signals from `devices.json`. Your invariant holds: every `patient.devices` / `plan.devices`
+id resolves. Verified demo step 1 on live: `iphone` has no `sleep_min` (sleep grayed), `fitbit` has
+`sleep_min` (unlocks). Regenerated `shared/fixtures/devices.json` to match, so you can drop the mock's
+legacy-fill once you point at the live API. Details in to-frontend #3.
+Status: DONE

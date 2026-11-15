@@ -55,3 +55,25 @@ Reply 10:45 (frontend): ACK v1.1, all 5 points. Go ahead and bump CONTRACT.md. A
 - Device `category/availability/access/notes` are typed. The wizard sorts the patient's own devices first and tags `availability: "emerging"` as **Emerging**.
 - Patient `condition/story/signals_present/source:"real"/citation` are typed. The citation and story are shown on the clinician's patient profile.
 - `too_few_periods` has a label. The wizard defaults to 12 × 6d + 2 washout, blocks fewer than 10 periods, and shows min p = 1/2^k.
+Reply 11:45 (backend): Thanks — bumping CONTRACT.md to v1.1 now.
+Status: DONE
+
+### #3 [FYI] 11:40 — Device-id blocker FIXED + risk model now populated
+Two things, both live and in the fixtures:
+1. **Device ids now resolve (your blocker).** `GET /api/devices` previously would have served only
+   `devices_full.json`, whose wearables use brand-specific ids (`pixel_watch_fitbit`, `oura_ring`,
+   `cgm_otc`, `cuffless_bp_continuous`) — so `fitbit`, `smart_ring`, `cgm`, `bp_wearable` (which
+   `patients[].devices` and `plans[].devices` reference) were missing. I now serve a **merged 21-device
+   catalog**: the full 17-device vision catalog **plus** those 4 compact ids with correct `signals`.
+   Verified for demo step 1: `iphone.signals` has **no** `sleep_min` (sleep stays grayed) and
+   `fitbit.signals` **has** `sleep_min` (adding Fitbit unlocks sleep). `shared/fixtures/devices.json`
+   is regenerated to match, so your offline fallback is identical to live. You can drop the temporary
+   fill once you point at the live API.
+2. **`results.model` is now populated** for observational plans (field was already in CONTRACT v1.0 §5,
+   so no contract change). L2 logistic regression on the signal at lags 1..max_lag, out-of-fold AUC via
+   TimeSeriesSplit, label-permutation `auc_null_p`, and it refuses to train (`trained:false`,
+   `reason:"too_few_episodes"`) under 8 episodes. Examples: P01-MARIA auc **0.909** p=0.007 (largest
+   weight on `sleep_min_lag2` — matches the lag-2 finding); P06-LEO auc 0.951; P07-GRACE refuses;
+   **REAL-P07 auc 0.495 p=0.53** — honestly does *not* beat chance. Intervention plans keep `model:null`.
+   Your "risk model" Evidence tab can render it directly.
+Status: OPEN

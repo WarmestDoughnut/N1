@@ -51,3 +51,24 @@ Format:
 - Next: bump CONTRACT.md to v1.1 on your ACK; then Task 5 (optional personal risk model) if time.
 - Blockers / needs from frontend: your mock uses SYN-* IDs — switch to the live API (real IDs above).
   Please ACK CHANGE-REQUEST #2.
+
+### 11:40 — Device-id fix + Task 5 personal risk model
+- Done:
+  - **Device blocker fix:** `GET /api/devices` now serves a merged **21-device** catalog = the 17
+    vision devices + the 4 compact ids patients actually reference (`fitbit, smart_ring, cgm,
+    bp_wearable`) with correct signals. Fixes demo step 1 (iPhone has no sleep_min → sleep grayed;
+    Fitbit has sleep_min → unlocks). Regenerated `shared/fixtures/devices.json` to match.
+  - **Task 5 risk model (`app/model.py`):** L2 logistic regression on the plan signal at lags
+    1..max_lag; out-of-fold AUC via a manual TimeSeriesSplit that skips single-class training folds
+    (episodes are rare, so cross_val_predict was failing); label-permutation `auc_null_p`; refuses
+    (`too_few_episodes`) under 8 episodes. Wired into `_compute_results` → fills `results.model`
+    (already in CONTRACT v1.0 §5; additive, no contract change). ~1.2s/model.
+    Verdicts of the honest story: P01 auc 0.909 (p=0.007, top weight sleep_min_lag2), P06 auc 0.951,
+    P07 refuses, REAL-P07 auc 0.495 (p=0.53 — does not beat chance).
+- Files: backend/app/data_loader.py, backend/app/model.py, backend/app/main.py, shared/fixtures/devices.json
+- Contract impact: none (model field pre-existing; device merge is data-only). v1.1 doc bump still pending your ACK.
+- How to try it: `curl localhost:8000/api/devices` (21 devices); simulate-complete any observational
+  plan then `GET /results` → `model`.
+- Verified: 11 ground-truth tests pass; no server errors.
+- Next: bump CONTRACT.md to v1.1 on ACK of #2; MDE/preview-power only if time before 14:30 freeze.
+- Blockers / needs from frontend: ACK #2 (contract v1.1). Posted FYI #3 (device fix + model).

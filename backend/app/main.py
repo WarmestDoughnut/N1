@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app import data_loader, stats
+from app.model import fit_risk_model
 from app.schedule import generate_schedule, smallest_possible_p
 from app.store import Store, build_patient_summary
 
@@ -69,6 +70,10 @@ def _compute_results(plan, incomplete=False):
     else:
         result = stats.run_plan(plan, df)
         result["plan_id"] = plan["id"]
+        try:
+            result["model"] = fit_risk_model(df, plan)
+        except Exception:
+            result["model"] = None
     if incomplete:
         result["complete"] = False
         if "incomplete_plan" not in result["warnings"]:

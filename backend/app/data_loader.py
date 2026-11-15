@@ -77,9 +77,46 @@ def load_patients(daily):
     return out
 
 
+# Extra catalog metadata for the compact device ids that patients/plans actually reference
+# but that the 17-device vision catalog lists only under brand-specific ids
+# (e.g. patients use "fitbit", the full catalog has "pixel_watch_fitbit"). We MUST serve the
+# exact ids patients reference or the device selector + "exactly what's shared" break.
+_COMPACT_META = {
+    "fitbit": {"category": "smartwatch", "access": "Google Health API / Health Connect",
+               "notes": "Affordable sleep/HR/steps tracker — strong equity option. The real "
+                        "PMData participant wears a Fitbit Versa 2."},
+    "smart_ring": {"category": "smart_ring", "access": "Oura API / Samsung Health / HealthKit",
+                   "notes": "Comfortable overnight wear for patients who won't wear a watch to bed."},
+    "cgm": {"category": "cgm", "access": "Dexcom API / HealthKit / Health Connect",
+            "notes": "Continuous glucose monitor; OTC options now need no prescription."},
+    "bp_wearable": {"category": "emerging", "access": "TBD",
+                    "notes": "Cuffless continuous blood-pressure wearable (emerging). Demo patient P04 uses this."},
+}
+
+
 def load_devices():
+    """Serve the 17-device vision catalog PLUS any compact device ids that patients reference
+    but that the full catalog omits (so every patient.devices id resolves)."""
     with open(os.path.join(DATA, "devices_full.json")) as f:
-        return json.load(f)
+        full = json.load(f)
+    with open(os.path.join(DATA, "devices.json")) as f:
+        compact = json.load(f)
+    have = {d["id"] for d in full}
+    merged = list(full)
+    for d in compact:
+        if d["id"] in have:
+            continue
+        meta = _COMPACT_META.get(d["id"], {})
+        merged.append({
+            "id": d["id"],
+            "name": d["name"],
+            "category": meta.get("category", "wearable"),
+            "availability": d.get("availability", "now"),
+            "access": meta.get("access", ""),
+            "signals": d.get("signals", []),
+            "notes": meta.get("notes", ""),
+        })
+    return merged
 
 
 def _real_plan(pid, df):
