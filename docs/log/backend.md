@@ -162,3 +162,13 @@ Format:
   NOTE: Postgres path not yet run against a real DB — will verify the moment we have the Supabase string.
 - Next: wire Supabase string when human provides it; frontend owns Vercel deploy + VITE_API_URL + dropping the mock data source.
 - Blockers / needs: Supabase `DATABASE_URL` (from human) to validate the Postgres backend; frontend to deploy to Vercel.
+
+### 14:10 — Full stack deployed & verified (Vercel + Railway + Supabase)
+- Done: Helped stand up the hosted stack. Frontend on Vercel (project `n1`, https://n1-lemon.vercel.app,
+  Git-connected to main, root `frontend`, VITE_API_URL=Railway). Backend on Railway (Dockerfile) →
+  Supabase Postgres (`store:postgres`). Verified end-to-end: public site loads, API URL baked in, CORS
+  allows the Vercel origin, backend healthy, clean seed. Auto-deploy on push to main is active.
+- Files: docs only (deploy config committed earlier: Dockerfile, render.yaml, persistence.py, etc.).
+- Contract impact: none.
+- How to try it: open https://n1-lemon.vercel.app (sign in rivera@n1hub.demo / demo).
+- Next: 15:30 joint rehearsal against the public URL; optional capability-gate enforcement + MDE.
