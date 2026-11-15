@@ -1,5 +1,6 @@
+import { useState } from 'react'
 import { api } from '../../api'
-import type { Device, Patient } from '../../types'
+import type { Device, Patient, SignalId } from '../../types'
 import { navigate, useAsync } from '../../lib/hooks'
 import { initials } from '../../lib/session'
 import { DEVICE_ICON, Icon, SIGNAL_ICON } from '../../components/Icon'
@@ -112,38 +113,7 @@ function PatientDetail({ patient: sel, data, catalog }: { patient: Patient; data
           <div className="muted small mt">
             {isReal(sel) ? `Real data: ${sel.citation ?? 'PMData (Thambawita et al., MMSys 2020, CC BY-NC 4.0)'}` : 'Synthetic patient with known ground truth'}
           </div>
-          <div className="grid-2 mt">
-            <div>
-              <div className="chart-title">Devices</div>
-              <div className="chart-sub">What the patient already owns</div>
-              <div className="stack" style={{ marginTop: 8 }}>
-                {sel.devices.map((d) => {
-                  const dev = catalog.find((c) => c.id === d)
-                  return (
-                    <div key={d} className="row" style={{ gap: 10, flexWrap: 'nowrap', alignItems: 'flex-start' }}>
-                      <span className="summary-icon tone-purple" style={{ width: 36, height: 36, margin: 0 }}><Icon name={DEVICE_ICON[d] ?? 'watch'} size={17} /></span>
-                      <div><strong>{dev?.name ?? d}</strong><div className="muted small">{dev?.signals.map(signalLabel).join(', ')}</div></div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-            <div>
-              <div className="chart-title">Testable signals</div>
-              <div className="chart-sub">From the patient's devices + app episode log</div>
-              <div className="row" style={{ marginTop: 8 }}>
-                {ALL_SIGNALS.map((s) => {
-                  const ok = s === 'episode' || (catalog.some((c) => sel.devices.includes(c.id) && c.signals.includes(s)) && (!sel.signals_present || sel.signals_present.includes(s)))
-                  return (
-                    <span key={s} className="chip" style={ok ? { background: 'var(--accent-soft)', color: 'var(--accent-ink)' } : { background: '#f8f8fa', color: '#a6a6b0', textDecoration: 'line-through' }}>
-                      <Icon name={SIGNAL_ICON[s] ?? 'activity'} size={13} />{signalLabel(s)}
-                    </span>
-                  )
-                })}
-              </div>
-            </div>
-          </div>
-          {sel.story && <div className="insight mt"><span><Icon name="info" size={17} /></span><p><strong>Clinical story</strong>{sel.story}</p></div>}
+          <PatientSources patient={sel} catalog={catalog} />
         </article>
 
         <article className="card">
@@ -184,6 +154,58 @@ function NotConnected({ id }: { id: string }) {
         <a className="button secondary" href="#/patients"><Icon name="arrowLeft" /> All patients</a>
         <a className="button primary" href="#/connections"><Icon name="people" /> Connections</a>
       </span>
+    </div>
+  )
+}
+
+/** Compact devices + signals: what can be tested now; what can't is one click away. */
+function PatientSources({ patient, catalog }: { patient: Patient; catalog: Device[] }) {
+  const [showOff, setShowOff] = useState(false)
+  const tracked = (s: SignalId) => catalog.some((c) => patient.devices.includes(c.id) && c.signals.includes(s))
+  const hasData = (s: SignalId) => !patient.signals_present || patient.signals_present.includes(s)
+  const ok = ALL_SIGNALS.filter((s) => s === 'episode' || (tracked(s) && hasData(s)))
+  const off = ALL_SIGNALS.filter((s) => !ok.includes(s))
+  return (
+    <div className="pd-sources mt">
+      <div className="pd-row">
+        <span className="pd-k">Devices</span>
+        <div className="pd-chips">
+          {patient.devices.map((d) => {
+            const dev = catalog.find((c) => c.id === d)
+            return (
+              <span key={d} className="chip" title={dev ? `Tracks: ${dev.signals.map(signalLabel).join(', ')}` : undefined}>
+                <Icon name={DEVICE_ICON[d] ?? 'watch'} size={13} />{dev?.name ?? d}
+              </span>
+            )
+          })}
+        </div>
+      </div>
+      <div className="pd-row">
+        <span className="pd-k">Testable</span>
+        <div className="pd-chips">
+          {ok.map((s) => (
+            <span key={s} className="chip" style={{ background: 'var(--accent-soft)', color: 'var(--accent-ink)' }}>
+              <Icon name={SIGNAL_ICON[s] ?? 'activity'} size={13} />{signalLabel(s)}
+            </span>
+          ))}
+        </div>
+      </div>
+      {off.length > 0 && (
+        <div className="pd-row">
+          <span className="pd-k" />
+          <div>
+            <button type="button" className="disclosure" onClick={() => setShowOff(!showOff)} aria-expanded={showOff}>
+              <span style={{ transform: showOff ? 'rotate(90deg)' : undefined, display: 'inline-flex' }}><Icon name="chevron" size={14} /></span>
+              Not testable <span className="muted">({off.length})</span>
+            </button>
+            {showOff && (
+              <div className="pd-chips">
+                {off.map((s) => <span key={s} className="td-off">{signalLabel(s)}<em>{tracked(s) ? 'no data yet' : 'needs a device'}</em></span>)}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

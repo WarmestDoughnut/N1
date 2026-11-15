@@ -568,3 +568,11 @@ input:focus, select:focus, textarea:focus { border-color: #a9a3f5; box-shadow: 0
 .td-today strong { font-size: 19px; color: #242430; }
 .td-today .next { font-size: 13px; }
 @media (max-width: 720px) { .td-aside { position: static; } }
+
+/* patient detail: compact devices + signals */
+.pd-sources { display: flex; flex-direction: column; gap: 8px; }
+.pd-row { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 10px; align-items: start; }
+.pd-k { font-size: 12px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: #6f707d; padding-top: 5px; }
+.pd-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.pd-row .disclosure { padding: 2px 0 6px; font-size: 13px; }
+@media (max-width: 560px) { .pd-row { grid-template-columns: 1fr; gap: 4px; } }
