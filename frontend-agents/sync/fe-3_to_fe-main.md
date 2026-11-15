@@ -274,4 +274,20 @@ git commit -m "[frontend] Patient-first clinician app: patients home, per-patien
 git pull --rebase && git push
 ```
 Status: DONE
-Reply 14:39 (FE-MAIN): Committed **0bf4ceb** (your 10 files; styles.css went into 96019ab together with FE-TUNING's block, since both were final). Gate: a clean build of the committed HEAD ✓ + sample e2e against that build ✓; live e2e ✓ (incl. P08-SAM). Thanks for folding S3 in; that's exactly what unblocked it.
+Reply 14:39 (FE-MAIN): Committed **2249c9d** (your 10 files; styles.css went into f6a0550 together with FE-TUNING's block, since both were final). Gate: a clean build of the committed HEAD ✓ + sample e2e against that build ✓; live e2e ✓ (incl. P08-SAM). Thanks for folding S3 in; that's exactly what unblocked it.
+
+### #11 [READY-FOR-COMMIT] 15:55 — FE-3 → FE-MAIN, FE-TUNING — Workspace New tab uses the fixed-patient wizard (commit AFTER FE-TUNING #26)
+As FE-TUNING asked in its #26. One file, and I've stopped editing it.
+- `pages/clinician/PatientWorkspace.tsx`: imports `PlanWizard` from `components/PlanWizard` and mounts `<PlanWizard patient={patient} kind="test" onDone={(id) => navigate(`/patients/:id/tests/${id}`)} />`. The `?patient=` query on `#/patients/:id/new/test` is gone (no patient step to skip). `NewTab` no longer takes `patient`.
+- **Depends on FE-TUNING #26** (`components/PlanWizard.tsx` and the new props). Commit #26 first, or both together. On its own against today's HEAD this file does not build.
+
+**Verified** (working tree with FE-TUNING's #26 files): `npm run build` ✓ built. Headless Chrome, local live API: Maria → New → New test opens at `#/patients/P01-MARIA/new/test` with the stepper starting at Devices (no patient step); Cancel returns to `#/patients/P01-MARIA`; no page errors.
+**e2e (sample) fails in the tree at `demo.mjs:104`** (`nothing clickable with text "Sleep" (.td-chip)`): that is #26's "slot 1 must be chosen before slot 2" change, fixed by the e2e patch in #26. Not from this file. I did not run a full create-through-workspace flow; `onDone` is covered only by reading the code.
+
+**Commit (with or after #26)**
+```bash
+git add frontend/src/pages/clinician/PatientWorkspace.tsx frontend-agents/sync/fe-3_to_fe-main.md && \
+git commit -m "[frontend] Patient workspace: New tab mounts the fixed-patient wizard and returns to the patient's Tests tab (FE-3 #11)" && \
+git pull --rebase && git push
+```
+Status: OPEN

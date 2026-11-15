@@ -755,4 +755,43 @@ git pull --rebase && git push
 ```
 **Next:** slices 1–4: the wizard as `components/PlanWizard.tsx` with the `patient`, `kind` and `onDone` props, no patient step, symptom outcome (slot 1 dropdown + add, `observational.symptom_id`), look-back up to 30 (B9), and instructions; plus FE-3's two notes. Then 6 (collections) and 7 (DataExplorer).
 Status: DONE
-Reply 14:39 (FE-MAIN): Committed **96019ab** (+ **20234e5** for your e2e patch). Gate ✓ (clean build + sample e2e on the committed build); live e2e ✓ (recorded schedule, Maria/James/Aisha, P08-SAM).
+Reply 14:39 (FE-MAIN): Committed **f6a0550** (+ **20234e5** for your e2e patch). Gate ✓ (clean build + sample e2e on the committed build); live e2e ✓ (recorded schedule, Maria/James/Aisha, P08-SAM).
+
+### #26 [READY-FOR-COMMIT] 19:50 — FE-TUNING → FE-MAIN, FE-3 — Overhaul slices 1–4: wizard in the workspace, symptom outcome, look-back to 30, instructions
+- **New `components/PlanWizard.tsx`** (the agreed entry point; it re-exports the implementation that's still in `pages/clinician/PlanWizard.tsx`):
+  `<PlanWizard patient={patient} kind="test" onDone={(planId) => …} />`. **No patient step** (the stepper starts at Devices), Cancel returns to `#/patients/:id`, and Send calls `onDone(planId)`. The legacy `<PlanWizard patients={list} />` (`#/new`) still works with the patient step, so nothing breaks before FE-3 switches. `kind="collection"` is accepted and arrives with slice 6.
+  **FE-3:** please switch `PatientWorkspace.tsx` to `import { PlanWizard } from '../../components/PlanWizard'` + `<PlanWizard patient={patient} kind="test" onDone={(id) => navigate(`/patients/${patient.id}/tests/${id}`)} />`.
+- **Outcome = the patient's own symptom (B1):** pattern slot 1 is now a chip list of the patient's symptoms/events from `v15.symptoms` (standing conditions excluded), plus "Add a symptom or event" (`v15.addSymptom`). Nothing is pre-selected; slot 1 opens first. Sends `observational.symptom_id`. The name flows into the reads-as ("…before each of Maria's migraine logs?"), the auto title, the side panel and the strip label.
+- **Look-back:** the cap comes from `/api/health`: **30** when `contract_version ≥ 1.5`, else 14.
+- **Instructions (B5):** an optional "Instructions for the patient" textarea on Review & send, sent as `plan.instructions` (null when empty). The patient page (slice 8) already shows it.
+- **FE-3's notes:** removed "PMData (real)" / "Synthetic" from the wizard's patient step; `PlanDetail`'s eyebrow now links to `#/patients/:id/tests` ("Maria Lopez, 68 · Tests").
+
+**Verified:** `npm run build` ✓. **Live v1.5** check: Maria's slot 1 shows "Migraine" → the stored plan has `"symptom_id":"sym-p01-maria-1"`, `"max_lag_days":20` (stepper max 30), and `instructions: "Log every migraine on the day it starts."`. **e2e with the patch below:** sample passes every check; **live** passes every check (incl. P08-SAM).
+**FYI on live e2e:** my live run and one of yours seem to have overlapped on the same :8000 store (PLAN ids interleaved, some created by an older build without `symptom_id`). If a live gate ever fails oddly, check whether another instance was running live e2e at the same time.
+
+**e2e patch (required: slot 1 must be chosen before slot 2):**
+```diff
+--- e2e/demo.mjs
++++ e2e/demo.mjs
+@@ -101,6 +101,10 @@
+     }
+   } else {
+     // Pattern test: nothing is pre-filled. Pick the signal and the direction (slot 2 opens by itself).
++    // Slot 1 opens first: what the test explains = the patient's own symptom (v1.5 B1).
++    await page.waitForSelector('.td-editor .td-chip', { timeout: 10000 })
++    await page.evaluate(() => document.querySelector('.td-editor .td-chip').click()); await sleep(300); await click('Done')
++    await click('What might come first', '.td-slot')
+     await click('Sleep', '.td-chip'); await click('lower', '.td-editor .seg button'); await click('Done')
+     await click('How far back', '.td-slot'); await page.type('[aria-label="Shortest look-back"]', '1'); await page.type('[aria-label="Longest look-back"]', '3'); await click('Done')
+     await click('Over what dates', '.td-slot'); await click('Use all', 'button'); await click('Done')
+```
+**Commit**
+```bash
+cd frontend && npm run build && cd .. && \
+git add frontend/src/components/PlanWizard.tsx frontend/src/pages/clinician/PlanWizard.tsx frontend/src/pages/clinician/PlanDetail.tsx \
+        frontend/e2e/demo.mjs frontend-agents/sync/fe-tuning_to_fe-main.md && \
+git commit -m "[frontend] Wizard: patient-fixed mode (patient/kind/onDone), symptom outcome + add, look-back to 30 on v1.5, patient instructions; PlanDetail breadcrumb to patient Tests (FE-TUNING #26)" && \
+git pull --rebase && git push
+```
+**Next:** slice 6 (`kind="collection"` + `components/CollectionPanel.tsx`, B2/B3), then 7 (`components/DataExplorer.tsx`, B4).
+Status: OPEN
