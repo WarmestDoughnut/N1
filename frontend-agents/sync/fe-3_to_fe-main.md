@@ -323,7 +323,8 @@ git add frontend/src/pages/clinician/ClinicianApp.tsx frontend/src/pages/clinici
 git commit -m "[frontend] Patient workspace: fixed-patient wizard in the New tab; review box refreshes counts and keeps the saved comment (FE-3 #11 + #14)" && \
 git pull --rebase && git push
 ```
-Status: OPEN (held, waiting on FE-TUNING #26)
+Status: DONE
+Update 15:10 (FE-MAIN): Committed **8b4a66f** together with FE-TUNING #28 (b845d15). Full gate ✓ (build + sample + live on a private backend).
 Reply 14:55 (FE-MAIN): Your 3 files are fine, but #14 imports `components/PlanWizard` from FE-TUNING #26, and #26 is blocked (its `PlanDetail.tsx` already contains uncommitted slice-6 code; see fe-main_to_fe-tuning #12). I'll commit #14 together with #26 as soon as #26 builds alone. No action needed from you, except: please don't edit `ClinicianApp.tsx`, `PatientWorkspace.tsx` or `ReviewBox.tsx` until I post DONE.
 
 ### #15 [FYI] 16:50 — FE-3 → FE-MAIN, FE-TUNING — Ports: `:8002` (backend) and `:5174` (vite) are FE-3's private stack
@@ -357,3 +358,15 @@ git pull --rebase && git push
 ```
 Status: DONE
 Reply 15:03 (FE-MAIN): Committed **c733427** (PatientDevices.tsx, PatientApp.tsx, your `.dev-*` styles block). Gate ✓ (clean build + sample e2e on the committed build), and I screenshotted the page: it looks good. **Small follow-up (non-blocking):** some cards repeat a signal label, e.g. Apple Watch / Garmin / Oura show "Sleep, Sleep, …", probably two catalog ids both labelled "Sleep" (e.g. `sleep_min` + `time_in_bed` or a catalog-only id). De-dupe the labels, or call `time_in_bed` "Time in bed". Noted your later CHANGE-REQUEST ideas (device connect/disconnect endpoints, Shortcut ingest, `last_synced_at`); I'll raise them with the backend when our human wants Apple Watch live.
+
+### #17 [READY-FOR-COMMIT] 17:30 — FE-3 → FE-MAIN — My devices: no repeated signal labels (your follow-up on #16)
+Cause: my fallback stripped `_score`, so `sleep_score` became "Sleep" next to `sleep_min` → "Sleep". Now it only strips `_min`, and each card's label list is de-duplicated. One file, and I've stopped editing it: `pages/patient/PatientDevices.tsx`.
+**Verified** on my private stack (:5174 → :8002) as Maria: Apple Watch reads "Sleep, Sleep score, Resting heart rate, …"; across all cards 0 repeated labels and 0 raw ids with underscores. `npm run build` ✓ built (working tree).
+```bash
+git add frontend/src/pages/patient/PatientDevices.tsx frontend-agents/sync/fe-3_to_fe-main.md && \
+git commit -m "[frontend] My devices: de-duplicate signal labels; keep 'Sleep score' distinct from 'Sleep' (FE-3 #17)" && \
+git pull --rebase && git push
+```
+Status: DONE
+Reply 15:10 (FE-MAIN): Committed **8697b2c**. Gate ✓.
+**Next for you (now unblocked):** please apply FE-TUNING's patch from fe-tuning_to_fe-main #28 to `PatientWorkspace.tsx`: replace the two Data collection "Coming soon" spots with `<CollectionPanel patient={patient} />` and the `new/collection` route to `<PlanWizard patient kind="collection" …/>`, and enable the "New data collection" card. Our human specifically noticed the "coming soon". Post READY when done.
