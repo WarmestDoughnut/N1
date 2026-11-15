@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Plan, Results } from '../../types'
 import type { ResultsV15 } from '../../lib/v15'
+import { deliveryOf, sharedOn } from '../../components/DeliveryBadge'
 import { navigate } from '../../lib/hooks'
 import { firstName, type Session } from '../../lib/session'
 import { Icon, SIGNAL_ICON } from '../../components/Icon'
@@ -13,7 +14,8 @@ import type { PatientData } from './PatientApp'
 export function PatientHome({ session, data }: { session: Session; data: PatientData }) {
   const plans = [...data.plans].sort((a, b) => b.created_at.localeCompare(a.created_at))
   const pending = plans.filter((p) => p.status === 'pending_approval')
-  const running = plans.filter((p) => p.status === 'active' || p.status === 'paused')
+  // Past-data-only requests are shared on approval and never collect, so they aren't "in progress".
+  const running = plans.filter((p) => (p.status === 'active' || p.status === 'paused') && deliveryOf(p) !== 'retrospective')
   const finished = plans.filter((p) => data.results[p.id])
   const latest = finished[0]
   const lr = latest ? data.results[latest.id] : undefined
@@ -97,7 +99,10 @@ function ResultItem({ plan, r }: { plan: Plan; r: Results }) {
               <p><strong>{plan.clinician_name} · {formatDate(comment.at)}</strong>{comment.text}</p>
             </div>
           )}
-          <div className="row mt"><a className="button secondary" href={`#/plans/${plan.id}`}>See full result <Icon name="chevron" size={15} /></a></div>
+          <div className="row mt">
+            <a className="button secondary" href={`#/plans/${plan.id}`}>See full result <Icon name="chevron" size={15} /></a>
+            <a className="link-btn" style={{ fontSize: 15 }} href={`#/plans/${plan.id}?focus=notes`}><Icon name="pencil" size={15} /> Add a comment</a>
+          </div>
         </div>
       )}
     </div>
@@ -134,6 +139,10 @@ function CareTeamStrip({ data }: { data: PatientData }) {
 }
 
 export function TestTile({ plan }: { plan: Plan }) {
+  const past = deliveryOf(plan) === 'retrospective'
+  const shared = sharedOn(plan)
+  // approved (or later): the past data has been shared
+  const settled = plan.status !== 'pending_approval' && plan.status !== 'declined'
   const icon = plan.status === 'pending_approval' ? 'bell' : plan.status === 'complete' || plan.status === 'stopped' ? 'sparkles' : plan.status === 'paused' ? 'pause' : plan.status === 'declined' ? 'x' : 'activity'
   const tone = plan.status === 'pending_approval' ? 'tone-yellow' : plan.status === 'complete' ? 'tone-green' : plan.status === 'declined' || plan.status === 'paused' ? 'tone-gray' : plan.status === 'stopped' ? 'tone-coral' : 'tone-purple'
   const cta = plan.status === 'pending_approval' ? 'Review' : plan.status === 'complete' || plan.status === 'stopped' ? 'See result' : 'Open'
@@ -142,9 +151,9 @@ export function TestTile({ plan }: { plan: Plan }) {
       <span className={`summary-icon ${tone}`}><Icon name={icon} /></span>
       <span className="body">
         <strong>{plan.title}</strong>
-        <small>From {plan.clinician_name} · {formatDate(plan.window.start)} to {formatDate(plan.window.end)}</small>
+        <small>From {plan.clinician_name} · {past && shared ? `Shared on ${formatDate(shared)}` : `${formatDate(plan.window.start)} to ${formatDate(plan.window.end)}`}</small>
       </span>
-      <StatusChip status={plan.status} patient />
+      {past && settled ? <span className="pill pill-green">Shared</span> : <StatusChip status={plan.status} patient />}
       <span className="link-btn" style={{ fontSize: 14.5 }}>{cta} <Icon name="chevron" size={15} /></span>
     </button>
   )

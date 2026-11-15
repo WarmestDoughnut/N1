@@ -4,10 +4,11 @@ import { initials, type Session } from '../../lib/session'
 import { Icon } from '../../components/Icon'
 import { RequestRow } from '../../components/Connections'
 import type { ClinicianData } from './ClinicianApp'
-import { isRunning, isUnreviewed, isWaiting, toneFor } from './PatientWorkspace'
+import { isCompletedTest, isRunning, isUnreviewed, isWaiting, toneFor } from './PatientWorkspace'
 
-type Focus = '' | 'active' | 'waiting' | 'unreviewed'
-type SortKey = 'attention' | 'name-asc' | 'name-desc'
+type Focus = '' | 'active' | 'waiting' | 'unreviewed' | 'completed'
+type CountKey = 'active' | 'waiting' | 'unreviewed' | 'completed'
+type SortKey = 'attention' | 'name-asc' | 'name-desc' | CountKey
 const PER_PAGE = 25
 
 function greeting() {
@@ -31,15 +32,17 @@ export function PatientsHome({ session, data }: { session: Session; data: Clinic
       active: mine.filter(isRunning).length,
       waiting: mine.filter(isWaiting).length,
       unreviewed: mine.filter((x) => isUnreviewed(results[x.id])).length,
+      completed: mine.filter((x) => isCompletedTest(results[x.id])).length,
     }
   }), [patients, plans, results])
 
-  const total = (k: 'active' | 'waiting' | 'unreviewed') => rows.reduce((n, r) => n + r[k], 0)
+  const total = (k: CountKey) => rows.reduce((n, r) => n + r[k], 0)
   const t = q.trim().toLowerCase()
   const visible = rows
     .filter((r) => (!t || `${r.patient.display_name} ${r.patient.condition ?? ''}`.toLowerCase().includes(t)) && (!focus || r[focus] > 0))
     .sort((a, b) =>
       sort === 'name-desc' ? b.patient.display_name.localeCompare(a.patient.display_name)
+        : sort === 'active' || sort === 'waiting' || sort === 'unreviewed' || sort === 'completed' ? (b[sort] - a[sort]) || a.patient.display_name.localeCompare(b.patient.display_name)
         : sort === 'attention' ? (b.unreviewed - a.unreviewed) || (b.active - a.active) || (b.waiting - a.waiting) || a.patient.display_name.localeCompare(b.patient.display_name)
           : a.patient.display_name.localeCompare(b.patient.display_name))
   const toggle = (f: Focus) => { setFocus(focus === f ? '' : f); setShown(PER_PAGE) }
@@ -54,11 +57,12 @@ export function PatientsHome({ session, data }: { session: Session; data: Clinic
         <a className="button primary" href="#/connections"><Icon name="people" /> Add a patient</a>
       </section>
 
-      <section className="summary-grid four" aria-label="Summary">
+      <section className="summary-grid five" aria-label="Summary">
         <Stat icon="people" tone="tone-purple" k="Connected patients" v={patients.length} on={false} onClick={() => toggle('')} />
         <Stat icon="activity" tone="tone-green" k="Active tests" v={total('active')} on={focus === 'active'} onClick={() => toggle('active')} />
         <Stat icon="bell" tone="tone-yellow" k="Awaiting consent" v={total('waiting')} on={focus === 'waiting'} onClick={() => toggle('waiting')} />
         <Stat icon="sparkles" tone="tone-coral" k="Unreviewed results" v={total('unreviewed')} on={focus === 'unreviewed'} onClick={() => toggle('unreviewed')} />
+        <Stat icon="check" tone="tone-gray" k="Completed tests" v={total('completed')} on={focus === 'completed'} onClick={() => toggle('completed')} />
       </section>
 
       {data.requests.length > 0 && (
@@ -75,7 +79,7 @@ export function PatientsHome({ session, data }: { session: Session; data: Clinic
         <div className="workspace-head">
           <div>
             <h2>Your patients</h2>
-            <p>{visible.length} of {patients.length}{focus ? ` · with ${focus === 'active' ? 'active tests' : focus === 'waiting' ? 'tests awaiting consent' : 'unreviewed results'}` : ''}</p>
+            <p>{visible.length} of {patients.length}{focus ? ` · with ${focus === 'active' ? 'active tests' : focus === 'waiting' ? 'tests awaiting consent' : focus === 'completed' ? 'completed tests' : 'unreviewed results'}` : ''}</p>
           </div>
           <div className="row" style={{ gap: 8 }}>
             <label className="tests-search">
@@ -86,6 +90,10 @@ export function PatientsHome({ session, data }: { session: Session; data: Clinic
               <option value="attention">Sort: needs attention</option>
               <option value="name-asc">Sort: name A–Z</option>
               <option value="name-desc">Sort: name Z–A</option>
+              <option value="active">Sort: most active tests</option>
+              <option value="waiting">Sort: most awaiting consent</option>
+              <option value="unreviewed">Sort: most unreviewed</option>
+              <option value="completed">Sort: most completed</option>
             </select>
           </div>
         </div>
@@ -105,9 +113,16 @@ export function PatientsHome({ session, data }: { session: Session; data: Clinic
             </div>
           ) : (
             <table className="table">
-              <thead><tr><th>Patient</th><th>Active tests</th><th>Awaiting consent</th><th>Unreviewed results</th><th /></tr></thead>
+              <thead><tr>
+                <SortTh label="Patient" on={sort === 'name-asc' || sort === 'name-desc'} dir={sort === 'name-desc' ? 'desc' : 'asc'} onClick={() => setSort(sort === 'name-asc' ? 'name-desc' : 'name-asc')} />
+                <SortTh label="Active tests" on={sort === 'active'} dir="desc" onClick={() => setSort('active')} />
+                <SortTh label="Awaiting consent" on={sort === 'waiting'} dir="desc" onClick={() => setSort('waiting')} />
+                <SortTh label="Unreviewed results" on={sort === 'unreviewed'} dir="desc" onClick={() => setSort('unreviewed')} />
+                <SortTh label="Completed tests" on={sort === 'completed'} dir="desc" onClick={() => setSort('completed')} />
+                <th />
+              </tr></thead>
               <tbody>
-                {visible.slice(0, shown).map(({ patient: p, active, waiting, unreviewed }) => (
+                {visible.slice(0, shown).map(({ patient: p, active, waiting, unreviewed, completed }) => (
                   <tr key={p.id} className="clickable" onClick={() => navigate(`/patients/${encodeURIComponent(p.id)}`)}>
                     <td>
                       <span className="row" style={{ gap: 10, flexWrap: 'nowrap' }}>
@@ -118,6 +133,7 @@ export function PatientsHome({ session, data }: { session: Session; data: Clinic
                     <td><Count n={active} tone="pill-purple" /></td>
                     <td><Count n={waiting} tone="pill-yellow" /></td>
                     <td><Count n={unreviewed} tone="pill-coral" /></td>
+                    <td><Count n={completed} tone="pill-green" /></td>
                     <td style={{ width: 24, color: '#b3b3bb' }}><Icon name="chevron" size={15} /></td>
                   </tr>
                 ))}
@@ -129,6 +145,15 @@ export function PatientsHome({ session, data }: { session: Session; data: Clinic
         )}
       </section>
     </>
+  )
+}
+
+/** Column header that sorts the table. The arrow shows on the active column only. */
+function SortTh({ label, on, dir, onClick }: { label: string; on: boolean; dir: 'asc' | 'desc'; onClick: () => void }) {
+  return (
+    <th aria-sort={on ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
+      <button className={`th-sort ${on ? 'on' : ''}`} onClick={onClick} title={`Sort by ${label.toLowerCase()}`}>{label}{on && <span aria-hidden>{dir === 'asc' ? ' ↑' : ' ↓'}</span>}</button>
+    </th>
   )
 }
 

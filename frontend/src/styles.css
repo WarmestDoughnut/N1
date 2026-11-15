@@ -733,3 +733,12 @@ input:focus, select:focus, textarea:focus { border-color: #a9a3f5; box-shadow: 0
 .dev-lead { font-size: 16.5px; line-height: 1.5; color: #33333e; margin: 0 0 14px; }
 .dev-qr-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 .dev-qr { width: 120px; height: 120px; display: grid; place-items: center; text-align: center; border: 2px dashed #c9c9d3; border-radius: 12px; color: #8d8d98; font-size: 12.5px; flex: none; }
+/* FE-3: completed tests column + counter, sortable headers */
+.summary-grid.five { grid-template-columns: repeat(5, 1fr); }
+.summary-grid.five .summary-card { padding-inline: 14px; }
+.th-sort { padding: 0; border: 0; background: transparent; font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit; cursor: pointer; white-space: nowrap; }
+.th-sort:hover, .th-sort.on { color: var(--accent-ink); }
+.ws-done { grid-template-columns: 96px minmax(0, 1fr) auto 16px; }
+@media (max-width: 1250px) { .summary-grid.five { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 860px) { .summary-grid.five { grid-template-columns: 1fr; } }
+@media (max-width: 700px) { .ws-done { grid-template-columns: minmax(0, 1fr) auto 16px; } }

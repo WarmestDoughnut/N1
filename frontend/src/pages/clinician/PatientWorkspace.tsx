@@ -3,7 +3,8 @@ import type { Device, Patient, Plan, Results, SignalId } from '../../types'
 import { navigate } from '../../lib/hooks'
 import { initials } from '../../lib/session'
 import { DEVICE_ICON, Icon, SIGNAL_COLOR, SIGNAL_ICON } from '../../components/Icon'
-import { StatusChip } from '../../components/Verdict'
+import { StatusChip, VerdictBadge } from '../../components/Verdict'
+import { DeliveryBadge, finishedOn } from '../../components/DeliveryBadge'
 import { formatDate, signalLabel, ALL_SIGNALS } from '../../lib/util'
 import type { ClinicianData } from './ClinicianApp'
 import { PlanDetail } from './PlanDetail'
@@ -20,6 +21,9 @@ export const toneFor = (id: string) => AVATAR_TONES[[...id].reduce((a, c) => a +
 /** A finished test whose result the clinician hasn't marked reviewed (backend B7 `results.reviewed_at`).
  *  A finished data collection has no verdict, so there is nothing to review. Keep this the only place that reads it. */
 export const isUnreviewed = (r: Results | undefined) => !!r && r.verdict != null && (r as Results & { reviewed_at?: string | null }).reviewed_at == null
+
+/** A finished test with a verdict. Data collections finish without one, so they don't count. */
+export const isCompletedTest = (r: Results | undefined) => !!r && r.verdict != null
 
 export const isRunning = (p: Plan) => p.status === 'active' || p.status === 'paused'
 export const isWaiting = (p: Plan) => p.status === 'pending_approval'
@@ -94,6 +98,7 @@ export function PatientWorkspace({ patient, data, catalog, tab: rawTab, sub }: {
 
 function OverviewTab({ patient, plans, data, catalog, base }: { patient: Patient; plans: Plan[]; data: ClinicianData; catalog: Device[]; base: string }) {
   const unreviewed = plans.filter((p) => isUnreviewed(data.results[p.id])).length
+  const completed = plans.filter((p) => isCompletedTest(data.results[p.id]))
   const activity = plans
     .flatMap((p) => p.history.map((h) => ({ ...h, plan: p })))
     .sort((a, b) => b.at.localeCompare(a.at))
@@ -120,6 +125,20 @@ function OverviewTab({ patient, plans, data, catalog, base }: { patient: Patient
           <p className="muted small" style={{ margin: '12px 0 0' }}>{patient.n_episodes} episode{patient.n_episodes === 1 ? '' : 's'} logged</p>
         </article>
       </section>
+
+      <article className="card">
+        <div className="card-title"><h3>Completed tests</h3><span className="muted small">{completed.length}</span></div>
+        {completed.length === 0
+          ? <div className="muted small">None yet.</div>
+          : completed.map((p) => (
+            <button key={p.id} className="ws-activity ws-done" onClick={() => navigate(`${base}/tests/${encodeURIComponent(p.id)}`)}>
+              <span className="muted small">{formatDate(finishedOn(p) ?? p.window.end)}</span>
+              <span><b>{p.title}</b></span>
+              <VerdictBadge verdict={data.results[p.id].verdict} small />
+              <Icon name="chevron" size={14} />
+            </button>
+          ))}
+      </article>
 
       <article className="card">
         <div className="card-title">
@@ -161,6 +180,13 @@ function testWhat(p: Plan): string {
 }
 
 function TestsTab({ plans, data, base }: { plans: Plan[]; data: ClinicianData; base: string }) {
+  // Who wrote the newest note on each test. "New comment" shows while the patient has the last word.
+  const ids = plans.map((p) => p.id).join(',')
+  const newestQ = useAsync<Record<string, string>>(async () => {
+    const pairs = await Promise.all(plans.map((p) => v15.notes(p.id).then((n) => [p.id, n[n.length - 1]?.author_role ?? ''] as const).catch(() => [p.id, ''] as const)))
+    return Object.fromEntries(pairs)
+  }, [ids])
+  const newest = newestQ.data ?? {}
   if (plans.length === 0) {
     return (
       <section className="workspace">
@@ -176,6 +202,7 @@ function TestsTab({ plans, data, base }: { plans: Plan[]; data: ClinicianData; b
     <section className="workspace">
       {plans.map((p) => {
         const signal = testSignal(p)
+        const fromPatient = newest[p.id] === 'patient'
         const r = data.results[p.id]
         return (
           <button key={p.id} className="test-row ws-test" onClick={() => navigate(`${base}/tests/${encodeURIComponent(p.id)}`)}>
@@ -185,6 +212,8 @@ function TestsTab({ plans, data, base }: { plans: Plan[]; data: ClinicianData; b
               <small>{p.type === 'observational' ? 'Observational' : 'A/B trial'} · {testWhat(p)} · {formatDate(p.window.start)} – {formatDate(p.window.end)}</small>
             </span>
             <span className="row" style={{ gap: 6, flexWrap: 'nowrap' }}>
+              <DeliveryBadge plan={p} />
+              {fromPatient && <span className="pill pill-purple" title="The newest comment on this test is from the patient">New comment</span>}
               {isUnreviewed(r) && <span className="pill pill-coral">Unreviewed result</span>}
               <StatusChip status={p.status} />
             </span>
