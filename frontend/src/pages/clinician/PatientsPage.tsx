@@ -133,7 +133,7 @@ function PatientDetail({ patient: sel, data, catalog }: { patient: Patient; data
               <div className="chart-sub">From the patient's devices + app episode log</div>
               <div className="row" style={{ marginTop: 8 }}>
                 {ALL_SIGNALS.map((s) => {
-                  const ok = s === 'episode' || catalog.some((c) => sel.devices.includes(c.id) && c.signals.includes(s))
+                  const ok = s === 'episode' || (catalog.some((c) => sel.devices.includes(c.id) && c.signals.includes(s)) && (!sel.signals_present || sel.signals_present.includes(s)))
                   return (
                     <span key={s} className="chip" style={ok ? { background: 'var(--accent-soft)', color: 'var(--accent-ink)' } : { background: '#f8f8fa', color: '#a6a6b0', textDecoration: 'line-through' }}>
                       <Icon name={SIGNAL_ICON[s] ?? 'activity'} size={13} />{signalLabel(s)}

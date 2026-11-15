@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { API_URL, getDataSource, onDataSourceChange, resetMockData, setDataSource } from '../api'
+import { api, API_URL, friendlyError, getDataSource, onDataSourceChange, setDataSource } from '../api'
 import { signOut, initials, type Session } from '../lib/session'
 import { navigate } from '../lib/hooks'
 import { Icon, type IconName } from './Icon'
@@ -140,9 +140,14 @@ function Search({ placeholder, items }: { placeholder: string; items: SearchItem
 
 function DataSourceBadge() {
   const [ds, setDs] = useState(getDataSource())
+  const [store, setStore] = useState<string | null>(null)
   useEffect(() => onDataSourceChange(() => setDs(getDataSource())), [])
+  useEffect(() => {
+    if (ds.source !== 'live') { setStore(null); return }
+    api.health().then((h) => setStore(h.store ?? null)).catch(() => setStore(null))
+  }, [ds.source])
   return (
-    <span className={`pill ${ds.source === 'live' ? 'pill-green' : 'pill-gray'}`} title={ds.source === 'live' ? `Connected to ${API_URL}` : `Using built-in sample data${ds.fellBack ? ` (couldn't reach ${API_URL})` : ''}`}>
+    <span className={`pill ${ds.source === 'live' ? 'pill-green' : 'pill-gray'}`} title={ds.source === 'live' ? `Connected to ${API_URL}${store ? ` · store: ${store}` : ''}` : `Using built-in sample data${ds.fellBack ? ` (couldn't reach ${API_URL})` : ''}`}>
       {ds.source === 'live' ? 'Live API' : ds.fellBack ? 'Offline · sample data' : 'Sample data'}
     </span>
   )
@@ -150,7 +155,17 @@ function DataSourceBadge() {
 
 function DemoCard() {
   const [ds, setDs] = useState(getDataSource())
+  const [resetting, setResetting] = useState(false)
+  const toast = useToast()
   useEffect(() => onDataSourceChange(() => setDs(getDataSource())), [])
+  // Restores the seed state (seeded plans, demo accounts, connections). Press before the pitch / between judges.
+  const reset = async () => {
+    if (!window.confirm('Reset the demo? This removes every plan and connection change made since the demo started and restores the starting data.')) return
+    setResetting(true)
+    try { await api.demoReset(); toast('Demo data restored') }
+    catch (e) { toast(friendlyError(e)) }
+    finally { setResetting(false) }
+  }
   return (
     <div className="sidebar-card">
       <span><Icon name="sparkles" size={15} /> Demo mode</span>
@@ -158,10 +173,8 @@ function DemoCard() {
       <div className="row">
         {ds.source === 'live'
           ? <button className="link-btn" onClick={() => setDataSource('fixtures')}>Use sample data <Icon name="chevron" size={13} /></button>
-          : <>
-              <button className="link-btn" onClick={() => setDataSource('live')}>Try live API <Icon name="chevron" size={13} /></button>
-              <button className="link-btn" style={{ color: '#8d8d98' }} onClick={resetMockData}>Reset</button>
-            </>}
+          : <button className="link-btn" onClick={() => setDataSource('live')}>Try live API <Icon name="chevron" size={13} /></button>}
+        <button className="link-btn" style={{ color: '#8d8d98' }} disabled={resetting} onClick={reset}>{resetting ? 'Resetting…' : 'Reset demo'}</button>
       </div>
     </div>
   )

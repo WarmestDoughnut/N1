@@ -3,7 +3,8 @@ import { api, friendlyError } from '../../api'
 import type { Device, Direction, Patient, Plan, PlanCreate, PlanType, SchedulePeriod, SignalId } from '../../types'
 import { navigate, useAsync } from '../../lib/hooks'
 import { ScheduleTimeline } from '../../components/ScheduleTimeline'
-import { DEVICE_ICON, Icon, SIGNAL_ICON } from '../../components/Icon'
+import { Icon } from '../../components/Icon'
+import { DevicePicker, SignalPicker } from '../../components/SourcePicker'
 import { useToast } from '../../components/Shell'
 import { getSession, initials } from '../../lib/session'
 import { ALL_SIGNALS, formatDate, SIGNAL_INFO, signalLabel } from '../../lib/util'
@@ -65,20 +66,24 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
     }).catch(() => {})
   }, [])
 
-  // ----- device → signal availability -----
-  const available = useMemo(() => {
+  // ----- device → signal availability (gate agreed with backend, to-frontend #5) -----
+  // selectable = (∪ selected devices' signals) ∩ patient.signals_present, plus `episode` (logged in the app).
+  const availableFor = (p: Patient | undefined, devs: string[]) => {
     const s = new Set<SignalId>(['episode'])
-    catalog.filter((d) => devices.includes(d.id)).forEach((d) => d.signals.forEach((x) => s.add(x)))
+    catalog.filter((d) => devs.includes(d.id)).forEach((d) => d.signals.forEach((x) => {
+      if (x === 'episode' || !p?.signals_present || p.signals_present.includes(x)) s.add(x)
+    }))
     return s
-  }, [catalog, devices])
-
-  const reasonFor = (sig: SignalId) => {
-    const providers = catalog.filter((d) => d.signals.includes(sig)).map((d) => d.name)
-    const what = SIGNAL_INFO[sig]?.plain ?? sig
-    return providers.length
-      ? `Needs a device that tracks ${what} (${providers.join(' or ')})`
-      : `No device in the catalog tracks ${what}`
   }
+  const available = useMemo(() => availableFor(patient, devices), [catalog, devices, patient]) // eslint-disable-line react-hooks/exhaustive-deps
+  // A selected device tracks it, but this patient has no data for it.
+  const noData = useMemo(() => {
+    const s = new Set<SignalId>()
+    catalog.filter((d) => devices.includes(d.id)).forEach((d) => d.signals.forEach((x) => { if (!available.has(x)) s.add(x) }))
+    return s
+  }, [catalog, devices, available])
+  const episodes = patient?.n_episodes ?? 0
+  const obsBlocked = !!patient && episodes === 0
 
   // Effective selection = ticked AND provided by a selected device.
   const signals: SignalId[] = useMemo(() => picked.filter((s) => available.has(s)), [picked, available])
@@ -99,7 +104,7 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
   useEffect(() => { if (!titleTouched) setTitle(autoTitle) }, [autoTitle, titleTouched])
 
   const patientPlans = useAsync<Plan[]>(() => (patientId ? api.listPlans(patientId) : Promise.resolve([])), [patientId])
-  const recordedPlan = (patientPlans.data ?? []).find((p) => p.intervention?.schedule?.length && p.id.startsWith('DEMO-')) ?? null
+  const recordedPlan = (patientPlans.data ?? []).find((p) => p.intervention?.schedule?.length && (p.seeded ?? p.id.startsWith('DEMO-'))) ?? null
   useEffect(() => { setRecorded(null) }, [patientId])
   const applyRecorded = (p: Plan) => {
     const { schedule: sch, ...rest } = p.intervention!
@@ -130,11 +135,13 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
   // ----- step handlers -----
   const pickPatient = (p: Patient) => {
     setPatientId(p.id)
+    // No logged episodes → nothing to look "before", so only an A/B test makes sense.
+    if (p.n_episodes === 0) setType('intervention')
     if (!cloneOf) {
       setDevices(p.devices)
-      const avail = new Set<SignalId>(['episode'])
-      catalog.filter((d) => p.devices.includes(d.id)).forEach((d) => d.signals.forEach((x) => avail.add(x)))
-      setSignals((['sleep_min', 'episode'] as SignalId[]).filter((s) => avail.has(s)))
+      const avail = availableFor(p, p.devices)
+      const first = (['sleep_min', ...SENSOR_SIGNALS] as SignalId[]).find((s) => avail.has(s))
+      setSignals([first, p.n_episodes > 0 ? 'episode' : undefined].filter(Boolean) as SignalId[])
     }
   }
 
@@ -176,6 +183,7 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
     if (step === 1 && devices.length === 0) return 'Select at least one device.'
     if (step === 2 && chosenSensors.length === 0) return 'Select at least one sensor signal. If none are available, add a device that provides one.'
     if (step === 3) {
+      if (type === 'observational' && obsBlocked) return 'No episodes logged, so use an A/B test.'
       if (type === 'observational' && !chosenSensors.includes(obs.signal)) return 'Pick a signal to test.'
       if (type === 'intervention') {
         if (!iv.arm_a.trim() || !iv.arm_b.trim()) return 'Name both arms.'
@@ -255,49 +263,17 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
             <h2>Which devices will this test use?</h2>
             <p className="muted">Pre-selected: the devices {patient?.display_name} already owns. Signals depend on the devices you choose.</p>
             {devicesQ.error && <div className="alert alert-error">{devicesQ.error}</div>}
-            <div className="option-grid">
-              {[...catalog].sort((a, b) => Number(!!patient?.devices.includes(b.id)) - Number(!!patient?.devices.includes(a.id)) || Number(a.availability === 'emerging') - Number(b.availability === 'emerging')).map((d) => {
-                const sel = devices.includes(d.id)
-                const owned = patient?.devices.includes(d.id)
-                return (
-                  <button key={d.id} className={`option ${sel ? 'selected' : ''}`} onClick={() => toggleDevice(d.id)} aria-pressed={sel}>
-                    {sel && <span className="check"><Icon name="check" size={14} /></span>}
-                    <span className="head"><span className="summary-icon tone-purple" style={{ width: 36, height: 36, margin: 0 }}><Icon name={DEVICE_ICON[d.id] ?? 'watch'} size={17} /></span><span className="title">{d.name}</span></span>
-                    <span className="sub">Tracks: {d.signals.filter((x) => x !== 'episode').map(signalLabel).join(', ')}</span>
-                    <span className="row" style={{ gap: 6, marginTop: 4 }}>
-                      {owned ? <span className="pill pill-green no-dot">Patient owns this</span> : <span className="pill pill-gray no-dot">Patient would need this</span>}
-                      {d.availability === 'emerging' && <span className="pill pill-yellow no-dot">Emerging</span>}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
+            <DevicePicker catalog={catalog} owned={patient?.devices ?? []} selected={devices} onToggle={toggleDevice}
+              patientName={patient?.display_name.replace(/,.*$/, '')} />
           </>
         )}
 
         {step === 2 && (
           <>
             <h2>Which signals may this test use?</h2>
-            <p className="muted">The patient's approval covers <strong>only</strong> these signals. Signals that none of the selected devices provide are grayed out.</p>
-            <div className="option-grid">
-              {ALL_SIGNALS.map((s) => {
-                const ok = available.has(s)
-                const sel = signals.includes(s)
-                return (
-                  <button key={s} className={`option ${sel ? 'selected' : ''} ${ok ? '' : 'unavailable'}`} disabled={!ok}
-                    onClick={() => toggleSignal(s)} aria-pressed={sel}>
-                    {sel && <span className="check"><Icon name="check" size={14} /></span>}
-                    <span className="head"><span className={`summary-icon ${ok ? 'tone-purple' : 'tone-gray'}`} style={{ width: 36, height: 36, margin: 0 }}><Icon name={SIGNAL_ICON[s] ?? 'activity'} size={17} /></span><span className="title">{SIGNAL_INFO[s].label}</span></span>
-                    {s === 'episode'
-                      ? <span className="sub">Logged by the patient in the app. Always available.</span>
-                      : ok
-                        ? <span className="sub">From {catalog.filter((d) => devices.includes(d.id) && d.signals.includes(s)).map((d) => d.name).join(', ')}</span>
-                        : <span className="reason"><Icon name="info" size={14} />{reasonFor(s)}</span>}
-                  </button>
-                )
-              })}
-            </div>
-            <p className="small muted mt">Want a grayed-out signal? Go back and add a device that tracks it.</p>
+            <p className="muted">The patient's approval covers <strong>only</strong> the signals you select.</p>
+            <SignalPicker signals={ALL_SIGNALS} available={available} noData={noData} selected={signals} onToggle={toggleSignal}
+              sourcesFor={(s) => catalog.filter((d) => devices.includes(d.id) && d.signals.includes(s)).map((d) => d.name)} />
           </>
         )}
 
@@ -305,9 +281,13 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
           <>
             <h2>Test design</h2>
             <div className="seg mb" role="radiogroup">
-              <button className={type === 'observational' ? 'active' : ''} onClick={() => setType('observational')}>Observational</button>
+              <button className={type === 'observational' ? 'active' : ''} disabled={obsBlocked} title={obsBlocked ? 'No episodes logged, so use an A/B test' : undefined} onClick={() => setType('observational')}>Observational</button>
               <button className={type === 'intervention' ? 'active' : ''} onClick={() => setType('intervention')}>Intervention (A/B trial)</button>
             </div>
+            {obsBlocked && <div className="alert alert-info mb"><Icon name="info" /><span>{patient?.display_name} has no episodes logged, so an observational test isn't possible. Use an A/B test.</span></div>}
+            {!obsBlocked && type === 'observational' && episodes < 5 && (
+              <div className="alert alert-warn mb"><Icon name="info" /><span>Only {episodes} episode{episodes === 1 ? '' : 's'} logged. With fewer than 5, expect "not enough data".</span></div>
+            )}
             <p className="muted">
               {type === 'observational'
                 ? 'Does a signal change in the days before logged episodes? Compares those days against normal days and checks 1 to N day lags against random shuffles.'

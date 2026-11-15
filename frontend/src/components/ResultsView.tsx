@@ -104,8 +104,8 @@ function ClinicianResults({ results, plan, aside }: { results: Results; plan?: P
                   delta={results.effect_pct} good={sign * results.effect_pct > 0 && results.verdict === 'likely_real'}
                   sub={isObs ? `vs ${formatValue(signal, obs?.baseline_mean)} on normal days` : `vs ${formatValue(signal, iv?.mean_a)} on A (${armA})`} />
                 {isObs
-                  ? <SignalChart series={results.series} signal={signal} baseline={obs?.baseline_mean} color={SIGNAL_COLOR[signal]} stoppedEarly={!results.complete} />
-                  : <ArmSeriesChart series={results.series} signal={signal} armA={armA} armB={armB} stoppedEarly={!results.complete} />}
+                  ? <SignalChart series={results.series} signal={signal} baseline={obs?.baseline_mean} color={SIGNAL_COLOR[signal]} stoppedEarly={!results.complete} collectedUntil={results.collected_until} windowEnd={plan?.window.end} />
+                  : <ArmSeriesChart series={results.series} signal={signal} armA={armA} armB={armB} stoppedEarly={!results.complete} collectedUntil={results.collected_until} windowEnd={plan?.window.end} />}
               </>
             )}
             {tab === 'lag' && obs && (
@@ -293,7 +293,7 @@ function PatientResults({ results, plan }: { results: Results; plan?: Plan | nul
             </div>
           </div>
           {results.type === 'observational'
-            ? <SignalChart series={results.series} signal={signal} height={260} showWindows={false} color={SIGNAL_COLOR[signal]} stoppedEarly={!results.complete} />
+            ? <SignalChart series={results.series} signal={signal} height={260} showWindows={false} color={SIGNAL_COLOR[signal]} stoppedEarly={!results.complete} collectedUntil={results.collected_until} windowEnd={plan?.window.end} />
             : iv && <ABMeansChart meanA={iv.mean_a} meanB={iv.mean_b} signal={signal} armA={cfg?.arm_a ?? 'A'} armB={cfg?.arm_b ?? 'B'} height={140} />}
         </article>
         <aside className="card">

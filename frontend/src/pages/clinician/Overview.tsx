@@ -148,8 +148,8 @@ function LatestResult({ plan, r }: { plan: Plan; r: NonNullable<ClinicianData['r
           </div>
         </div>
         {isObs
-          ? <SignalChart series={r.series} signal={signal} baseline={r.observational?.baseline_mean} height={250} color={SIGNAL_COLOR[signal]} stoppedEarly={!r.complete} />
-          : <ArmSeriesChart series={r.series} signal={signal} height={250} armA={plan.intervention?.arm_a} armB={plan.intervention?.arm_b} stoppedEarly={!r.complete} />}
+          ? <SignalChart series={r.series} signal={signal} baseline={r.observational?.baseline_mean} height={250} color={SIGNAL_COLOR[signal]} stoppedEarly={!r.complete} collectedUntil={r.collected_until} windowEnd={plan.window.end} />
+          : <ArmSeriesChart series={r.series} signal={signal} height={250} armA={plan.intervention?.arm_a} armB={plan.intervention?.arm_b} stoppedEarly={!r.complete} collectedUntil={r.collected_until} windowEnd={plan.window.end} />}
       </article>
       <aside className="insights-card">
         <div className="card-title">

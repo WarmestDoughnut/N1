@@ -15,7 +15,7 @@ import {
   YAxis,
 } from 'recharts'
 import type { LagScanEntry, PeriodMean, ResultSeriesPoint } from '../types'
-import { formatDateShort, formatValue, pct, signalLabel } from '../lib/util'
+import { addDays, formatDateShort, formatValue, pct, signalLabel } from '../lib/util'
 
 export const C = {
   accent: '#6258df',
@@ -77,6 +77,22 @@ const bridgeLine = (b: BridgeSpec) => (
   <Line key={b.key} dataKey={b.key} type="linear" stroke="#a3a4b3" strokeWidth={1.6} strokeDasharray="2 3"
     dot={false} activeDot={false} connectNulls isAnimationActive={false} legendType="none" tooltipType="none" />
 )
+/** Stopped-early plans (v1.2): the backend's `series` ends at `collected_until`. Pad it with empty
+ *  rows through the plan's window end so the x-axis keeps the planned length, and return the index
+ *  of the last collected day (or -1 when nothing needs shading). */
+function padStopped(series: ResultSeriesPoint[], collectedUntil?: string | null, windowEnd?: string | null) {
+  if (!collectedUntil) return { series, cut: -1 }
+  const out = series.filter((p) => p.date <= collectedUntil)
+  const end = windowEnd && windowEnd > collectedUntil ? windowEnd : series[series.length - 1]?.date
+  let last = out[out.length - 1]?.date ?? collectedUntil
+  for (let i = 0; end && last < end && i < 400; i++) {
+    last = addDays(last, 1)
+    out.push({ date: last, value: null, episode: 0, arm: null, in_window: false })
+  }
+  const cut = out.findIndex((p) => p.date > collectedUntil) - 1
+  return { series: out, cut: cut >= 0 ? cut : -1 }
+}
+
 /** Index of the last reading; when a plan was stopped early, everything after it was never collected. */
 const lastReading = (values: (number | null)[]) => {
   for (let i = values.length - 1; i >= 0; i--) if (values[i] != null) return i
@@ -90,13 +106,18 @@ const notCollectedArea = (series: ResultSeriesPoint[], last: number) =>
   ) : null
 
 // ---------- observational: signal over time ----------
-export function SignalChart({ series, signal, baseline, height = 280, showWindows = true, color = C.accent, stoppedEarly = false }: {
+export function SignalChart({ series: raw, signal, baseline, height = 280, showWindows = true, color = C.accent, stoppedEarly = false, collectedUntil, windowEnd }: {
   series: ResultSeriesPoint[]; signal: string; baseline?: number | null; height?: number; showWindows?: boolean; color?: string
   /** results.complete === false: shade the uncollected tail instead of showing it as a gap */
   stoppedEarly?: boolean
+  /** v1.2 results.collected_until + plan.window.end: series ends at collected_until; pad + shade to window end */
+  collectedUntil?: string | null
+  windowEnd?: string | null
 }) {
+  const padded = padStopped(raw, stoppedEarly ? collectedUntil : null, windowEnd)
+  const series = padded.series
   const values = series.map((p) => p.value)
-  const last = lastReading(values)
+  const last = padded.cut >= 0 ? padded.cut : lastReading(values)
   const stopAt = stoppedEarly ? last : series.length - 1
   const bridges = bridgeSpecs(values, () => 's', stopAt)
   const data = withBridges(series as unknown as Record<string, unknown>[], values, bridges)
@@ -204,16 +225,21 @@ export function NullHistogram({ nulls, observed, sign, height = 200 }: { nulls: 
 }
 
 // ---------- intervention: outcome colored by arm ----------
-export function ArmSeriesChart({ series, signal, height = 280, armA = 'A', armB = 'B', stoppedEarly = false }: {
+export function ArmSeriesChart({ series: raw, signal, height = 280, armA = 'A', armB = 'B', stoppedEarly = false, collectedUntil, windowEnd }: {
   series: ResultSeriesPoint[]; signal: string; height?: number; armA?: string; armB?: string
   /** results.complete === false: shade the uncollected tail instead of showing it as a gap */
   stoppedEarly?: boolean
+  /** v1.2 results.collected_until + plan.window.end: series ends at collected_until; pad + shade to window end */
+  collectedUntil?: string | null
+  windowEnd?: string | null
 }) {
+  const padded = padStopped(raw, stoppedEarly ? collectedUntil : null, windowEnd)
+  const series = padded.series
   const values = series.map((p) => p.value)
   // O = days outside the trial schedule (before the first / after the last period): real
   // readings, not analyzed. Drawn in gray rather than dropped.
   const segOf = (i: number) => series[i].arm ?? 'O'
-  const last = lastReading(values)
+  const last = padded.cut >= 0 ? padded.cut : lastReading(values)
   const stopAt = stoppedEarly ? last : series.length - 1
   // Segment changes (A -> washout -> B ...) get a neutral dashed connector instead of
   // extending either arm's color onto a day that doesn't belong to it.
