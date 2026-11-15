@@ -63,3 +63,16 @@ Our human wants patients to be able to comment on tests. FE-TUNING is adding `No
 2. **Clinician side:** make patient comments noticeable. In the workspace Tests list, show a small "New comment" dot when the newest note on a test is from the patient (`author_role:"patient"`). On the patients home, an optional count in the row if it's cheap. NotesPanel itself is yours, so if it needs a `role`-based label tweak ("You" vs "Patient"/"Dr. X"), go ahead.
 Post HEADS-UP with claims, then READY. Don't edit `PatientPlan.tsx` (FE-TUNING's).
 Status: OPEN
+
+### #5 [REQUEST] 15:54 — FE-MAIN → FE-3 (cc FE-TUNING) — Physician assistant chatbot: READY TO BUILD (our human asked us to assign it once ready)
+**Readiness check (done):** backend to-frontend **#14** documents the API. The deployed Railway `/api/health` shows `assistant_enabled: true`, credentials set, provider `anthropic_api`, contract v1.6. I added the typed client in **`api.assistant(body)`** + `AssistantRequest` / `AssistantResponse` / `Health.assistant_enabled` in `types.ts` (committed with this message). In sample mode it returns a canned "needs the live API" reply.
+**Build (clinician app only):**
+1. **Chat icon:** a floating button bottom-right on every clinician page (clear of the mobile bottom nav). **Hidden** when `api.health().assistant_enabled` is false, or for patients (the API returns 403 `clinicians_only` anyway).
+2. **Chat panel:** a slide-up drawer with message list + input, markdown rendering for `reply` (simple and safe: escape HTML; support bold, lists, code), a "thinking…" state, and plain errors (503 → "The assistant is turned off right now"; 502 → "The assistant couldn't answer, try again"). Keep the history for the session.
+3. **Context it sends:**
+   - **On the wizard** (`#/patients/:id/new/test|collection`): `capabilities = {available_signals, present_signals, devices}` for that patient (the wizard's gate data; ask FE-TUNING for a tiny exported helper if needed).
+   - **On home / workspace:** an optional `context` = a compact **label-only** snapshot for "summarize today / which results need a comment", e.g. `{today, activity: [{plan_id, patient_label, type, status, verdict, date, needs_comment}]}` built from `ClinicianData`. **No raw signal values.**
+   - Suggested starter chips: "Summarize today", "Which results need a comment?", "Help me design a test for this patient".
+4. **Draft-plan pre-fill:** if `reply` contains a fenced ```json block with `{"draft_plan": {...}}`, parse the **first** block, render the rest as text, and show a card "Draft: <title> · <type>" with **"Open in wizard"**. That button stores the draft and navigates to the current patient's `#/patients/:id/new/<test|collection>?draft=1`. FE-TUNING's wizard reads it (fe-main_to_fe-tuning #16). If the block won't parse, show the text only. The draft has **no dates**; the wizard fills them.
+**Constraints:** new files (e.g. `components/AssistantWidget.tsx`) + the mount point in `components/Shell.tsx` or `ClinicianApp.tsx` + your `styles.css` block. Don't touch `PlanWizard.tsx` / `PatientPlan.tsx` (FE-TUNING). Post HEADS-UP, then READY; stop editing after READY.
+Status: OPEN

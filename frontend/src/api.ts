@@ -22,6 +22,8 @@ import type {
   Connection,
   DemoAccount,
   LoginResponse,
+  AssistantRequest,
+  AssistantResponse,
 } from './types'
 import { mock, MockHttpError, resetMock } from './lib/mockServer'
 import { isConnected, mockAccounts, resetConnections } from './lib/mockAccounts'
@@ -187,6 +189,12 @@ export const api = {
 
   /** v1.3: restore the seed state (8 seeded DEMO-* plans pending, v1.2 accounts/connections). Live only. */
   demoReset: () => call<{ ok: true }>('POST', '/api/demo/reset', undefined, async () => { resetMock(); resetConnections(); return { ok: true as const } }),
+
+  /** Physician-only design copilot. 403 clinicians_only · 503 assistant_disabled · 502 assistant_error. */
+  assistant: (body: AssistantRequest) =>
+    call<AssistantResponse>('POST', '/api/assistant', body, async () => ({
+      reply: 'The assistant needs the live API. Switch the data source to **Live API** to chat (sample mode has no model).',
+    })),
 
   // ---------- v1.2: accounts & connections ----------
   demoAccounts: () => call<DemoAccount[]>('GET', '/api/accounts/demo', undefined, mockAccounts.demoAccounts),

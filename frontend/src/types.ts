@@ -226,6 +226,23 @@ export interface Health {
   contract_version: string
   /** v1.3: which persistence the backend is using */
   store?: 'json' | 'postgres'
+  /** assistant kill switch: hide the chatbot when false */
+  assistant_enabled?: boolean
+}
+
+// ---------- Physician assistant (design copilot), backend to-frontend #14 ----------
+export interface AssistantMessage { role: 'user' | 'assistant'; content: string }
+export interface AssistantRequest {
+  /** chat turns; the first must be from the user */
+  messages: AssistantMessage[]
+  /** current wizard context, when the chat is opened from the wizard */
+  capabilities?: { available_signals?: string[]; present_signals?: string[]; devices?: string[] }
+  /** optional compact, label-only snapshot of the clinician's own dashboard (for "summarize today") */
+  context?: Record<string, unknown>
+}
+export interface AssistantResponse {
+  /** markdown; may end with one fenced ```json block containing {"draft_plan": {...}} */
+  reply: string
 }
 
 export type Role = 'clinician' | 'patient'
