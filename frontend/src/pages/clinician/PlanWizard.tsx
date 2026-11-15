@@ -42,6 +42,10 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
   const [sending, setSending] = useState(false)
   const [sendErr, setSendErr] = useState<string | null>(null)
   const [cloneOf, setCloneOf] = useState<Plan | null>(null)
+  // Historical demo data was recorded on a fixed A/B schedule (backend demo_plans.json). A freshly
+  // randomized schedule can't line up with when the patient actually took the intervention, so we
+  // offer the recorded one. `recorded` = the schedule + window we're locked to, if chosen.
+  const [recorded, setRecorded] = useState<Plan | null>(null)
 
   const patient = patients.find((p) => p.id === patientId)
 
@@ -94,10 +98,25 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
     : `Does ${iv.arm_b} ${iv.better === 'higher' ? 'improve' : 'lower'} ${SIGNAL_INFO[iv.outcome_signal].plain}?`
   useEffect(() => { if (!titleTouched) setTitle(autoTitle) }, [autoTitle, titleTouched])
 
+  const patientPlans = useAsync<Plan[]>(() => (patientId ? api.listPlans(patientId) : Promise.resolve([])), [patientId])
+  const recordedPlan = (patientPlans.data ?? []).find((p) => p.intervention?.schedule?.length && p.id.startsWith('DEMO-')) ?? null
+  useEffect(() => { setRecorded(null) }, [patientId])
+  const applyRecorded = (p: Plan) => {
+    const { schedule: sch, ...rest } = p.intervention!
+    setIv(rest); setSchedule(sch); setRecorded(p); setScheduleErr(null)
+    if (!titleTouched) { setTitle(p.title); setTitleTouched(true) }
+  }
+
+  // Editing the design after choosing the recorded schedule means a new (randomized) schedule.
+  useEffect(() => {
+    const r = recorded?.intervention
+    if (r && (r.n_periods !== iv.n_periods || r.period_days !== iv.period_days || r.washout_days !== iv.washout_days || r.seed !== iv.seed)) setRecorded(null)
+  }, [recorded, iv.n_periods, iv.period_days, iv.washout_days, iv.seed])
+
   // Live schedule preview
   const start = patient?.date_range[0] ?? '2026-01-01'
   useEffect(() => {
-    if (type !== 'intervention') return
+    if (type !== 'intervention' || recorded) return
     const valid = iv.n_periods >= 2 && iv.period_days >= 1 && iv.washout_days >= 0
     if (!valid) { setSchedule([]); return }
     const t = setTimeout(() => {
@@ -106,7 +125,7 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
         .catch((e) => setScheduleErr(friendlyError(e)))
     }, 200)
     return () => clearTimeout(t)
-  }, [type, iv.n_periods, iv.period_days, iv.washout_days, iv.seed, start])
+  }, [type, iv.n_periods, iv.period_days, iv.washout_days, iv.seed, start, recorded])
 
   // ----- step handlers -----
   const pickPatient = (p: Patient) => {
@@ -133,7 +152,7 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
 
   const window_ = useMemo(() => {
     if (!patient) return { start: '', end: '' }
-    if (type === 'intervention' && schedule.length) return { start: patient.date_range[0], end: schedule[schedule.length - 1].washout_end }
+    if (type === 'intervention' && schedule.length) return { start: schedule[0].start, end: schedule[schedule.length - 1].washout_end }
     return { start: patient.date_range[0], end: patient.date_range[1] }
   }, [patient, type, schedule])
 
@@ -368,8 +387,22 @@ export function PlanWizard({ patients }: { patients: Patient[] }) {
                     </div>
                   </div>
                 </div>
+                {recordedPlan && (
+                  <div className={`insight ${recorded ? '' : 'warn'} mt`} style={{ alignItems: 'center' }}>
+                    <span><Icon name="calendar" size={17} /></span>
+                    <p style={{ flex: 1 }}>
+                      <strong>{recorded ? 'Using the schedule this patient followed' : 'This patient already followed a recorded A/B schedule'}</strong>
+                      {recorded
+                        ? `${recorded.intervention!.arm_a} vs ${recorded.intervention!.arm_b}, ${recorded.intervention!.n_periods} periods from ${formatDate(recorded.window.start)}. Demo data is historical, so the analysis must use the order the patient actually followed.`
+                        : 'Demo data is historical: a newly randomized order would not match the days the patient actually took each option. Use the recorded schedule for an honest result.'}
+                    </p>
+                    {recorded
+                      ? <button className="button ghost sm" onClick={() => setRecorded(null)}>Randomize instead</button>
+                      : <button className="button primary sm" onClick={() => applyRecorded(recordedPlan)}>Use recorded schedule</button>}
+                  </div>
+                )}
                 <div className="mt">
-                  <div className="chart-title">Schedule preview</div>
+                  <div className="chart-title">{recorded ? 'Recorded schedule' : 'Schedule preview'}</div>
                   {scheduleErr && <div className="alert alert-error">{scheduleErr}</div>}
                   <ScheduleTimeline schedule={schedule} armA={iv.arm_a} armB={iv.arm_b} />
                   {scheduleOverruns && <div className="alert alert-warn mt">This schedule ends {formatDate(window_.end)}, after the patient's data ends ({formatDate(patient!.date_range[1])}).</div>}

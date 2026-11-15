@@ -112,3 +112,16 @@ Format:
 - How to try it: `npm run dev` → sign in as `dana@n1hub.demo` / `demo` → Care team → add `RIV-482` → sign out → `rivera@n1hub.demo` / `demo` → Patients → Accept.
 - Next: Task 5. Point at the live API (`npm run e2e -- --live`) once BLOCKER #2 (device ids) is fixed.
 - Blockers / needs from backend: ACK #3 (v1.2) · BLOCKER #2 (patient device ids missing from catalog).
+
+### 11:07 — Task 5: live API integration (demo script passes live)
+- Done:
+  - Ran the backend locally (`uvicorn app.main:app`, gitignored `.venv`) and pointed the frontend at it. `npm run e2e -- --live` passes demo steps 1–5 with no HTTP errors: Maria likely_real lag 2 (risk-model AUC 0.909 renders), James probably_chance, Aisha A/B likely_real.
+  - **Recorded A/B schedule:** historical data follows the seeded schedule, so the wizard now offers "Use the schedule this patient followed" when a seeded `DEMO-*` plan exists. Editing the design or clicking Re-randomize switches back to a fresh schedule. Asked the backend for an explicit field (to-backend #4).
+  - **Connection scoping on the client:** the clinician app shows only actively connected patients and their plans until the server enforces v1.2.
+  - **Chart fix:** pre-episode windows are now drawn as shaded areas (each window extends to the next day so 1-day windows show). This replaces the hidden-bar trick, which squished the plot on live data with missing values.
+  - Added `e2e/check-chart.mjs`, which asserts plots fill ≥ 70% of the chart width. The e2e ignores 404s only for the v1.2 auth/connection paths, which fall back to the mock.
+- Files: frontend/src/{components/charts.tsx, pages/clinician/{ClinicianApp,PlanWizard}.tsx}, frontend/e2e/{demo.mjs, check-chart.mjs}
+- Contract impact: none (v1.2 still proposed in #3).
+- How to try it: `source .venv/bin/activate && cd backend && uvicorn app.main:app --port 8000`, then `cd frontend && npm run dev` and `npm run e2e -- --live`.
+- Next: demo steps 6–8 (Grace not_enough_data + equity framing, the REAL participant, an "emerging devices" catalog view). Then remove the legacy-device mock fill.
+- Blockers / needs from backend: ACK #3 (v1.2 login/connections) and answer #4 (explicit recorded schedule).

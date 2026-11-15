@@ -35,8 +35,13 @@ function useClinicianData(patients: Patient[]): ClinicianData {
       return null
     }))).then((pairs) => setResults(Object.fromEntries(pairs.filter(Boolean) as [string, Results][])))
   }, [plansQ.data])
+  // Clinicians only see actively connected patients (and their plans). The backend enforces this
+  // with a token once v1.2 ships (to-backend #3); filtering here too keeps the live demo correct now.
+  const connected = new Set(connections.filter((c) => c.status === 'active').map((c) => c.patient_id))
+  const scoped = connQ.data ? patients.filter((p) => connected.has(p.id)) : []
+  const scopedPlans = connQ.data ? (plansQ.data ?? []).filter((p) => connected.has(p.patient_id)) : []
   return {
-    patients, plans: plansQ.data ?? [], results, connections,
+    patients: scoped, plans: scopedPlans, results, connections,
     requests: connections.filter((c) => c.status === 'pending' && c.requested_by === 'patient'),
     loading: plansQ.loading && !plansQ.data, error: plansQ.error ?? connQ.error,
   }
@@ -59,15 +64,15 @@ export function ClinicianApp({ session, route, patients }: { session: Session; r
   ]
 
   const searchItems: SearchItem[] = useMemo(() => [
-    ...patients.map((p) => ({ label: p.display_name, sub: p.id, href: `#/patients/${p.id}`, icon: 'user' as const })),
-    ...data.plans.map((p) => ({ label: p.title, sub: `${p.id} · ${patients.find((x) => x.id === p.patient_id)?.display_name ?? p.patient_id}`, href: `#/plans/${p.id}`, icon: 'clipboard' as const })),
-  ], [patients, data.plans])
+    ...data.patients.map((p) => ({ label: p.display_name, sub: p.id, href: `#/patients/${p.id}`, icon: 'user' as const })),
+    ...data.plans.map((p) => ({ label: p.title, sub: `${p.id} · ${data.patients.find((x) => x.id === p.patient_id)?.display_name ?? p.patient_id}`, href: `#/plans/${p.id}`, icon: 'clipboard' as const })),
+  ], [data.patients, data.plans])
 
   let page: JSX.Element
   switch (route[0]) {
     case 'patients': page = <PatientsPage data={data} selectedId={route[1]} />; break
     case 'plans': page = route[1] ? <PlanDetail planId={route[1]} data={data} /> : <PlansPage data={data} />; break
-    case 'new': page = <PlanWizard patients={patients} />; break
+    case 'new': page = <PlanWizard patients={data.patients} />; break
     case 'validation': page = <ResultsGallery />; break
     default: page = <Overview session={session} data={data} />
   }

@@ -357,6 +357,9 @@ function computeIntervention(plan: Plan, incomplete: boolean): Results {
 
 function mockModel(plan: Plan, verdict: Verdict): Results['model'] {
   if (plan.type !== 'observational') return null
+  // Backend rule (to-frontend 11:55): only fit when the screening test found a candidate signal.
+  if (verdict === 'not_enough_data') return { kind: 'logistic_l2', auc: null, auc_null_p: null, coefficients: [], risk_tomorrow: null, trained: false, reason: 'too_few_episodes' }
+  if (verdict === 'probably_chance') return { kind: 'logistic_l2', auc: null, auc_null_p: null, coefficients: [], risk_tomorrow: null, trained: false, reason: 'no_primary_signal' }
   const strong = verdict === 'likely_real'
   return {
     kind: 'logistic_l2', auc: strong ? 0.74 : 0.52, auc_null_p: strong ? 0.03 : 0.46,

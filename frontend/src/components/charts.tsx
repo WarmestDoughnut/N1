@@ -53,14 +53,16 @@ const yFmt = (signal: string) => (v: number) => (signal === 'sleep_min' ? `${Mat
 export function SignalChart({ series, signal, baseline, height = 280, showWindows = true, color = C.accent }: {
   series: ResultSeriesPoint[]; signal: string; baseline?: number | null; height?: number; showWindows?: boolean; color?: string
 }) {
-  // Pre-episode windows are drawn as full-height background bars (works for 1-day windows too).
-  const data = series.map((p) => ({ ...p, win: showWindows && p.in_window ? 1 : null }))
+  // Pre-episode windows: shaded areas from the first window day to the day after the last one,
+  // so even 1-day windows have width.
+  const data = series
+  const windows = showWindows ? runs(series, (p) => (p.in_window ? 'w' : null)) : []
   const episodes = series.filter((p) => p.episode)
   const gid = `g-${signal}-${color.slice(1)}`
   return (
     <div>
       <ResponsiveContainer width="100%" height={height}>
-        <ComposedChart data={data} margin={{ top: 10, right: 8, bottom: 0, left: -6 }} barCategoryGap={0}>
+        <ComposedChart data={data} margin={{ top: 10, right: 8, bottom: 0, left: -6 }}>
           <defs>
             <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor={color} stopOpacity={0.2} />
@@ -70,15 +72,17 @@ export function SignalChart({ series, signal, baseline, height = 280, showWindow
           <CartesianGrid stroke={C.grid} strokeDasharray="3 5" vertical={false} />
           <XAxis dataKey="date" tickFormatter={formatDateShort} interval={tickEvery(data.length)} {...axisProps} />
           <YAxis domain={['auto', 'auto']} width={52} tickFormatter={yFmt(signal)} {...axisProps} />
-          {showWindows && <YAxis yAxisId="win" hide domain={[0, 1]} />}
-          {showWindows && <Bar yAxisId="win" dataKey="win" fill={C.window} barSize={1000} maxBarSize={14} isAnimationActive={false} />}
+          {windows.map((w) => (
+            <ReferenceArea key={w.from} x1={series[w.from].date} x2={series[Math.min(series.length - 1, w.to + 1)].date}
+              fill={C.window} fillOpacity={0.9} ifOverflow="extendDomain" />
+          ))}
           {episodes.map((e) => (
             <ReferenceLine key={e.date} x={e.date} stroke={C.episode} strokeWidth={1.6} strokeDasharray="3 3" />
           ))}
           {baseline != null && <ReferenceLine y={baseline} stroke="#b8b9c5" strokeWidth={2} strokeDasharray="5 6" />}
           <Tooltip
             labelFormatter={(d) => formatDateShort(String(d))}
-            formatter={(v: number, k) => (k === 'win' ? ['yes', 'Before an episode'] : [formatValue(signal, v), signalLabel(signal)])}
+            formatter={(v: number) => [formatValue(signal, v), signalLabel(signal)]}
           />
           <Area type="monotone" dataKey="value" stroke="none" fill={`url(#${gid})`} connectNulls isAnimationActive={false} tooltipType="none" />
           <Line type="monotone" dataKey="value" stroke={color} strokeWidth={2.4} dot={false} connectNulls={false} isAnimationActive={false} />

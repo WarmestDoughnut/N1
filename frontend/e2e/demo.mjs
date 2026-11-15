@@ -16,7 +16,15 @@ const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new'
 const page = await browser.newPage()
 const errors = []
 page.on('pageerror', (e) => errors.push('pageerror: ' + e.message))
-page.on('console', (m) => { if (m.type() === 'error' && !m.text().includes('ERR_CONNECTION_REFUSED')) errors.push('console: ' + m.text()) })
+// "Failed to load resource" console lines carry no URL, so track HTTP failures via responses instead.
+const OPTIONAL = /\/api\/(auth|accounts|connections)\b/ // v1.2, falls back to the mock until the backend ships it
+page.on('response', (r) => {
+  if (r.status() >= 400 && !OPTIONAL.test(r.url()) && !(r.status() === 404 && /\/results$/.test(r.url()))) errors.push(`http ${r.status()}: ${r.url()}`)
+})
+page.on('console', (m) => {
+  const t = m.text()
+  if (m.type() === 'error' && !t.includes('ERR_CONNECTION_REFUSED') && !t.startsWith('Failed to load resource')) errors.push('console: ' + t)
+})
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const shot = async (n) => { if (SHOTS) await page.screenshot({ path: `${SHOTS}/${n}.png`, fullPage: true }) }
 async function click(text, sel = 'button, a') {
@@ -62,7 +70,12 @@ async function createPlan(patient, { intervention = false, grayOutDemo = false }
     console.log('✓ add Fitbit → Sleep unlocks')
   } else await click('Next')
   await click('Next')
-  if (intervention) { await click('Intervention (A/B trial)'); await sleep(700) }
+  if (intervention) {
+    await click('Intervention (A/B trial)'); await sleep(900)
+    // Live demo data follows a recorded schedule; use it when offered (sample mode has none).
+    const rec = await page.evaluate(() => !![...document.querySelectorAll('button')].find((b) => b.textContent.includes('Use recorded schedule')))
+    if (rec) { await click('Use recorded schedule'); await sleep(300); console.log('✓ used the recorded A/B schedule') }
+  }
   await click('Next'); await click('Send to patient'); await sleep(700)
   return planIdFromUrl()
 }

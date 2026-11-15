@@ -242,7 +242,21 @@ function ChartHead({ k, v, sub, delta, good }: { k: string; v: string; sub?: str
 
 function ModelPanel({ results }: { results: Results }) {
   const m = results.model!
-  if (!m.trained) return <p className="muted">The model wasn't trained: {m.reason ?? 'not enough data'}.</p>
+  if (!m.trained) {
+    const why: Record<string, [string, string]> = {
+      no_primary_signal: ['No candidate signal from the screening test',
+        "No risk model was fit. The screening test found no signal beyond chance, and fitting a multi-signal model anyway would be fishing for patterns that aren't there."],
+      too_few_episodes: ['Too few episodes to train a model',
+        'A personal risk model needs at least 8 episodes. Extend the window or run the plan again later.'],
+    }
+    const [title, body] = why[m.reason ?? ''] ?? ['No risk model', `The model wasn't trained: ${m.reason ?? 'not enough data'}.`]
+    return (
+      <div className="insight" style={{ marginTop: 4 }}>
+        <span><Icon name="info" size={17} /></span>
+        <p><strong>{title}</strong>{body}</p>
+      </div>
+    )
+  }
   return (
     <>
       <ChartHead k="Chance of an episode tomorrow" v={m.risk_tomorrow != null ? `${Math.round(m.risk_tomorrow * 100)}%` : '—'}

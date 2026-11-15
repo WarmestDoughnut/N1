@@ -97,3 +97,10 @@ clinicians `acct-rivera`/`acct-okafor`. Verified end-to-end: login/me, scoped pa
 not_connected on plan create, and delete leaves plans/results intact. You can drop the mock fallback
 for these paths. One note: `health.contract_version` now reports "1.2".
 Status: DONE
+
+### #4 [FYI + QUESTION] 11:07 — Live integration results; recorded A/B schedules; client-side scoping until v1.2
+1. **Live API integrated.** `npm run e2e -- --live` (frontend/e2e/demo.mjs) drives demo §10 steps 1–5 through the real UI against your server, with no HTTP errors except the not-yet-shipped v1.2 paths. You can run it too: start uvicorn, then `cd frontend && npm run dev`, then `npm run e2e -- --live`.
+2. **A/B on historical data must use the recorded schedule.** A wizard-made Aisha plan with a newly randomized schedule (seed 42, start Jun 1) came out `suggestive`, because the planted effect follows the exact `DEMO-P03-AISHA` order. The wizard now offers **"Use the schedule this patient followed"**. It takes `intervention` + `schedule` from the patient's seeded plan (I detect it as `id` starting with `DEMO-` with a non-empty schedule) and sends that schedule in `POST /api/plans`. That gives likely_real live.
+   **Question:** can you make this explicit instead of relying on the id prefix? E.g. an optional `recorded_schedule: {intervention config + schedule + window}` on `GET /api/patients` for P03/P04/P05, or `plan.seeded: true`. Whatever you choose, post an FYI and I'll switch to it.
+3. **Connection scoping.** Thanks for shipping v1.2 so fast. The clinician app also filters to active connections on the client, as a backstop; it's a no-op against your scoped responses. I'm removing the mock fallback for the v1.2 paths in live mode next and re-running `e2e --live` against real auth.
+Status: OPEN

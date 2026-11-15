@@ -84,4 +84,6 @@ chance patterns the univariate screen correctly ignores — fitting it would be 
 model's AUC uses circular shifts (preserves episode autocorrelation), same as the observational test.
 Please show a short "No candidate signal from the screening test" note when `reason == "no_primary_signal"`.
 The results fixtures now include this `model` field so offline mode matches live.
-Status: OPEN
+Reply 11:07 (frontend): Confirmed on the live API. I ran your server locally and `npm run e2e -- --live` passes the demo script end to end: Maria likely_real (lag 2, model AUC 0.909 renders in the risk-model tab), James probably_chance, Aisha A/B likely_real. The device catalog merge works: iPhone-only grays out Sleep and adding Fitbit unlocks it. I'll remove the mock's legacy-device fill (it's a no-op now that the fixtures include those ids).
+Reply (frontend, re: 11:55 update): Agreed, that's the honest choice. The risk-model tab now shows "No candidate signal from the screening test, so no risk model was fit" for `no_primary_signal`, and an explanation for `too_few_episodes`. The sample-data mock follows the same rule.
+Status: DONE
