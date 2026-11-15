@@ -22,7 +22,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 MIN_EPISODES = 8
-N_PERM = 150
+N_PERM = 100   # label-permutation null for AUC (100 gives ample resolution; keeps simulate snappy)
 
 
 def _pipe():
@@ -45,6 +45,19 @@ def _lagged(df, signal, max_lag):
         X.append([sig[t - L] for L in range(1, max_lag + 1)])
         y.append(ep[t])
     return np.array(X, float), np.array(y, int), feats, sig
+
+
+def _feature_label(feature):
+    """Turn 'sleep_min_lag2' into a plain label like 'Sleep, 2 days before' for the UI."""
+    from app.stats import _signal_label
+    if "_lag" in feature:
+        sig, lag = feature.rsplit("_lag", 1)
+        try:
+            L = int(lag)
+            return f"{_signal_label(sig)}, {L} day{'s' if L != 1 else ''} before"
+        except ValueError:
+            pass
+    return _signal_label(feature)
 
 
 def _untrained(reason):
@@ -119,11 +132,19 @@ def fit_risk_model(df, plan, verdict=None):
     # fit on all data for coefficients + tomorrow's risk
     pipe = _pipe().fit(X, y)
     weights = pipe.named_steps["lr"].coef_[0]
-    coefs = [{"feature": f, "weight": round(float(w), 3)} for f, w in zip(feats, weights)]
+    coefs = [{"feature": f, "label": _feature_label(f), "weight": round(float(w), 3)}
+             for f, w in zip(feats, weights)]
 
     # risk for "tomorrow": the most recent max_lag days as lag1..lagL
     recent = [sig[-L] for L in range(1, max_lag + 1)]
     risk = float(pipe.predict_proba([recent])[0, 1]) if not np.all(np.isnan(recent)) else None
+
+    # plain-language framing so the clinician (and patient) needn't read AUC / feature names
+    quality = "strong" if auc >= 0.8 else "moderate" if auc >= 0.65 else "weak"
+    beats = auc_null_p < 0.05
+    plain = (f"On days it hadn't seen, this model told an about-to-have-an-episode day from a normal "
+             f"day about {round(auc * 100)}% of the time (50% is a coin flip) — a {quality} signal. "
+             + ("Better than chance." if beats else "Not better than chance, so treat it with caution."))
 
     return {
         "kind": "logistic_l2",
@@ -131,6 +152,9 @@ def fit_risk_model(df, plan, verdict=None):
         "reason": None,
         "auc": round(auc, 3),
         "auc_null_p": round(auc_null_p, 3),
+        "quality": quality,
+        "beats_chance": beats,
+        "plain": plain,
         "coefficients": coefs,
         "risk_tomorrow": None if risk is None else round(risk, 3),
     }

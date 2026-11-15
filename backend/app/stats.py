@@ -70,9 +70,10 @@ def observational(df, signal, direction, max_lag, rng, min_lag=1):
     null_best_raw = np.empty(N_PERM)          # raw (signed) null at the best lag, for the histogram
     for i, s in enumerate(shifts):
         e2 = np.roll(ep, s)
-        vals = np.array([obs_effect(sig, e2, L) for L in lags]) * sign
+        raw = np.array([obs_effect(sig, e2, L) for L in lags])   # one pass, reused below
+        vals = raw * sign
         null_max[i] = np.nanmax(vals) if not np.all(np.isnan(vals)) else np.nan
-        null_best_raw[i] = obs_effect(sig, e2, lags[best])
+        null_best_raw[i] = raw[best]
 
     best_oriented = oriented[best]
     if all_nan or np.isnan(best_oriented):

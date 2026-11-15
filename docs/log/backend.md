@@ -205,3 +205,19 @@ Format:
   simulate → likely_real lag 1. Did NOT touch the shared Supabase DB (used DATABASE_URL="" locally).
 - Next: HOLDING the push until the two usability agents finish their live runs (a Railway redeploy would
   interrupt them). After they report: push → Railway redeploys with P08 → reset Supabase to reseed incl Sam.
+
+### 15:05 — Usability-report fixes (backend side) + perf trim
+- Done (responding to the physician/patient usability agents):
+  - **Risk-model jargon (physician MED):** model now returns `quality` (strong/moderate/weak),
+    `beats_chance` (bool), a plain-language `plain` sentence, and `coefficients[].label`
+    ("Sleep, 2 days before") so the UI needn't show raw AUC / `sleep_min_lag2`.
+  - **Simulate perf (physician HIGH):** dropped a redundant per-shift permutation call in the
+    observational null (zero stats change) and cut the risk-model permutation null 150→100
+    (verdict-independent). Kept observational at 2000 shuffles (the UI advertises "2,000"). The
+    headline fix for "looked hung" is a frontend progress indicator — relayed.
+  - Confirmed backend `pause` works (approve→pause→paused→resume) — the patient's HIGH "pause broken"
+    is a frontend issue, relayed.
+- Files: backend/app/stats.py, backend/app/model.py, shared/fixtures/results_*.json, docs/CONTRACT.md
+- Contract impact: additive v1.4 (model `quality`/`beats_chance`/`plain`/`coefficients[].label`).
+- Verified: pytest 12/12; model returns plain labels.
+- Next: push (Sam + these) → Railway/Vercel redeploy → reset Supabase → relay both usability reports.

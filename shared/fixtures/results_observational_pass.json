@@ -1387,18 +1387,24 @@
     "trained": true,
     "reason": null,
     "auc": 0.909,
-    "auc_null_p": 0.007,
+    "auc_null_p": 0.01,
+    "quality": "strong",
+    "beats_chance": true,
+    "plain": "On days it hadn't seen, this model told an about-to-have-an-episode day from a normal day about 91% of the time (50% is a coin flip) \u2014 a strong signal. Better than chance.",
     "coefficients": [
       {
         "feature": "sleep_min_lag1",
+        "label": "Sleep, 1 day before",
         "weight": -0.467
       },
       {
         "feature": "sleep_min_lag2",
+        "label": "Sleep, 2 days before",
         "weight": -2.648
       },
       {
         "feature": "sleep_min_lag3",
+        "label": "Sleep, 3 days before",
         "weight": 1.923
       }
     ],

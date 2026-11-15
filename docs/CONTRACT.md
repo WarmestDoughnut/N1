@@ -220,12 +220,18 @@ only data already collected); the frontend can shade `(collected_until, window.e
 `windows_cover_most_days` (v1.4: the best look-back window covers > 50% of analyzable days, leaving
 little baseline — interpret with caution).
 
-`model` (optional, added later, null until then):
+`model` (optional, null until computed; observational plans only, and only when the screening
+verdict is `likely_real`/`suggestive` — else `trained:false` with `reason` `no_primary_signal` /
+`too_few_episodes`):
 ```json
-"model": {"kind": "logistic_l2", "auc": 0.71, "auc_null_p": 0.04,
-          "coefficients": [{"feature": "sleep_min_lag2", "weight": -0.8}],
-          "risk_tomorrow": 0.32, "trained": true, "reason": null}
+"model": {"kind": "logistic_l2", "trained": true, "reason": null,
+          "auc": 0.91, "auc_null_p": 0.01, "quality": "strong", "beats_chance": true,
+          "plain": "On days it hadn't seen, this model told an about-to-have-an-episode day from a normal day about 91% of the time (50% is a coin flip) — a strong signal. Better than chance.",
+          "coefficients": [{"feature": "sleep_min_lag2", "label": "Sleep, 2 days before", "weight": -0.8}],
+          "risk_tomorrow": 0.32}
 ```
+v1.4 added `quality` (`strong|moderate|weak`), `beats_chance` (bool), `plain` (sentence), and
+`coefficients[].label` (plain label) so the UI needn't show raw AUC / feature names.
 
 ## 6. Health
 `GET /api/health` → `{"ok": true, "contract_version": "1.2"}`
