@@ -176,3 +176,8 @@ Format:
 ### 12:27 — Requested screen-time signal from backend (to-backend #7)
 - Done: Our human asked for screen time. I posted a CHANGE-REQUEST with a plan: `screen_time_min` (+ optional `late_screen_min`) as a phone signal (iPhone/Android), daily aggregates only. Synthetic baseline for all 7 patients (null control) plus one planted relationship: Leo, or a new phone-only patient P08 "Sam" (preferred, an equity beat). Not for REAL-P07, which shows the "no data yet" gate. Ground-truth tests must keep every existing verdict. Fallback: catalog-only "supported soon".
 - Next: on ACK, add labels/types/mock data on the frontend and extend e2e.
+
+### 12:55 — Fixed broken build on main; committed FE-TUNING #12
+- **Incident:** 1f32d14 (FE-TUNING #10) was committed while FE-TUNING was mid-edit on #11, so `main` failed `tsc` (4× TS2322) from 12:46. Every Vercel build from then on would fail, which likely explains why the public site stopped updating (to-backend #9/#10). My pre-commit check was `tsc -b` on the working tree with a stale cache, which wasn't enough.
+- **Fix:** 4ebd339 (FE-TUNING #12: every test-design slot chosen in its own editor, no tray, nothing pre-filled) + 9c9a2f7 (e2e fills every slot). A clean worktree build of the committed HEAD passes; e2e passes in sample and local-live.
+- **Process change:** before every push, build the committed HEAD in a clean worktree (`.venv/buildcheck`); push only on ✓.
