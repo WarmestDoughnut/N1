@@ -57,9 +57,13 @@ const planIdFromUrl = () => decodeURIComponent(page.url().split('/plans/')[1] ??
 async function createPlan(patient, { intervention = false, grayOutDemo = false } = {}) {
   await signInAs('clinician', 'Dr. Rivera')
   await page.evaluate(() => { location.hash = '/new' }); await sleep(600)
+  await page.waitForSelector('.option', { timeout: 10000 }) // patients load async
   await click(patient, '.option'); await click('Next')
   if (grayOutDemo) {
+    // Wait until the device catalog has rendered (it loads async), then until the signals step shows its grayed row.
+    await page.waitForFunction(() => [...document.querySelectorAll('.option')].some((e) => e.textContent.includes('Fitbit')), { timeout: 10000 })
     await click('Fitbit', '.option'); await click('Next')
+    await page.waitForSelector('.option.unavailable', { timeout: 10000 })
     const grayed = await page.evaluate(() => [...document.querySelectorAll('.option.unavailable .title')].map((e) => e.textContent))
     if (!grayed.includes('Sleep')) throw new Error('Sleep should be grayed out with iPhone only, got ' + grayed)
     console.log('✓ iPhone only → Sleep grayed out')
