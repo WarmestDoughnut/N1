@@ -8,17 +8,18 @@ import { formatDate, signalLabel, ALL_SIGNALS } from '../../lib/util'
 import type { ClinicianData } from './ClinicianApp'
 import { PlanDetail } from './PlanDetail'
 import { PlanWizard } from '../../components/PlanWizard'
+import { CollectionPanel } from '../../components/CollectionPanel'
 import { NotesPanel } from '../../components/NotesPanel'
 import { ReviewBox } from '../../components/ReviewBox'
 import { useAsync } from '../../lib/hooks'
-import { v15, type Symptom } from '../../lib/v15'
+import { isCollection, v15, type Symptom } from '../../lib/v15'
 
 export const AVATAR_TONES = ['tone-purple', 'tone-coral', 'tone-yellow', 'tone-green']
 export const toneFor = (id: string) => AVATAR_TONES[[...id].reduce((a, c) => a + c.charCodeAt(0), 0) % AVATAR_TONES.length]
 
 /** A finished test whose result the clinician hasn't marked reviewed (backend B7 `results.reviewed_at`).
- *  Until that field ships every finished test counts as unreviewed. Keep this the only place that reads it. */
-export const isUnreviewed = (r: Results | undefined) => !!r && (r as Results & { reviewed_at?: string | null }).reviewed_at == null
+ *  A finished data collection has no verdict, so there is nothing to review. Keep this the only place that reads it. */
+export const isUnreviewed = (r: Results | undefined) => !!r && r.verdict != null && (r as Results & { reviewed_at?: string | null }).reviewed_at == null
 
 export const isRunning = (p: Plan) => p.status === 'active' || p.status === 'paused'
 export const isWaiting = (p: Plan) => p.status === 'pending_approval'
@@ -41,6 +42,8 @@ export function PatientWorkspace({ patient, data, catalog, tab: rawTab, sub }: {
   const base = `/patients/${encodeURIComponent(patient.id)}`
   const plans = data.plans.filter((p) => p.patient_id === patient.id).sort((a, b) => b.created_at.localeCompare(a.created_at))
   const conn = data.connections.find((c) => c.patient_id === patient.id && c.status === 'active')
+  // Collections have their own tab; the Tests tab and its count show tests only.
+  const tests = plans.filter((p) => !isCollection(p))
   const unreviewed = plans.filter((p) => isUnreviewed(data.results[p.id])).length
 
   return (
@@ -63,7 +66,7 @@ export function PatientWorkspace({ patient, data, catalog, tab: rawTab, sub }: {
             <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? 'selected' : ''}
               onClick={() => navigate(t.id === 'overview' ? base : `${base}/${t.id}`)}>
               <Icon name={t.icon} size={16} /> {t.label}
-              {t.id === 'tests' && plans.length > 0 && <span className="ws-count">{plans.length}</span>}
+              {t.id === 'tests' && tests.length > 0 && <span className="ws-count">{tests.length}</span>}
               {t.id === 'tests' && unreviewed > 0 && <span className="ws-dot" title={`${unreviewed} unreviewed result${unreviewed > 1 ? 's' : ''}`} />}
             </button>
           ))}
@@ -74,12 +77,14 @@ export function PatientWorkspace({ patient, data, catalog, tab: rawTab, sub }: {
         {tab === 'overview' && <OverviewTab patient={patient} plans={plans} data={data} catalog={catalog} base={base} />}
         {tab === 'tests' && (sub
           ? <OpenTest planId={sub} base={base} data={data} />
-          : <TestsTab plans={plans} data={data} base={base} />)}
-        {tab === 'collection' && <ComingSoon icon="watch" title="Data collection" body="Collection plans for this patient, and the tests run on the data they gather, will appear here." />}
+          : <TestsTab plans={tests} data={data} base={base} />)}
+        {tab === 'collection' && <CollectionPanel patient={patient} />}
         {tab === 'data' && <ComingSoon icon="activity" title="Data & graphs" body="Charts of this patient's consented signals and logged symptoms will appear here." />}
         {tab === 'new' && (sub === 'test'
           ? <PlanWizard patient={patient} kind="test" onDone={(id) => navigate(`${base}/tests/${encodeURIComponent(id)}`)} />
-          : <NewTab base={base} />)}
+          : sub === 'collection'
+            ? <PlanWizard patient={patient} kind="collection" onDone={() => navigate(`${base}/collection`)} />
+            : <NewTab base={base} />)}
       </div>
     </>
   )
@@ -215,10 +220,10 @@ function NewTab({ base }: { base: string }) {
         <strong>New test</strong>
         <small>Check a pattern before episodes, or compare two options (A/B).</small>
       </button>
-      <button className="ws-new-card" disabled title="Coming soon">
+      <button className="ws-new-card" onClick={() => navigate(`${base}/new/collection`)}>
         <span className="summary-icon tone-green"><Icon name="watch" /></span>
         <strong>New data collection</strong>
-        <small>Gather signals now and decide on a test later. Coming soon.</small>
+        <small>Gather signals now and decide on a test later.</small>
       </button>
     </section>
   )
