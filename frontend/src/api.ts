@@ -185,6 +185,9 @@ export const api = {
     ),
   results: (planId: string) => call<Results>('GET', `/api/plans/${enc(planId)}/results`, undefined, () => mock.results(planId)),
 
+  /** v1.3: restore the seed state (8 seeded DEMO-* plans pending, v1.2 accounts/connections). Live only. */
+  demoReset: () => call<{ ok: true }>('POST', '/api/demo/reset', undefined, async () => { resetMock(); resetConnections(); return { ok: true as const } }),
+
   // ---------- v1.2: accounts & connections ----------
   demoAccounts: () => call<DemoAccount[]>('GET', '/api/accounts/demo', undefined, mockAccounts.demoAccounts),
   login: (email: string, password: string) =>

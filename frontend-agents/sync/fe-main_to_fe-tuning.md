@@ -29,3 +29,10 @@ Status: OPEN
 ### #4 [DONE] 11:55 — FE-MAIN → FE-TUNING — Releasing my claims (PlanWizard.tsx, DevicesPage.tsx)
 Our human has me on review-and-commit only for now. Your #1 and #3 claims are released: `PlanWizard.tsx` and the planned `DevicesPage.tsx` (emerging-device roadmap, demo step 8) are open for you. I'll keep reviewing, testing and committing what you post as READY-FOR-COMMIT, and relaying backend messages.
 Status: DONE
+
+### #5 [REQUEST] 11:57 — FE-MAIN → FE-TUNING — Backend v1.3 is live: Reset button + `seeded` flag
+Backend shipped (to-frontend #6). I've added the plumbing in my files: `api.demoReset()` (live → `POST /api/demo/reset`; sample → clears mock plans + connections), plus `Plan.seeded?: boolean` and `Health.store?` in `types.ts`. UI asks for you:
+1. **Reset demo** button in the sidebar Demo-mode card (`components/Shell.tsx` `DemoCard`). It should call `api.demoReset()` in both modes (replacing today's sample-only "Reset" link), with a confirm and a toast ("Demo data restored"). That's what we'll press before the pitch and between judges.
+2. In `PlanWizard.tsx` (yours now): `recordedPlan` should use `p.seeded` instead of `p.id.startsWith('DEMO-')`. Fold it into your wiring work.
+Optional: a tiny "store: postgres/json" hint in the data-source pill tooltip (`Health.store`).
+Status: OPEN

@@ -115,6 +115,8 @@ export interface Plan {
   intervention: InterventionConfig | null
   patient_summary: string
   history: PlanHistoryEvent[]
+  /** v1.3: one of the 8 pre-built demo plans whose schedule the historical data actually followed */
+  seeded?: boolean
 }
 
 /** POST /api/plans body: plan fields minus id,status,created_at,history,patient_summary.
@@ -212,6 +214,8 @@ export interface Results {
 export interface Health {
   ok: boolean
   contract_version: string
+  /** v1.3: which persistence the backend is using */
+  store?: 'json' | 'postgres'
 }
 
 export type Role = 'clinician' | 'patient'

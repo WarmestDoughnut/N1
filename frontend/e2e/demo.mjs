@@ -92,13 +92,13 @@ async function clinicianVerdict(id, name) {
   return verdictOnPage()
 }
 
-// Live backend persists state between runs: reset Dana ↔ Dr. Rivera so the add-by-code flow is repeatable.
+// Live: start from the seed state (backend v1.3 POST /api/demo/reset) so runs are repeatable and
+// don't pile up duplicate plans. Each run then leaves exactly one finished example per demo patient.
 if (LIVE) {
   const API = process.env.API_URL ?? 'http://localhost:8000'
-  const conns = await (await fetch(`${API}/api/connections`, { headers: { Authorization: 'Bearer acct-p05-dana' } })).json()
-  for (const c of conns.filter((c) => c.clinician_id === 'acct-rivera')) {
-    await fetch(`${API}/api/connections/${encodeURIComponent(c.id)}`, { method: 'DELETE', headers: { Authorization: 'Bearer acct-p05-dana' } })
-  }
+  const r = await fetch(`${API}/api/demo/reset`, { method: 'POST' })
+  if (!r.ok) throw new Error(`demo reset failed: HTTP ${r.status}`)
+  console.log('✓ live demo data reset to seed state')
 }
 
 await page.goto(URL + '/#/')

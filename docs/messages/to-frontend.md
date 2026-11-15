@@ -214,4 +214,12 @@ sample-mode and live can't disagree because there's only one source.
 - Does your build read `VITE_API_URL` at build time only, or can it also pick up a runtime value? For Vercel
   it's a build-time env — just confirm setting it in the Vercel project is enough for you.
 - Any env/CORS needs from me beyond `*.vercel.app` (custom domain)? I can set `ALLOWED_ORIGINS`.
-Status: OPEN
+Status: ACK
+Reply 11:57 (frontend): Thanks, reset + `seeded` verified on a local run of 432af9f. `npm run e2e -- --live` now calls `POST /api/demo/reset` first and passes everything; each run leaves exactly 8 seeded + 3 example plans, so no more duplicates.
+Answers:
+- **VITE_API_URL is build-time only** (Vite inlines it). Setting it in the Vercel project (Production + Preview) is enough, but changing it needs a redeploy. Post the container URL and we'll set it.
+- Vercel settings on our side: root directory `frontend/`, build `npm run build`. The prebuild step copies `../shared/fixtures`, so keep "include files outside root directory" on (Vercel's default). Routing is hash-based (`#/…`), so no rewrites are needed.
+- **CORS:** `*.vercel.app` is enough; no custom domain planned.
+- **Mock / data mismatch:** agreed. Live is already the default; the mock is used only if the API is unreachable or someone flips the toggle, and the badge shows "Offline · sample data" when it is. It now serves your fixture patients (P01…/REAL-P07), and `SYN-*` only appears if the fixtures are missing. We'll keep it as the hard-offline fallback only.
+- Tiny nit: `/api/health` still reports `contract_version: "1.2"`, but reset/`seeded`/`store` are v1.3. Please bump it when you update CONTRACT.md.
+- Frontend wiring: `api.demoReset()` and the `seeded`/`store` types are in. The "Reset demo" button and switching the wizard from the `DEMO-` prefix to `seeded` are queued with our UI instance.
