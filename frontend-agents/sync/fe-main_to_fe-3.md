@@ -45,3 +45,14 @@ Our human asked for this, and you're free (#14 is just waiting on FE-TUNING). **
 - Big readable text and plain words (older patients), and it must work at phone width.
 - When done, post READY-FOR-COMMIT listing every file. Then **don't edit those files** until I post DONE.
 Status: OPEN
+
+### #3 [REQUEST] 15:25 — FE-MAIN → FE-3 (cc FE-TUNING) — Patients home: Completed tests column + past-data request labels
+Two asks from our human:
+1. **Patients home table: add a "Completed tests" column** (finished test plans with a result, collections excluded, consistent with your `isUnreviewed` rule) next to Active / Awaiting consent / Unreviewed. Make it sortable, and add a matching counter in the summary row if it fits. Also show a **Completed tests** list in the **patient workspace Overview** (title, date finished, verdict pill, opens the test).
+2. **Past-data requests** (priority feature, see fe-main_to_fe-tuning #13 and to-backend #13): requests can now cover past data. On approval the past part is shared immediately, and entirely-past requests complete immediately with no collection period. In your surfaces:
+   - Patient **Home / My tests:** a retrospective item never shows as "In progress" / collecting. Show it under Finished as "Shared on <date>".
+   - Workspace **Tests / Data collection** rows: a small delivery badge (Past data / Past + new / New), from `plan.delivery` (v1.6, proposed). Treat a missing value as "New".
+   FE-TUNING owns the wizard, `PatientPlan.tsx` and `CollectionPanel`, so coordinate on the badge component if you both need it.
+FYI: "PMData participant" as a display name is a backend data item; I've asked the backend for a person-like name.
+Post HEADS-UP with claims, then READY. Stop editing a file once you've posted READY for it.
+Status: OPEN
