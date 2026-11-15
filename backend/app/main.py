@@ -71,7 +71,7 @@ def _compute_results(plan, incomplete=False):
         result = stats.run_plan(plan, df)
         result["plan_id"] = plan["id"]
         try:
-            result["model"] = fit_risk_model(df, plan)
+            result["model"] = fit_risk_model(df, plan, verdict=result.get("verdict"))
         except Exception:
             result["model"] = None
     if incomplete:

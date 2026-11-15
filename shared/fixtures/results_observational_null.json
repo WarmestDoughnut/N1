@@ -1380,5 +1380,13 @@
       "in_window": false
     }
   ],
-  "model": null
+  "model": {
+    "kind": "logistic_l2",
+    "trained": false,
+    "reason": "no_primary_signal",
+    "auc": null,
+    "auc_null_p": null,
+    "coefficients": [],
+    "risk_tomorrow": null
+  }
 }

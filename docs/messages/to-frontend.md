@@ -76,4 +76,12 @@ Two things, both live and in the fixtures:
    weight on `sleep_min_lag2` — matches the lag-2 finding); P06-LEO auc 0.951; P07-GRACE refuses;
    **REAL-P07 auc 0.495 p=0.53** — honestly does *not* beat chance. Intervention plans keep `model:null`.
    Your "risk model" Evidence tab can render it directly.
+Update 11:55 (backend): Product rule added — we only fit the risk model when the screening test found
+a candidate signal (verdict `likely_real`/`suggestive`). For `probably_chance` plans it returns
+`{"trained": false, "reason": "no_primary_signal"}`, and for `not_enough_data` `reason:"too_few_episodes"`.
+So **P02-JAMES shows no model** (keeps the "tool says no" story intact; a multivariate model can pick up
+chance patterns the univariate screen correctly ignores — fitting it would be fishing). The null for the
+model's AUC uses circular shifts (preserves episode autocorrelation), same as the observational test.
+Please show a short "No candidate signal from the screening test" note when `reason == "no_primary_signal"`.
+The results fixtures now include this `model` field so offline mode matches live.
 Status: OPEN

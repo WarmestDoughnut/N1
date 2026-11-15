@@ -1380,5 +1380,26 @@
       "in_window": false
     }
   ],
-  "model": null
+  "model": {
+    "kind": "logistic_l2",
+    "trained": true,
+    "reason": null,
+    "auc": 0.909,
+    "auc_null_p": 0.007,
+    "coefficients": [
+      {
+        "feature": "sleep_min_lag1",
+        "weight": -0.467
+      },
+      {
+        "feature": "sleep_min_lag2",
+        "weight": -2.648
+      },
+      {
+        "feature": "sleep_min_lag3",
+        "weight": 1.923
+      }
+    ],
+    "risk_tomorrow": 0.494
+  }
 }

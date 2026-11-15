@@ -47,10 +47,23 @@ def _lagged(df, signal, max_lag):
     return np.array(X, float), np.array(y, int), feats, sig
 
 
-def fit_risk_model(df, plan):
-    """Return a CONTRACT §5 `model` dict, or None for non-observational plans."""
+def _untrained(reason):
+    return {"kind": "logistic_l2", "trained": False, "reason": reason,
+            "auc": None, "auc_null_p": None, "coefficients": [], "risk_tomorrow": None}
+
+
+def fit_risk_model(df, plan, verdict=None):
+    """Return a CONTRACT §5 `model` dict, or None for non-observational plans.
+
+    Product rule: we only build a personal risk model once the screening test has found a
+    candidate signal (verdict likely_real/suggestive). Fitting a predictive model on a signal
+    the screening test rejected is fishing, and small-sample multivariate AUC can pick up chance
+    patterns the univariate test (correctly) ignores — so for a `probably_chance` plan we decline.
+    """
     if plan.get("type") != "observational":
         return None
+    if verdict is not None and verdict not in ("likely_real", "suggestive"):
+        return _untrained("too_few_episodes" if verdict == "not_enough_data" else "no_primary_signal")
     warnings.filterwarnings("ignore", category=ConvergenceWarning)
     warnings.filterwarnings("ignore", category=FutureWarning)
     o = plan["observational"]
@@ -87,11 +100,17 @@ def fit_risk_model(df, plan):
         return {"kind": "logistic_l2", "trained": False, "reason": "cv_insufficient",
                 "auc": None, "auc_null_p": None, "coefficients": [], "risk_tomorrow": None}
 
-    # label-permutation null for AUC
+    # Null for AUC: CIRCULAR SHIFTS of the episode series, not random label permutation.
+    # Episodes and the signal are both autocorrelated; random shuffling breaks the episodes'
+    # temporal clustering and makes the test anti-conservative (false positives, e.g. P02-JAMES).
+    # Circular shifts preserve that autocorrelation, so a high AUC only survives if the signal
+    # genuinely predicts episodes at the right phase.
     rng = np.random.default_rng(0)
+    n = len(y)
+    shifts = rng.integers(max_lag + 1, n - max_lag - 1, N_PERM)
     null = []
-    for _ in range(N_PERM):
-        a = oof_auc(rng.permutation(y))
+    for s in shifts:
+        a = oof_auc(np.roll(y, s))
         if a is not None:
             null.append(a)
     null = np.array(null) if null else np.array([0.5])

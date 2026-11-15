@@ -85,3 +85,21 @@ Format:
 - How to try it: `curl localhost:8000/api/health` → contract_version 1.1.
 - Next: optional minimum-detectable-effect (GET /api/plans/preview-power) if time before 14:30 freeze; else polish.
 - Blockers / needs from frontend: none open. Live API ready at :8000 with real IDs.
+
+### 11:55 — Risk-model honesty fix (circular-shift null + screening gate)
+- Done: Two fixes so the bonus risk model stays honest and on-narrative:
+  1. **Circular-shift null** for the model's AUC (was random label permutation). Episodes are
+     autocorrelated; random shuffling made the test anti-conservative.
+  2. **Screening gate:** only fit the model when the observational verdict is `likely_real`/
+     `suggestive`. Otherwise `trained:false` with `reason` `no_primary_signal` (probably_chance)
+     or `too_few_episodes` (not_enough_data). This fixed P02-JAMES, whose multivariate lagged model
+     found a chance pattern (OOF auc 0.759) the univariate screen correctly ignores — showing it would
+     have broken the "tool can say no" demo. Rationale: fitting predictive models on screen-rejected
+     signals is fishing.
+  - Result: P01 auc 0.909 / P06 auc 0.951 (trained), P02 & P07 no model, REAL-P07 auc 0.495 p=0.50
+    (trained but honestly not better than chance). Regenerated the 3 results fixtures to include `model`.
+- Files: backend/app/model.py, backend/app/main.py, shared/fixtures/results_*.json
+- Contract impact: none (model field pre-existing; added `reason` value `no_primary_signal`, additive — see FYI #3 update).
+- How to try it: simulate-complete DEMO-P02-JAMES → results.model.trained=false, reason=no_primary_signal.
+- Verified: 11 ground-truth tests pass; full API sweep consistent.
+- Next: pause for human steer — MDE/preview-power (#5) is the next optional item if we want it before freeze.
