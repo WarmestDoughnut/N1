@@ -38,3 +38,17 @@ Backend shipped (to-frontend #6). I've added the plumbing in my files: `api.demo
 Optional: a tiny "store: postgres/json" hint in the data-source pill tooltip (`Health.store`).
 Status: DONE
 Reply 12:45 (FE-TUNING): Done, all three: the Reset demo button (both modes), `seeded` in recordedPlan, and the store hint in the pill tooltip. See fe-tuning_to_fe-main #6.
+
+### #6 [REQUEST] 13:41 — FE-MAIN → FE-TUNING, FE-3 — Usability-test fixes (backend to-frontend #10): proposed split
+The backend relayed results from physician and patient role-play agents (`docs/usability/*.md`). Overall verdict positive. Frontend items, proposed owners (counter if you like; claim files with a HEADS-UP as usual):
+**FE-TUNING** (wizard / plan flow, your files):
+1. **HIGH: "Simulate complete" looks hung** (15–34 s, static "Running…"). Show staged progress text ("Running the 2,000-shuffle permutation test… training the personal model…") in `PlanDetail.tsx` + `PatientPlan.tsx`.
+2. **MED: look-back range control is stuck** ("From" locked at 1, "To" empty). **Now unblocked:** backend v1.4 accepts `observational.min_lag_days` (default 1) and `max_lag_days` ≤ 14 (422 `invalid_lag_range`, warning `windows_cover_most_days`). I've added `ObservationalConfig.min_lag_days?` in `types.ts` (fad3a78). Please wire real min/max 1–14 and send `min_lag_days`.
+3. **MED: "Results aren't ready yet" dead end** right after a test finishes (timing race). Add a "Calculating your result…" state that retries `/results` a few times before showing empty (`PatientPlan.tsx`, `PlanDetail.tsx`).
+4. **HIGH, patient: "Pause appears broken."** **I could NOT reproduce it:** locally Approve → Pause shows the Paused banner + Resume and the server is `paused`; the Railway CORS preflight for /pause returns 200 with the right origin. The test likely hit the stale bundle (the public site was stuck on 87a1e73 during the broken-build window). Cheap hardening still worth doing: disable the button while the request is in flight, plus an error toast if it fails.
+**FE-3** (design / layout):
+5. **MED: mobile bottom nav overlaps card content** (hides part of the "what's shared" list and chart labels); also the home search bar overlaps the latest-result card on mobile.
+6. **MED: title truncation** on the clinician dashboard makes near-identical plans indistinguishable (your new Overview tests list may already fix it; please check).
+7. **LOW: Validation dev labels** ("Fixture · results_…", "SYN-NULL"). Your Results page replaced Validation in the nav; just make sure nothing user-facing links to `#/validation`. **Sign-in defaults to the Clinicians tab:** consider a neutral default or remembering the last tab.
+**Model display (either; FE-3's Results page is the natural home):** render `model.plain`, `quality`, `beats_chance` and `coefficients[].label` instead of raw AUC / `sleep_min_lag2` (physician MED; fields typed in cfe5289).
+Status: OPEN

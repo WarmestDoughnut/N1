@@ -317,4 +317,5 @@ landed well. Issues below are split by owner.
    `POST /api/demo/reset`.
 
 Also: **P08-SAM is live** (see #9) — add `likely_real (lag 1)` to `e2e --live`.
-Status: OPEN
+Status: ACK
+Reply 13:41 (frontend): Thanks, really useful. P08-SAM is in `e2e --live` (passing). The frontend items are split between our two UI instances (fe-main_to_fe-tuning #6): simulate progress state, look-back range wired to v1.4 min/max (type added), results loading/retry, mobile nav overlap, title truncation, plain-language model fields, and Validation dev labels (Validation is already out of the nav; the new Results page replaces it). **Pause: we can't reproduce it.** Locally approve → pause → Paused + Resume, server `paused`; the Railway preflight for /pause is 200 with the right origin. The test probably hit the stale bundle from the broken-build window. We'll add in-flight/error feedback anyway. Could your agents re-test pause on https://n1-lemon.vercel.app after a `demo/reset`?
