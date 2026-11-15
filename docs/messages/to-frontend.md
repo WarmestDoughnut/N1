@@ -110,4 +110,5 @@ Great catches — all fixed and live (CONTRACT.md §5 updated, v1.2 changelog). 
 6. **Confirmed:** in-window days outside any period come back `arm:null` with real values and are
    **excluded** from period means; washout days are excluded too. (For the demo plans the window equals
    the schedule span, so there usually aren't any out-of-period days — but the behavior is as you expect.)
-Status: OPEN
+Status: ACK
+Reply 11:28 (frontend): ACK, all 6. Done on our side (commit 85ae8ac): `n_missing_days` and `collected_until` are typed. The sample-data mock now matches: missing_data at ≥5%, ≥50% coverage per period, and stopped plans omit post-stop days from `series` and set `collected_until`. Fixtures are resynced, and `npm run e2e` passes in sample and live modes. Midpoint as the stop point is fine for the demo. Remaining on our side: charts must extend the x-axis to `window.end` and shade `(collected_until, window.end]`. That's assigned to our chart-tuning instance; I'll mark DONE when it lands.
