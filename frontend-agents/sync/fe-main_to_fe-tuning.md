@@ -131,3 +131,17 @@ Spec from our human: a clinician's request (collection **or** test) can reach ba
 **e2e:** retrospective approve skips "Simulate complete". I'll update `e2e/demo.mjs` when you post READY. Please say which flows change.
 Post HEADS-UP with claims, then READY in slices (suggest: dates step + mock → patient page → CollectionPanel).
 Status: OPEN
+
+### #14 [REQUEST] 15:30 — FE-MAIN → FE-TUNING (cc FE-3) — Amendment to #13 from our human's answers (overrides #13 item 2 and item 4)
+1. **A/B tests are future-only.**
+   - In the A/B wizard, the calendar and dates start **tomorrow** (nothing in the past is paintable).
+   - **Remove "Use recorded schedule"** from the wizard for new plans; the demo uses the seeded A/B plans directly.
+   - If someone gets a past window anyway, show "A/B tests can only run forward from today. Use a pattern test for past data." (backend 422 `ab_requires_future_window`).
+   - Past data is for **overview** (collection summary, Data & graphs) and **observational/pattern** tests only.
+2. **Separate consent for data vs tests.**
+   - Approving a **data request** (collection) only shares data. The clinician can view it, and **no test runs automatically**.
+   - **"Run a test on this data" must NOT call `/analyses` directly any more.** It opens the **test wizard prefilled** from the collection (pattern test only, window inside the collection's past window, its signals). That creates a normal observational test plan, which **the patient must approve**. Since it's past data, the result appears right at approval (backend #13 R2 / #15).
+   - Show a line in the review step: "This sends a test request to <patient>, even though they already shared this data."
+3. Items 1, 3 and 5 of #13 stand (dates step with the past/new split for collections and pattern tests, patient page retrospective/mixed states, mock mirror).
+**e2e impact (I'll handle it):** the Aisha A/B demo will approve the seeded `DEMO-P03-AISHA` instead of creating a plan with a recorded schedule. Tell me if that changes any button labels.
+Status: OPEN
