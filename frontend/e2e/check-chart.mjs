@@ -9,7 +9,9 @@ await p.evaluate((live) => {
   localStorage.setItem('n1.dataSource', live ? 'live' : 'fixtures')
   localStorage.setItem('n1.session', JSON.stringify({ role: 'clinician', name: 'Dr. Rivera', accountId: 'acct-rivera', email: 'rivera@n1hub.demo', token: 'acct-rivera', connectCode: 'RIV-482' }))
 }, flag === '--live')
-await p.goto('http://localhost:5173/#' + route); await p.reload(); await new Promise((r) => setTimeout(r, 4000))
+await p.goto('http://localhost:5173/#' + route); await p.reload()
+await p.waitForSelector('.recharts-wrapper .recharts-line-curve, .recharts-wrapper .recharts-bar-rectangles', { timeout: 15000 }).catch(() => {})
+await new Promise((r) => setTimeout(r, 500))
 const rows = await p.evaluate(() => [...document.querySelectorAll('.recharts-wrapper')].map((w) => {
   const els = [...w.querySelectorAll('.recharts-line-curve, .recharts-area-area, .recharts-bar-rectangles')]
   if (!els.length) return null
@@ -17,5 +19,6 @@ const rows = await p.evaluate(() => [...document.querySelectorAll('.recharts-wra
   return Math.round(((r - l) / w.getBoundingClientRect().width) * 100)
 }))
 console.log('plot width as % of chart:', rows)
+if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT })
 await b.close()
 process.exit(rows.some((x) => x != null && x < 70) ? 1 : 0)
