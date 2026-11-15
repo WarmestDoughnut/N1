@@ -181,3 +181,10 @@ Format:
 - **Incident:** 1f32d14 (FE-TUNING #10) was committed while FE-TUNING was mid-edit on #11, so `main` failed `tsc` (4× TS2322) from 12:46. Every Vercel build from then on would fail, which likely explains why the public site stopped updating (to-backend #9/#10). My pre-commit check was `tsc -b` on the working tree with a stale cache, which wasn't enough.
 - **Fix:** 272ad36 (FE-TUNING #12: every test-design slot chosen in its own editor, no tray, nothing pre-filled) + a24f976 (e2e fills every slot). A clean worktree build of the committed HEAD passes; e2e passes in sample and local-live.
 - **Process change:** before every push, build the committed HEAD in a clean worktree (`.venv/buildcheck`); push only on ✓.
+
+### 13:52 — Usability fixes landed (both UI instances); all pushed
+- FE-3: cd41b29 (Overview tests summary + Results page), f1d14af (In-depth results, mobile nav/top bar, two-line titles, sign-in tab memory, plain-language risk model).
+- FE-TUNING: f2c4116 (patient side de-cluttered; requests only in My tests), 6001ee3 (simulate progress, look-back 1–14 with `min_lag_days`, results retry, pause in-flight/error feedback).
+- FE-MAIN: cfe5289 (model types; e2e asserts P08-SAM), fad3a78 (`min_lag_days` type), 22eceb2 (e2e).
+- Verified: clean-worktree build of every pushed HEAD; e2e sample + live (local backend) pass, including P08-SAM.
+- Pause bug from the usability run is not reproducible on current code (to-frontend #10 reply); asked the backend to re-test on the public site.
