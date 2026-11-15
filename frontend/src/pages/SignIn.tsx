@@ -47,7 +47,6 @@ export function SignIn() {
             <li><span><Icon name="shuffle" size={17} /></span><div><strong>Honest statistics.</strong> Every result is checked against thousands of random shuffles.</div></li>
           </ul>
         </div>
-        <div className="cite">Based on n-of-1 trial methodology: Lillie EO et al., Personalized Medicine 2011;8(2):161–173.</div>
       </aside>
 
       <main className="signin-main">

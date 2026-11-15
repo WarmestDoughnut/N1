@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import type { Plan, Results } from '../../types'
+import type { ResultsV15 } from '../../lib/v15'
 import { navigate } from '../../lib/hooks'
 import { firstName, type Session } from '../../lib/session'
 import { Icon, SIGNAL_ICON } from '../../components/Icon'
@@ -37,21 +39,15 @@ export function PatientHome({ session, data }: { session: Session; data: Patient
       <section className="bottom-grid">
         <article className="card">
           <div className="card-title">
-            <div><h3 style={{ fontSize: 18 }}>Latest result</h3>{latest && <p style={{ fontSize: 14 }}>{latest.title}</p>}</div>
-            {lr && <VerdictBadge verdict={lr.verdict} patient small />}
+            <h3 style={{ fontSize: 18 }}>Latest results</h3>
+            {finished.length > 0 && <span className="muted small">{finished.length}</span>}
           </div>
-          {latest && lr ? (
-            <>
-              <p className="headline" style={{ fontSize: 19, marginBottom: 12 }}>{lr.patient_headline}</p>
-              <LatestChart plan={latest} r={lr} />
-              <div className="row mt"><a className="button secondary" href={`#/plans/${latest.id}`}>See full result <Icon name="chevron" size={15} /></a></div>
-            </>
-          ) : (
+          {finished.length === 0 ? (
             <div className="empty" style={{ padding: 24 }}>
               <div className="summary-icon tone-purple"><Icon name="flask" /></div>
               <p>No results yet.</p>
             </div>
-          )}
+          ) : finished.map((p) => <ResultItem key={p.id} plan={p} r={data.results[p.id]} />)}
         </article>
 
         <aside className="card">
@@ -77,6 +73,34 @@ export function PatientHome({ session, data }: { session: Session; data: Patient
       <CareTeamStrip data={data} />
 
     </>
+  )
+}
+
+/** One finished test: collapsed to a title + verdict; expands to the plain result and the clinician's comment. */
+function ResultItem({ plan, r }: { plan: Plan; r: Results }) {
+  const [open, setOpen] = useState(false)
+  const comment = (r as ResultsV15).clinician_comment
+  return (
+    <div className={`result-item ${open ? 'open' : ''}`}>
+      <button className="result-item-head" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <span className="tests-caret"><Icon name="chevron" size={15} /></span>
+        <span className="result-item-title"><strong>{plan.title}</strong><small>{formatDate(plan.window.start)} to {formatDate(plan.window.end)}{comment ? ' · comment from your clinician' : ''}</small></span>
+        <VerdictBadge verdict={r.verdict} patient small />
+      </button>
+      {open && (
+        <div className="result-item-body">
+          <p className="headline" style={{ fontSize: 19, margin: '0 0 12px' }}>{r.patient_headline}</p>
+          <LatestChart plan={plan} r={r} />
+          {comment && (
+            <div className="insight" style={{ marginTop: 14 }}>
+              <span><Icon name="stethoscope" size={17} /></span>
+              <p><strong>{plan.clinician_name} · {formatDate(comment.at)}</strong>{comment.text}</p>
+            </div>
+          )}
+          <div className="row mt"><a className="button secondary" href={`#/plans/${plan.id}`}>See full result <Icon name="chevron" size={15} /></a></div>
+        </div>
+      )}
+    </div>
   )
 }
 

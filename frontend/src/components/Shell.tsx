@@ -93,8 +93,8 @@ export function Shell({ session, subtitle, route, nav, secondary = [], searchPla
           <div className="content">
             {children}
             <footer className="app-footer">
-              Demo mode · datasets are historical and plans run instantly. Not diagnostic: results are worth discussing with your clinician.
-              <br />Data: PMData (Thambawita et al., MMSys 2020, CC BY-NC 4.0) and synthetic patients with known ground truth.
+              Not diagnostic: results are worth discussing with your clinician.
+              <br />Demo data. Includes data from PMData (Thambawita et al., MMSys 2020, CC BY-NC 4.0).
             </footer>
           </div>
         </main>
@@ -169,7 +169,7 @@ function DemoCard() {
   return (
     <div className="sidebar-card">
       <span><Icon name="sparkles" size={15} /> Demo mode</span>
-      <p>Datasets are historical, so a plan can run instantly over its window. {ds.source === 'live' ? 'Connected to the live API.' : 'Showing built-in sample data.'}</p>
+      <p>Plans run instantly on recorded data.</p>
       <div className="row">
         {ds.source === 'live'
           ? <button className="link-btn" onClick={() => setDataSource('fixtures')}>Use sample data <Icon name="chevron" size={13} /></button>
