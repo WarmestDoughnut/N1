@@ -83,11 +83,16 @@ export function Shell({ session, subtitle, route, nav, secondary = [], searchPla
             <Search placeholder={searchPlaceholder} items={searchItems} />
             <div className="top-actions">
               <DataSourceBadge />
-              <span className="divider" />
-              <button className="icon-btn" aria-label={`${notifications} items need attention`} title="Needs attention" onClick={onNotifications}>
-                <Icon name="bell" />
-                {notifications > 0 && <i />}
-              </button>
+              {/* Bell removed from the clinician view at our human's request (the Patients home already shows what needs attention). */}
+              {session.role !== 'clinician' && (
+                <>
+                  <span className="divider" />
+                  <button className="icon-btn" aria-label={`${notifications} items need attention`} title="Needs attention" onClick={onNotifications}>
+                    <Icon name="bell" />
+                    {notifications > 0 && <i />}
+                  </button>
+                </>
+              )}
             </div>
           </header>
           <div className="content">
