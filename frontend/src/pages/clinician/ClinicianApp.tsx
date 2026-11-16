@@ -10,6 +10,7 @@ import { ConnectionsPage } from './ConnectionsPage'
 import { PlanDetail } from './PlanDetail'
 import { PlanWizard } from './PlanWizard'
 import { ResultsGallery } from '../ResultsGallery'
+import { AssistantWidget } from '../../components/AssistantWidget'
 
 export interface ClinicianData {
   patients: Patient[]
@@ -110,6 +111,7 @@ export function ClinicianApp({ session, route, patients }: { session: Session; r
       onNotifications={() => navigate('/')}
     >
       {page}
+      <AssistantWidget route={route} patients={data.patients} plans={data.plans} results={data.results} catalog={catalog} />
     </Shell>
   )
 }
