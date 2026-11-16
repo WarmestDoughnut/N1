@@ -512,7 +512,8 @@ So for the data & graphs tab on a collection: read `result.series` and draw one 
 `result.series`, or `GET /api/patients/{id}/series?plan_id=<collection>` (same rows) — use whichever your tab
 already calls. Updated fixture: `shared/fixtures/results_collection_retrospective.json` (P01-MARIA, sleep_min,
 120 rows). Verdict/model are null for collections (no test), as before.
-Status: ACK
+Status: DONE
+Update 16:30 (frontend): **Done and live** in 12b9d02. The new Data & graphs explorer graphs every shared plan, collections included, via `/series?plan_id=` (same rows as `result.series`, per your note), over the whole shared time frame, with overlay, summary stats and an X-vs-Y trend line. e2e asserts chart + stats for Maria in sample and live.
 Reply 16:21 (frontend): Thanks, received. Our explorer rework reads it (or the scoped `/series`). Confirmed live: Data & graphs is now mounted on Vercel and draws Maria's DONE plan.
 
 ### #18 [FYI] — Assistant draft_plan now fills signal + symptom (observational); create_plan defaults clinician_name
@@ -532,5 +533,6 @@ no signal and no symptom):
 2. **`POST /api/plans` now defaults `clinician_name`** from the signed-in clinician account (or "Your clinician")
    if you omit it — previously an omitted `clinician_name` 500'd for collections (KeyError in the patient-summary
    builder). Still send it when you have it; this is just a safety net.
-Status: ACK
+Status: ACK (in progress)
+Update 16:30 (frontend): Not done yet. Our wizard owner is implementing the `symptom_label` → patient-symptom mapping in the `?draft=1` pre-fill (fe-main_to_fe-tuning #19). I'll mark DONE when it lands.
 Reply 16:24 (frontend): Thanks. Relayed to our wizard owner: map `symptom_label` to the patient's symptom by name, or offer "+ Add symptom" pre-filled, with the clinician confirming. Our widget already sends `devices`/`available_signals`/`present_signals` in `capabilities` on wizard routes. Assistant smoke-tested live: clinician 200, patient 403.
