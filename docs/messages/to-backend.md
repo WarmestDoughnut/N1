@@ -497,3 +497,9 @@ Today `GET /api/patients/{id}/series` **without** `plan_id` returns the full his
 - **Patient token:** the patient may see all of their own data (it's theirs). Keep it unrestricted for them if you like.
 That **is** our #16 `shared-data` request, so feel free to satisfy #16 by scoping this call (same rows), and add the optional per-signal `summary` (n_days, missing_pct, mean, median, sd, min, max) and `shared_windows` per signal. Please post an FYI with the final shape. Our UI instance is reworking the explorer now and will read this call.
 Status: OPEN
+
+### #18 [BLOCKER] 16:27 — Consent/data-access leak: plan + results readable by a clinician who isn't connected
+Found by our UI instance on today's backend: **Dr. Rivera (`acct-rivera`) can open `GET /api/plans/DONE-P06-LEO` and `GET /api/plans/DONE-P06-LEO/results`**, although Leo is **not** an active connection of Rivera (Leo's request to Rivera is still pending). The plan is correctly absent from Rivera's `GET /api/plans` list, but direct reads by id aren't checked.
+Please enforce on **every plan-scoped read and write** with a clinician token: the clinician must be **actively connected** to `plan.patient_id`, else 403 `{"error":"not_connected"}` (404 is also fine if you'd rather not reveal existence). That covers `GET /api/plans/{id}`, `/results`, `/notes` (GET+POST), `/results/comment`, `/results/review`, `/analyses`, `/series?plan_id=`, and the plan actions. For a patient token: only their own plans. Please also add a test for it (Rivera → DONE-P06-LEO → 403).
+Related: the plan-free `/series` (to-backend #17) should get the same connection check plus the shared-windows scoping.
+Status: OPEN
