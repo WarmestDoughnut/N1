@@ -6,7 +6,7 @@ import { DEVICE_ICON, Icon, SIGNAL_ICON } from '../../components/Icon'
 import { StatusChip } from '../../components/Verdict'
 import { ResultsView } from '../../components/ResultsView'
 import { ABCalendar } from '../../components/TestDesign'
-import { deliveryOf, isCollection, splitWindow, v15, v15Plan, type CollectionResults, type Symptom } from '../../lib/v15'
+import { deliveryOf, isCollection, splitWindow, v15, v15Plan, type CollectionResults, type LogEntry, type Symptom } from '../../lib/v15'
 import { NotesPanel } from '../../components/NotesPanel'
 import { CollectionCoverage } from '../../components/CollectionPanel'
 import { useToast } from '../../components/Shell'
@@ -30,6 +30,7 @@ export function PatientPlan({ planId, data }: { planId: string; data: PatientDat
   const [err, setErr] = useState<string | null>(null)
   const [confirm, setConfirm] = useState<'decline' | 'stop' | null>(null)
   const [logOpen, setLogOpen] = useState(false)
+  const [logTick, setLogTick] = useState(0)
 
   const act = async (fn: () => Promise<Plan>, msg: string, key: PlanAction | 'simulate') => {
     if (busy) return
@@ -53,9 +54,9 @@ export function PatientPlan({ planId, data }: { planId: string; data: PatientDat
     (devicesQ.data ?? []).filter((d) => plan.devices.includes(d.id) && d.signals.includes(sig as never))
   const approvedAt = plan.history.find((h) => h.event.startsWith('approve'))?.at
   // v1.6 (fe-main #13): past data is shared at approval. Seeded demo plans keep the prospective flow (backend #15).
-  const seeded = !!(plan as { seeded?: boolean }).seeded
   const split = splitWindow(plan.window)
-  const delivery = seeded ? 'prospective' : deliveryOf(plan)
+  // the server's `delivery` decides (seeded demo plans included); sample mode computes it from the window
+  const delivery = deliveryOf(plan)
   const sharedAt = plan.history.find((h) => h.event.startsWith('shared'))?.at ?? approvedAt
   /** the part still being collected: the new-data part of a mixed window, else the whole window */
   const liveWin = delivery === 'mixed' && split.live ? split.live : plan.window
@@ -78,9 +79,9 @@ export function PatientPlan({ planId, data }: { planId: string; data: PatientDat
             <p className="eyebrow">{plan.clinician_name} is asking</p>
             <h1>{plan.title}</h1>
             <div className="summary-text">{plan.patient_summary}</div>
-            {!seeded && (split.past || split.live) && (
+            {((split.past && delivery !== 'prospective') || split.live) && (
               <div className="mt" style={{ display: 'grid', gap: 6, fontSize: 15.5 }}>
-                {split.past && <div><strong>Your past data</strong> from {formatDate(split.past.start)} to {formatDate(split.past.end)} will be shared as soon as you approve.</div>}
+                {split.past && delivery !== 'prospective' && <div><strong>Your past data</strong> from {formatDate(split.past.start)} to {formatDate(split.past.end)} will be shared as soon as you approve.</div>}
                 {split.live && delivery !== 'retrospective' && <div><strong>New data</strong> will be collected from {formatDate(split.live.start)} to {formatDate(split.live.end)}.{split.past ? ' You can pause or stop that part any time.' : ''}</div>}
               </div>
             )}
@@ -92,9 +93,10 @@ export function PatientPlan({ planId, data }: { planId: string; data: PatientDat
               </>
             )}
             <div className="big-actions">
-              <button className="button success lg" disabled={busy} onClick={() => doAction('approve', 'Approved')}><Icon name="check" /> Approve</button>
+              <button className="button success lg" disabled={busy} onClick={() => doAction('approve', delivery === 'retrospective' ? 'Approved. Your past data was shared.' : 'Approved')}><Icon name="check" /> {running === 'approve' ? 'Approving…' : 'Approve'}</button>
               <button className="button danger lg" disabled={busy} onClick={() => setConfirm('decline')}><Icon name="x" /> Decline</button>
             </div>
+            <RunProgress plan={plan} active={running === 'approve' && delivery === 'retrospective' && !isCollection(plan)} audience="patient" />
           </article>
           <aside className="card">
             <div className="card-title"><div><h3 style={{ fontSize: 18 }}>Exactly what will be shared</h3></div></div>
@@ -155,10 +157,8 @@ export function PatientPlan({ planId, data }: { planId: string; data: PatientDat
                 <li key={d} className="muted small"><span className="ic tone-gray"><Icon name={DEVICE_ICON[d] ?? 'watch'} size={17} /></span>{(devicesQ.data ?? []).find((x) => x.id === d)?.name ?? d}</li>
               ))}
             </ul>
-            <button className="button demo mt" style={{ width: '100%' }} disabled={busy} onClick={() => act(() => api.simulateComplete(planId), 'Test complete. Here are your results.', 'simulate')}>
-              <Icon name="fastForward" /> {running === 'simulate' ? 'Running…' : 'Simulate complete (demo)'}
-            </button>
-            <RunProgress plan={plan} active={running === 'simulate'} audience="patient" />
+            {/* fe-main #21: "Simulate complete" removed; past-only plans run at approval. Private activity log instead. */}
+            <ActivityLog plan={plan} tick={logTick} />
           </aside>
         </section>
       )}
@@ -187,6 +187,7 @@ export function PatientPlan({ planId, data }: { planId: string; data: PatientDat
       )}
 
       {/* fe-main #15: patients can comment on any plan, in every state (FE-3's NotesPanel; deep link ?focus=notes) */}
+      {finished && <ActivityLog plan={plan} tick={logTick} />}
       <NotesPanel planId={plan.id} role="patient" />
 
       {confirm && (
@@ -215,12 +216,42 @@ export function PatientPlan({ planId, data }: { planId: string; data: PatientDat
         </div>
       )}
 
-      {logOpen && <LogModal patientId={plan.patient_id} defaultDate={today ?? plan.window.end} onClose={(msg) => { setLogOpen(false); if (msg) toast(msg) }} />}
+      {logOpen && <LogModal patientId={plan.patient_id} defaultDate={today ?? plan.window.end} onClose={(msg) => { setLogOpen(false); if (msg) { toast(msg); setLogTick((t) => t + 1) } }} />}
     </div>
   )
 }
 
 /** What A, B and a break mean, on the dated calendar (no "A-B-B-A" strings). */
+/** fe-main #21: the patient's own recent logs that count toward this test (same symptom, inside its window).
+ *  Visible only to the patient. Logs come from the Log button here and from the Symptoms and conditions page
+ *  (both go through v15.logSymptom with the symptom id). */
+function ActivityLog({ plan, tick }: { plan: Plan; tick: number }) {
+  const logsQ = useAsync<LogEntry[]>(() => v15.logs(plan.patient_id), [plan.patient_id, tick])
+  const symQ = useAsync<Symptom[]>(() => v15.symptoms(plan.patient_id), [plan.patient_id])
+  const planSym = v15Plan(plan).observational?.symptom_id ?? null
+  const defaultSym = (symQ.data ?? []).find((x) => x.kind !== 'condition')?.id ?? null
+  const counts = (x: LogEntry) => x.date >= plan.window.start && x.date <= plan.window.end
+    && (planSym ? x.symptom_id === planSym : !x.symptom_id || x.symptom_id === defaultSym)
+  const items = (logsQ.data ?? []).filter(counts).slice(0, 5)
+  const name = (sid: string | null) => symQ.data?.find((x) => x.id === sid)?.name ?? (symQ.data?.find((x) => x.id === defaultSym)?.name ?? 'Episode')
+  const when = (x: LogEntry) => {
+    if (!x.logged_at) return formatDate(x.date)
+    const t = new Date(x.logged_at)
+    const at = `${formatDateShort(x.logged_at.slice(0, 10))}, ${t.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`
+    return x.logged_at.slice(0, 10) === x.date ? at : `${at} (for ${formatDateShort(x.date)})`
+  }
+  return (
+    <div className="mt" style={{ borderTop: '1px solid var(--border-2)', paddingTop: 12 }}>
+      <div className="row-between"><strong style={{ fontSize: 15 }}>Your log for this test</strong><span className="muted small">Only you see this list</span></div>
+      {items.length === 0
+        ? <div className="muted small" style={{ marginTop: 6 }}>Nothing logged yet.</div>
+        : <ul style={{ listStyle: 'none', margin: '6px 0 0', padding: 0, display: 'grid', gap: 4, fontSize: 14 }}>
+            {items.map((x, k) => <li key={k}>Logged: <strong>{name(x.symptom_id)}</strong> · {when(x)}{x.note ? <span className="muted"> · {x.note}</span> : null}</li>)}
+          </ul>}
+    </div>
+  )
+}
+
 function PatientCalendar({ plan, today }: { plan: Plan; today?: string | null }) {
   const iv = plan.intervention
   if (!iv?.schedule?.length) return null

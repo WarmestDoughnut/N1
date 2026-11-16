@@ -42,6 +42,21 @@ export const ANALYSIS_ERRORS: Record<string, string> = {
   window_too_short: 'The collection window is too short for this look-back range.',
 }
 
+// ---------- logged events (fe-main #21) ----------
+export interface LogEntry { patient_id: string; date: string; symptom_id: string | null; note?: string; logged_at?: string }
+const LOG_KEY = 'n1.logs'
+/** local wall-clock time as "YYYY-MM-DDTHH:MM:SS" (no zone), so the date part is the patient's own day */
+function localNow() {
+  const d = new Date(), p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+}
+function localLogs(pid: string): LogEntry[] {
+  try { return (JSON.parse(localStorage.getItem(LOG_KEY) ?? '[]') as LogEntry[]).filter((x) => x.patient_id === pid).sort((a, b) => (b.logged_at ?? '').localeCompare(a.logged_at ?? '')) } catch { return [] }
+}
+function rememberLog(e: LogEntry) {
+  try { const xs = JSON.parse(localStorage.getItem(LOG_KEY) ?? '[]') as LogEntry[]; localStorage.setItem(LOG_KEY, JSON.stringify([...xs, e].slice(-200))) } catch { /* ignore */ }
+}
+
 // ---------- v1.6 (to-backend #13): past + future windows ----------
 export type Delivery = 'retrospective' | 'prospective' | 'mixed'
 /** "today" for delivery (backend uses its as_of; the frontend uses the local date) */
@@ -118,12 +133,28 @@ export const v15 = {
       store.symptoms[patientId] = mockSymptoms(patientId).filter((s) => s.id !== symptomId); save()
       return { ok: true as const }
     }, true),
-  /** B1 logging: today's /api/episodes plus symptom_id (v1.4 ignores the extra field). */
+  /** B1 logging: /api/episodes + symptom_id. The ONE call for every log (Log button on a test page and
+   *  FE-3's Symptoms and conditions page), so a test counts it when `symptom_id` = the test's outcome symptom. */
   logSymptom: (body: { patient_id: string; date: string; symptom_id: string; note?: string }) =>
     call<{ ok: true }>('POST', '/api/episodes', body, async () => {
       const { mock } = await import('./mockServer')
       return mock.logEpisode({ patient_id: body.patient_id, date: body.date, note: body.note })
-    }),
+    }).then((r) => { rememberLog({ ...body, note: body.note ?? '', logged_at: localNow() }); return r }),
+  /** The patient's logged events, newest first. `GET /api/patients/{id}/episodes` (requested, fe-tuning #37);
+   *  until it ships, the logs made in this browser. */
+  logs: (patientId: string) =>
+    call<LogEntry[]>('GET', `/api/patients/${enc(patientId)}/episodes`, undefined, async () => localLogs(patientId), true)
+      .then((xs) => [...xs].sort((a, b) => (b.logged_at ?? b.date).localeCompare(a.logged_at ?? a.date)))
+      .catch(() => localLogs(patientId)),
+  /** v1.7 review gate (FE-3's ReviewBox): share the held result with the patient, or mark reviewed without sharing. */
+  releaseResults: (planId: string) =>
+    call<ResultsV15>('POST', `/api/plans/${enc(planId)}/results/release`, undefined, async () => {
+      throw Object.assign(new Error('not_available_yet'), { status: 404 })
+    }, true),
+  reviewWithoutSharing: (planId: string) =>
+    call<ResultsV15>('POST', `/api/plans/${enc(planId)}/results/review`, { release: false }, async () => {
+      throw Object.assign(new Error('not_available_yet'), { status: 404 })
+    }, true),
 
   // B6 notes on any plan, both sides
   notes: (planId: string) =>

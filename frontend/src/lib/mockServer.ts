@@ -161,7 +161,7 @@ const persist = () => { save('n1mock.plans', plans); save('n1mock.results', resu
 
 /** Sample mode mirrors the live API's seeded demo plans (fe-main #14 / backend #15): the fixture plans
  *  (DEMO-P03-AISHA recorded A/B, DEMO-P01-MARIA observational, DEMO-COLLECT-DANA collection) as
- *  `seeded: true`. Seeded plans keep the prospective flow (approve → active → simulate-complete). */
+ *  `seeded: true`. Like any past-only plan they run at approval ("Simulate complete" was removed, fe-main #21). */
 const SEED_FIXTURES = ['plan_intervention', 'plan_observational', 'plan_collection']
 function seedDemoPlans() {
   let added = false
@@ -519,7 +519,9 @@ export const mock = {
     p.history.push({ at: nowIso(), event: { approve: 'approved', decline: 'declined', pause: 'paused', resume: 'resumed', stop: 'stopped' }[action] })
     // v1.6 R2 (mirrors to-backend #13): a window entirely in the past is shared at once on approval,
     // so the plan goes straight to complete with results. (Mixed windows stay active for the new part.)
-    if (action === 'approve' && p.window.end <= localToday() && !(p as { seeded?: boolean }).seeded) {
+    // fe-main #21 removed "Simulate complete", so seeded demo plans (historical windows) also run at approval;
+    // otherwise they would stay active forever. Backend asked to drop its seeded exemption too (fe-tuning #38).
+    if (action === 'approve' && p.window.end <= localToday()) {
       p.status = 'complete'
       p.history.push({ at: nowIso(), event: 'shared' })
       computeResults(p, false)

@@ -1,19 +1,16 @@
-import { useState } from 'react'
-import { api, friendlyError } from '../../api'
+import { api } from '../../api'
 import type { Device, Plan, Results } from '../../types'
 import { navigate, useAsync } from '../../lib/hooks'
 import { Icon } from '../../components/Icon'
 import { StatusChip } from '../../components/Verdict'
 import { ResultsView } from '../../components/ResultsView'
 import { History, PlanFacts, PlanSchedule } from '../../components/PlanSummary'
-import { useToast } from '../../components/Shell'
-import { RunProgress, resultsWithRetry } from '../../components/RunProgress'
+import { resultsWithRetry } from '../../components/RunProgress'
 import { CollectionCoverage } from '../../components/CollectionPanel'
 import { isCollection, type CollectionResults } from '../../lib/v15'
 import type { ClinicianData } from './ClinicianApp'
 
 export function PlanDetail({ planId, data }: { planId: string; data: ClinicianData }) {
-  const toast = useToast()
   const planQ = useAsync<Plan>(() => api.getPlan(planId), [planId])
   const devicesQ = useAsync<Device[]>(() => api.devices(), [])
   const plan = planQ.data
@@ -22,16 +19,9 @@ export function PlanDetail({ planId, data }: { planId: string; data: ClinicianDa
     () => (hasResults ? resultsWithRetry(planId) : Promise.resolve(null)),
     [planId, plan?.status],
   )
-  const [busy, setBusy] = useState(false)
-  const [err, setErr] = useState<string | null>(null)
   const deviceName = (id: string) => devicesQ.data?.find((d) => d.id === id)?.name ?? id
   const patient = data.patients.find((p) => p.id === plan?.patient_id)
 
-  const simulate = async () => {
-    setBusy(true); setErr(null)
-    try { planQ.setData(await api.simulateComplete(planId)); toast('Plan completed (demo). Results are ready.') }
-    catch (e) { setErr(friendlyError(e)) } finally { setBusy(false) }
-  }
 
   if (planQ.error) return <div className="stack"><a href="#/plans">← Test plans</a><div className="alert alert-error">{planQ.error}</div></div>
   if (!plan) return <div className="spinner">Loading plan…</div>
@@ -57,14 +47,9 @@ export function PlanDetail({ planId, data }: { planId: string; data: ClinicianDa
         </div>
         <div className="heading-actions">
           <button className="button secondary" onClick={() => navigate(`/new?from=${plan.id}`)}><Icon name="people" /> Run on another patient</button>
-          {(plan.status === 'active' || plan.status === 'paused') && (
-            <button className="button demo" disabled={busy} onClick={simulate}><Icon name="fastForward" /> {busy ? 'Running…' : 'Simulate complete (demo)'}</button>
-          )}
         </div>
       </section>
-      {busy && <div className="card mb" style={{ padding: '14px 18px' }}><RunProgress plan={plan} active={busy} /></div>}
 
-      {err && <div className="alert alert-error"><Icon name="info" />{err}</div>}
 
       {plan.status === 'pending_approval' && (
         <div className="alert alert-info"><Icon name="bell" /><span className="grow"><strong>Waiting for {patient?.display_name ?? 'the patient'}.</strong> Nothing is shared until they review and approve this plan from their own account.</span></div>

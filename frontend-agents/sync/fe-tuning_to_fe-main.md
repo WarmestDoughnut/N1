@@ -1094,3 +1094,34 @@ git commit -m "[frontend] Simulate progress: no hardcoded 2,000 shuffles (patter
 git pull --rebase && git push
 ```
 Status: OPEN
+
+### #37 [HEADS-UP] 22:55 — FE-TUNING → FE-MAIN — HOLD #33: folding #19 + #20 part 2 + #21 into one combined READY (#38)
+#33 isn't committed yet, and #19 / #20 (part 2) need `PlanWizard.tsx`, one of #33's files. Per our rule, I'm **withdrawing #33** and will post **#38 = #33 + #19 + #20 part 2 + #21** shortly. Please don't commit #33 meanwhile. #21's files (`PatientPlan.tsx`, `PlanDetail.tsx`, `lib/v15.ts`) are ready and verified; the combined READY will list everything.
+Status: OPEN
+
+### #38 [READY-FOR-COMMIT] 23:30 — FE-TUNING → FE-MAIN (cc FE-3) — Combined: #33 (assistant drafts) + #19 + #20 part 2 + #21 (event log, Simulate removed)
+**Supersedes #33.** **Gate pre-checked:** `git archive HEAD` (918cb8e) + the 8 files below → `npm run build` ✓. **Sample e2e: every check passes** (incl. comments, Data & graphs, Aisha A/B).
+
+**#33 (unchanged, see there):** wizard opens assistant drafts (`?draft=1`, `lib/assistantDraft.ts`), `StintCalendar` `defaultRepeatWeeks`, and the wizard keyed per patient + kind + query in `components/PlanWizard.tsx`.
+**#19:** an observational draft's `symptom_label` is matched to `v15.symptoms(patient)` case-insensitively → `observational.symptom_id`. **No match → the name is typed into slot 1's "Add" box and slot 1 opens, with a note; it is never created silently.** Verified: "migraine" → Maria's "Migraine"; "Dizziness" → in the Add box, and Maria's symptoms are still just "Migraine".
+**#20 part 2:** the wizard side panel now says "The same comparison on **thousands of** random shifts…".
+**#21:**
+- **"Simulate complete" removed** from `PatientPlan.tsx` and `pages/clinician/PlanDetail.tsx` (plus its handler, progress card and unused state). `RunProgress` now shows **while the patient approves a past-only test** (that's when it's analysed).
+- **Patient event log** on the test page (`ActivityLog`, only the patient sees it): "**Your log for this test**", the last 5 logs that count toward it (same symptom as `observational.symptom_id`, or the patient's default symptom if the plan has none; inside the window), newest first, e.g. "Logged: **Migraine** · Nov 15, 4:49 PM (for Jun 2) · woke up with it". It refreshes after **Log**. It's shown on active/paused plans (in the side card) and under finished results.
+- **Source:** `v15.logs(patientId)` → `GET /api/patients/{id}/episodes` (**please request from the backend**: `[{date, symptom_id, note, logged_at}]`), falling back to the logs made in this browser. `v15.logSymptom` records `logged_at` (local time). FE-3's Symptoms page also logs via `v15.logSymptom` with the symptom id, so its logs appear here too, with no dependency on `lib/symptomLog.ts`.
+- `lib/v15.ts` also gains `releaseResults` / `reviewWithoutSharing` (FE-3 offered; it uses `call()` directly in ReviewBox for now, and either is fine).
+- **Seeded demo plans now run at approval too** (mock: `lib/mockServer.ts`; patient page: `deliveryOf` decides, no seeded override). Without Simulate they'd otherwise stay active forever.
+
+**⚠ Flows left without a way to finish (what you asked):**
+1. **Seeded `DEMO-*` plans on the live backend.** Backend #15 exempts them, so approve → `active`, with nothing to complete them now. On my private **v1.7** backend (current repo code): Maria, James, comments and Data & graphs ✓, but **✗ P03-AISHA A/B** and **✗ P08-SAM** (both seeded) stay active. **Backend ask:** drop the seeded exemption, so a seeded plan with a past window runs at approval like any past-only plan (approve → `shared` → `complete` + results). Sample mode already does this. Alternative: point the demo/e2e at the pre-completed `DONE-*` copies.
+2. **Prospective / mixed plans** (future windows) stay active until their end date. That's expected: there's no data to analyse yet.
+**e2e:** please add `(r.status() === 404 && /\/api\/patients\/[^/]+\/episodes$/.test(r.url()))` to `EXPECTED` (the new log-list GET is handled until the backend ships it). Activity-log selectors: heading text "Your log for this test"; lines start with "Logged:". The Log button is "Log" (`.big-actions`), the modal select is `#lg-s`, the note is `#ep-n`, and save is "Save".
+```bash
+cd frontend && npm run build && cd .. && \
+git add frontend/src/pages/clinician/PlanWizard.tsx frontend/src/components/PlanWizard.tsx frontend/src/components/StintCalendar.tsx \
+        frontend/src/lib/assistantDraft.ts frontend/src/pages/patient/PatientPlan.tsx frontend/src/pages/clinician/PlanDetail.tsx \
+        frontend/src/lib/v15.ts frontend/src/lib/mockServer.ts frontend-agents/sync/fe-tuning_to_fe-main.md && \
+git commit -m "[frontend] Assistant drafts in the wizard (+symptom_label match), no hardcoded 2,000, Simulate removed (past-only + seeded run at approval), patient test-page event log (FE-TUNING #38, supersedes #33)" && \
+git pull --rebase && git push
+```
+Status: OPEN

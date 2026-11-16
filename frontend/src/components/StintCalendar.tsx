@@ -91,10 +91,12 @@ const COLORS: Record<StintKind, { bg: string; fg: string }> = {
   W: { bg: 'repeating-linear-gradient(45deg, #c9c9d6, #c9c9d6 3px, #ececf2 3px, #ececf2 6px)', fg: '#3c3c47' },
 }
 
-export function StintCalendar({ range, stints, onChange, armA, armB, assignment, onAssignment }: {
+export function StintCalendar({ range, stints, onChange, armA, armB, assignment, onAssignment, defaultRepeatWeeks }: {
   range: { start: string; end: string }
   stints: Stint[]; onChange: (s: Stint[]) => void; armA: string; armB: string
   assignment: Assignment; onAssignment: (a: Assignment) => void
+  /** seeds "Repeat this pattern for N weeks" (e.g. from an assistant draft) */
+  defaultRepeatWeeks?: number
 }) {
   const sorted = useMemo(() => sortStints(stints), [stints])
   const [brush, setBrush] = useState<StintKind>('A')
@@ -103,7 +105,7 @@ export function StintCalendar({ range, stints, onChange, armA, armB, assignment,
   const [selected, setSelected] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
   const [repMode, setRepMode] = useState<'until' | 'weeks'>('weeks')
-  const [repWeeks, setRepWeeks] = useState('')
+  const [repWeeks, setRepWeeks] = useState(defaultRepeatWeeks ? String(defaultRepeatWeeks) : '')
   const [repUntil, setRepUntil] = useState('')
   const [rhythm, setRhythm] = useState<'back' | 'spread'>('back')
   const gridRef = useRef<HTMLDivElement>(null)

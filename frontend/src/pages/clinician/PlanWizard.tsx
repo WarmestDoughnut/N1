@@ -7,6 +7,7 @@ import { Icon } from '../../components/Icon'
 import { DevicePicker, SignalPicker } from '../../components/SourcePicker'
 import { WindowPicker, ABTimeline, Fact, PatientDayPreview, PatternStrip, Slot, SlotEditor, Stepper, StrengthMeter, strengthFor } from '../../components/TestDesign'
 import { asOf, splitWindow, v15, type Symptom } from '../../lib/v15'
+import { takeAssistantDraft } from '../../lib/assistantDraft'
 import { randomizeStints, StintCalendar, stintsToSchedule, stintStats, type Assignment, type Stint } from '../../components/StintCalendar'
 import { useToast } from '../../components/Shell'
 import { getSession, initials } from '../../lib/session'
@@ -238,6 +239,73 @@ export function PlanWizard({ patients, patient: fixed, kind = 'test', onDone }: 
   }, [devices, catalog, finalSignals])
   const droppedSignals = signals.filter((s) => !finalSignals.includes(s))
 
+  // fe-main #16: pre-fill from the physician assistant's draft (read once, then cleared). Dates stay with the
+  // clinician; signals the patient has no data for are dropped with a note; A/B rules still apply.
+  const fromDraft = fixed ? readParam('draft') === '1' : false
+  const [draftNotes, setDraftNotes] = useState<string[] | null>(null)
+  const [draftRepeatWeeks, setDraftRepeatWeeks] = useState<number | undefined>(undefined)
+  useEffect(() => {
+    if (!fromDraft || draftNotes || !prefilled || !catalog.length || !fixed) return
+    const d = takeAssistantDraft()
+    if (!d) { setDraftNotes(['The assistant draft wasn’t found (it may already have been used). Fill in the plan as usual.']); return }
+    const notes = ['Pre-filled from the assistant’s draft. Check each slot; the dates are yours to choose.']
+    const owned = (d.devices ?? []).filter((x) => catalog.some((c) => c.id === x))
+    const devs = owned.length ? owned : fixed.devices
+    setDevices(devs)
+    const avail = availableFor(fixed, devs)
+    const keep = (s?: string | null) => (s && avail.has(s as SignalId) ? (s as SignalId) : null)
+    const dropped = (d.signals ?? []).filter((s) => !avail.has(s as SignalId))
+    if (dropped.length) notes.push(`Left out (no data from ${fixed.display_name.replace(/,.*$/, '')} for these): ${dropped.map(signalLabel).join(', ')}.`)
+    if (d.title) { setTitle(d.title); setTitleTouched(true) }
+    const instr = d.collection?.instructions ?? d.instructions
+    if (instr) setInstructions(instr)
+    const isTestDraft = d.type === 'observational' || d.type === 'intervention'
+    if (isCollection !== (d.type === 'collection')) notes.push(`This draft is ${isTestDraft ? 'a test' : 'a data collection'}, so only its devices, signals and instructions were used here.`)
+    if (isCollection || !isTestDraft) {
+      setSignals((d.signals ?? []).map(keep).filter(Boolean) as SignalId[])
+    } else if (d.type === 'observational' && d.observational) {
+      const o = d.observational
+      const sig = keep(o.signal)
+      if (!sig) notes.push(`${signalLabel(o.signal)} isn’t available for this patient, so choose what might come first (slot 2).`)
+      const clamp = (n: number | undefined, lo: number) => (n == null ? null : Math.max(lo, Math.min(LAG_MAX, Math.round(n))))
+      const minL = clamp(o.min_lag_days ?? 1, 1)
+      const maxL = clamp(o.max_lag_days, minL ?? 1)
+      setType('observational')
+      setObs({ ...EMPTY_OBS, signal: sig, direction: o.direction ?? null, min_lag_days: minL, max_lag_days: maxL })
+      setSignals(sig ? [sig, 'episode'] : [])
+      // fe-main #19 / backend #18: map symptom_label to one of the patient's symptoms (case-insensitive). If none
+      // matches, put the name in slot 1's "Add" box for the clinician to confirm (never create it silently).
+      const want = o.symptom_label?.trim()
+      if (want) {
+        notes.push(`The draft explains “${want}”.`)
+        v15.symptoms(fixed.id).then((xs) => {
+          const hit = xs.filter((x) => x.kind !== 'condition').find((x) => x.name.trim().toLowerCase() === want.toLowerCase())
+          if (hit) setObs((cur) => ({ ...cur, symptom_id: hit.id }))
+          else {
+            setNewSymptom(want); setOpenSlot(1)
+            setDraftNotes((n) => [...(n ?? []), `“${want}” isn’t one of ${fixed.display_name.replace(/,.*$/, '')}’s symptoms yet. It’s filled in under slot 1; press Add to create it, or pick an existing one.`])
+          }
+        }).catch(() => { setNewSymptom(want); setOpenSlot(1) })
+        notes.push('Choose the dates (slot 4).')
+      } else notes.push('Choose which of the patient’s symptoms it explains (slot 1) and the dates (slot 4).')
+    } else if (d.type === 'intervention' && d.intervention) {
+      const i = d.intervention
+      const out = keep(i.outcome_signal)
+      if (!out) notes.push(`${signalLabel(i.outcome_signal)} isn’t available for this patient, so choose the outcome (slot 1).`)
+      setType('intervention')
+      setIv({ ...EMPTY_IV, arm_a: i.arm_a ?? '', arm_b: i.arm_b ?? '', outcome_signal: out, better: i.better ?? null })
+      setSignals(out ? [out] : [])
+      if (i.n_periods && i.period_days != null) {
+        const weeks = Math.max(1, Math.ceil((i.n_periods * (i.period_days + (i.washout_days ?? 0))) / 7))
+        setDraftRepeatWeeks(weeks)
+        notes.push(`Paint the first A and B periods from tomorrow. The draft suggests ${i.n_periods} periods of ${i.period_days} days${i.washout_days ? ` with ${i.washout_days}-day breaks` : ''}, so “Repeat for ${weeks} weeks” is pre-set.`)
+      } else notes.push('Paint the A and B periods from tomorrow on the calendar.')
+    }
+    setDraftNotes(notes)
+    setStep(3)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromDraft, prefilled, catalog.length, draftNotes])
+
   // apply the collection prefill once the patient is set (after the fixed-patient prefill resets the form)
   const [colApplied, setColApplied] = useState(false)
   useEffect(() => {
@@ -323,7 +391,7 @@ export function PlanWizard({ patients, patient: fixed, kind = 'test', onDone }: 
             <Fact k="Explains">{symptom ? `${symptom.name} (at least 5 logged needed)` : <span className="muted">Not chosen yet</span>}</Fact>
             <Fact k="Using">{obs.signal ? `${lbl(obs.signal)}${obs.direction ? `, expected to be ${obs.direction}` : ''}` : <span className="muted">Not chosen yet</span>}</Fact>
             <Fact k="Looks back">{obs.min_lag_days == null || obs.max_lag_days == null ? <span className="muted">Not chosen yet</span> : <>{lagRange(obs.min_lag_days, obs.max_lag_days)} before each episode{obs.max_lag_days > obs.min_lag_days ? ', each window tested and corrected for' : ''}</>}</Fact>
-            <Fact k="Chance check">The same comparison on 2,000 random shifts of {firstName}'s episode dates</Fact>
+            <Fact k="Chance check">The same comparison on thousands of random shifts of {firstName}'s episode dates</Fact>
             <Fact k="Shared with you">{obs.signal ? `${lbl(obs.signal)} and the episode log` : 'The episode log'}, {range ? `${range} only` : 'for the dates you choose'}</Fact>
           </div>
         </aside>
@@ -382,6 +450,11 @@ export function PlanWizard({ patients, patient: fixed, kind = 'test', onDone }: 
 
       <div className={step === 3 && !isCollection ? 'td-wrap' : undefined}>
       <div className="card">
+        {draftNotes && (
+          <div className="alert alert-info mb" role="note" style={{ alignItems: 'flex-start' }}>
+            <Icon name="sparkles" /><div>{draftNotes.map((n, k) => <div key={k}>{n}</div>)}</div>
+          </div>
+        )}
         {step === 0 && (
           <>
             <h2>Which patient?</h2>
@@ -618,7 +691,7 @@ export function PlanWizard({ patients, patient: fixed, kind = 'test', onDone }: 
                   {abView === 'timeline' && schedule.length
                     ? <ABTimeline schedule={schedule} armA={iv.arm_a.trim() || 'Option A'} armB={iv.arm_b.trim() || 'Option B'} />
                     : <StintCalendar range={{ start: addDays(today, 1), end: addDays(today, 180) }} stints={stints} onChange={setStints}
-                        armA={iv.arm_a.trim() || 'Option A'} armB={iv.arm_b.trim() || 'Option B'} assignment={assignment} onAssignment={setAssignment} />}
+                        armA={iv.arm_a.trim() || 'Option A'} armB={iv.arm_b.trim() || 'Option B'} assignment={assignment} onAssignment={setAssignment} defaultRepeatWeeks={draftRepeatWeeks} />}
                   {ss.count > 0 && assignment === 'manual' && !recorded && (
                     <p className="td-note">Order set by hand: results will be marked as <strong>not randomized</strong>. “Randomize for me” gives the strongest result.</p>
                   )}
