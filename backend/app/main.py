@@ -154,6 +154,10 @@ def _apply_delivery(plan):
     win["past_end"] = d["past_end"]
     win["live_start"] = d["live_start"]
     win["live_days"] = _live_days(win)
+    # v1.7 review gate: `patient_released` (clinician has shared the test verdict) + derived
+    # `results_released` (collections are always visible; tests only once released).
+    plan.setdefault("patient_released", False)
+    plan["results_released"] = plan.get("type") == "collection" or bool(plan["patient_released"])
     return d
 
 
@@ -292,6 +296,7 @@ def seed_completed():
         plan = copy.deepcopy(src)
         plan["id"] = cid
         plan["seeded"] = True            # exempt from retrospective rules (a prospective trial that has finished)
+        plan["patient_released"] = True  # pre-reviewed historical results — patient view is populated in the demo
         now = _now()
         plan["created_at"] = now
         plan["status"] = "complete"
@@ -599,15 +604,37 @@ def simulate_complete(plan_id: str):
     return plan
 
 
+def _results_released(plan):
+    """A TEST verdict is held from the patient until the clinician reviews/releases it (v1.7). A
+    data COLLECTION is a raw-data request — it's shared on approval, so there's no verdict to gate."""
+    return plan.get("type") == "collection" or bool(plan.get("patient_released"))
+
+
 @app.get("/api/plans/{plan_id}/results")
-def results(plan_id: str):
+def results(plan_id: str, request: Request):
     plan = STORE.get_plan(plan_id)
     if plan is None:
         return err(404, "not_found")
     r = STORE.get_result(plan_id)
     if r is None:
         return err(404, "no_results")
-    return r
+    released = _results_released(plan)
+    account = current_account(request)
+    is_this_patient = (account is not None and account["role"] == "patient"
+                       and account.get("patient_id") == plan["patient_id"])
+    # Patient asking for a not-yet-released test verdict → a holding state, not the verdict itself
+    # (withheld server-side, not just hidden in the UI).
+    if is_this_patient and not released:
+        return {"plan_id": plan_id, "type": plan.get("type"), "complete": r.get("complete", True),
+                "patient_released": False, "awaiting_review": True,
+                "verdict": None, "headline": None,
+                "patient_headline": "Your results are ready and are being reviewed by your clinician. "
+                                    "They'll share the findings with you shortly.",
+                "observational": None, "intervention": None, "collection": None,
+                "effect_pct": None, "p_value": None, "model": None,
+                "series": [], "null_distribution": [], "warnings": [],
+                "reviewed_at": None}
+    return {**r, "patient_released": released, "awaiting_review": False}
 
 
 # --------------------------------------------------------------------------- #
@@ -810,13 +837,38 @@ async def result_comment(plan_id: str, request: Request):
 
 
 @app.post("/api/plans/{plan_id}/results/review")
-def result_review(plan_id: str):
+async def result_review(plan_id: str, request: Request):
+    """Clinician reviews a result. By default this also RELEASES the test verdict to the patient
+    (the review gate, v1.7) — the clinician's 'I've looked at this, share it' gesture. Pass
+    {"release": false} to mark reviewed without releasing yet."""
     result = STORE.get_result(plan_id)
     if result is None:
         return err(404, "no_results")
+    plan = STORE.get_plan(plan_id)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    release = body.get("release", True)
     result["reviewed_at"] = _now()
     STORE.set_result(plan_id, result)
-    return {"ok": True, "reviewed_at": result["reviewed_at"]}
+    if release and plan is not None:
+        plan["patient_released"] = True
+        STORE.save()
+    return {"ok": True, "reviewed_at": result["reviewed_at"],
+            "patient_released": bool(plan and plan.get("patient_released"))}
+
+
+@app.post("/api/plans/{plan_id}/results/release")
+def result_release(plan_id: str):
+    """Explicit 'share these results with the patient' (v1.7) — releases the held test verdict without
+    requiring a comment. Idempotent."""
+    plan = STORE.get_plan(plan_id)
+    if plan is None:
+        return err(404, "not_found")
+    plan["patient_released"] = True
+    STORE.save()
+    return {"ok": True, "patient_released": True}
 
 
 # --------------------------------------------------------------------------- #
