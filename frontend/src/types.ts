@@ -219,6 +219,10 @@ export interface Results {
   null_distribution: number[]
   series: ResultSeriesPoint[]
   model: ModelResult | null
+  /** v1.7 review gate: a test verdict is withheld from the patient until the clinician releases it.
+   * When `awaiting_review` is true (patient view only), verdict/headline/observational/intervention are null. */
+  awaiting_review?: boolean
+  patient_released?: boolean
 }
 
 export interface Health {

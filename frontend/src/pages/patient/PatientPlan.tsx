@@ -172,6 +172,13 @@ export function PatientPlan({ planId, data }: { planId: string; data: PatientDat
                 <CollectionCoverage results={resultsQ.data as unknown as CollectionResults} />
               </div>
             )
+            : resultsQ.data?.awaiting_review ? (
+              // v1.7: the backend holds a test verdict until the clinician reviews it; show a holding state, not ResultsView.
+              <div className="card"><h1>{plan.title}</h1>
+                <p>{resultsQ.data.patient_headline || 'Your results are ready and are being reviewed by your clinician. They\u2019ll share the findings with you shortly.'}</p>
+                <button className="button secondary" onClick={resultsQ.reload}>Check again</button>
+              </div>
+            )
             : resultsQ.data ? <>
                 {delivery === 'retrospective' && sharedAt && <div className="muted small" style={{ marginBottom: -6 }}>Shared on {formatDate(sharedAt)}</div>}
                 <ResultsView results={resultsQ.data} plan={plan} audience="patient" />

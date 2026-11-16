@@ -28,7 +28,8 @@ export function PatientApp({ session, route, patients }: { session: Session; rou
   useEffect(() => {
     const finished = (plansQ.data ?? []).filter((p) => p.status === 'complete' || p.status === 'stopped')
     Promise.all(finished.map((p) => api.results(p.id).then((r) => [p.id, r] as const).catch((e) => (e instanceof ApiError ? null : null))))
-      .then((pairs) => setResults(Object.fromEntries(pairs.filter(Boolean) as [string, Results][])))
+      // v1.7: results still with the clinician (awaiting_review) carry no verdict; leave them out of "Latest results".
+      .then((pairs) => setResults(Object.fromEntries((pairs.filter(Boolean) as [string, Results][]).filter(([, r]) => !r.awaiting_review))))
   }, [plansQ.data])
 
   const data: PatientData = {
