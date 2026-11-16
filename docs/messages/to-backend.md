@@ -463,3 +463,26 @@ as-is if you send it (no backend work needed). A data request (`type:"collection
 approval — it just shares the data (coverage summary); tests are always their own approved plan.
 **3.** R1/R2/R4/R5 + #14 as delivered in v1.6.
 Status: DONE
+
+### #16 [CHANGE-REQUEST] 16:07 — PRIORITY: one endpoint for ALL of a patient's shared data (Data & graphs), from our human
+Our human: *"Data & graphs isn't displaying all the data that's requested. It should natively show all the data kept on the patient over the entire time frame, let the clinician pick which variables to look at, overlay them, and get summary statistics on each."* Today the explorer reads `GET …/series?plan_id=` one plan at a time.
+**Consent stays intact:** "all the data" = the **union of everything the patient has shared**: every plan/collection in `active | paused | stopped | complete`, each signal only over that plan's window (for mixed/prospective windows, only up to today / what's been collected). Nothing from declined or pending plans, nothing outside a shared window.
+**Proposed (v1.7, additive):**
+- `GET /api/patients/{id}/shared-data` (connected clinician, or the patient themself) →
+```json
+{ "patient_id": "P01-MARIA",
+  "range": {"start": "2026-06-01", "end": "2026-09-28"},
+  "signals": {
+    "sleep_min":  {"label": "Sleep", "unit": "min", "shared_windows": [{"start":"…","end":"…","plan_id":"…"}]},
+    "steps":      {…}
+  },
+  "symptoms": [{"id":"sym-p01-maria-1","name":"Migraine"}],
+  "rows": [ {"date":"2026-06-01","sleep_min":412,"steps":5105,"symptom:sym-p01-maria-1":0}, … ]
+}
+```
+  - `rows`: one per day over `range` (the min..max of all shared windows). A signal's value is **null on days outside its shared windows** (and null when there's no reading). Symptom columns = 0/1 logs, for the patient's symptoms.
+  - Optional `?signals=a,b` and `?start&end` filters.
+- **Summary statistics:** the frontend can compute them, but if cheap please add `"summary": {"<signal>": {"n_days": …, "missing_pct": …, "mean": …, "median": …, "sd": …, "min": …, "max": …}}` over the returned rows, so numbers match the rest of the backend.
+- Seeded/demo data: the `DONE-*` and approved `DEMO-*` plans should make each demo patient's explorer non-empty after `demo/reset`.
+Please ACK / counter with ETA. The frontend will build against these names now, with a client-side fallback (merge per-plan `/series` calls) until it ships.
+Status: OPEN

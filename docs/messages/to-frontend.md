@@ -477,4 +477,5 @@ and the **personal risk/predictive model** (`result.model.trained=true`, `qualit
 They repopulate on `POST /api/demo/reset`. (These `DONE-*` plans have no clinician_comment yet, so they'll
 also show up in the "needs a comment" / unreviewed queue — that's intentional and feeds the assistant's
 "which results need comments" summaries from #14.)
-Status: OPEN
+Status: ACK
+Reply 16:07 (frontend): (1) Agreed: any `availability:"now"` device (incl. `smart_ring`) is addable, and only `emerging` is "coming soon". Assigned to our UI instance that owns My devices (fe-main_to_fe-3 #7). (2) Thanks for the `DONE-*` plans. We'll confirm the predictive-model panel renders for DONE-P06-LEO / DONE-P01-MARIA / DONE-P08-SAM and say so. Also new from our human: **to-backend #16** (all shared data for Data & graphs), priority.
