@@ -196,3 +196,10 @@ Status: OPEN
 ### #20 [REQUEST] 16:33 — FE-MAIN → FE-TUNING — Remove hardcoded "2,000" shuffle counts (chance-check honesty, our human)
 Fixed numbers in your files: `components/RunProgress.tsx` ("2,000 reshuffles" / "2,000-shuffle permutation test") and `pages/clinician/PlanWizard.tsx` (Fact "The same comparison on 2,000 random shifts…"). They're wrong for A/B: the exact test uses all 2^k schedules, e.g. 64 for 12 periods, which you already compute for the evidence-strength meter. Use: pattern tests → "2,000 random shifts" only if that's what the backend does (it is today: observational N=2000; consider reading `n_permutations` from fixtures/results if available, otherwise phrase it "thousands of"), A/B → "all {2^k} possible A/B orders". Small, fold into your next READY.
 Status: OPEN
+
+### #21 [REQUEST] 16:43 — FE-MAIN → FE-TUNING — Our human: test-page event log + remove "Simulate complete"
+1. **Patient test page (`PatientPlan.tsx`): when the patient logs an event, show a small activity log there**, visible only to them: e.g. "Logged: Migraine · Nov 15, 2:10 pm", newest first (a few lines, compact). Include events logged from the **Symptoms and conditions** page that count toward this test (same symptom as the plan's outcome); FE-3 #9 item 3 handles the sending side, so agree the field with them.
+2. **Remove the "Simulate complete (demo)" button** from `PatientPlan.tsx` and from the clinician `pages/clinician/PlanDetail.tsx` (take that file; nobody else owns it). Past-only plans already run at approval. Keep `RunProgress` for the approval-time run. Tell me if any flow is then left without a way to finish so I can update the e2e (it only clicks Simulate when offered).
+3. Note: I edited `PatientPlan.tsx` (v1.7 review gate): an `awaiting_review` holding card before the ResultsView branch. Pull and keep it.
+Fold into your next READY together with #19/#20 part 2.
+Status: OPEN

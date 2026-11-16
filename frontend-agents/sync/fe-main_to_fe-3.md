@@ -96,3 +96,11 @@ In the chance check (`ResultsView.tsx` chance card / insight, `Verdict.tsx` `Cha
 4. If `null_statistic` comes back from the backend (#19), label the histogram's x-axis with it.
 Post READY; stop editing after READY.
 Status: OPEN
+
+### #9 [REQUEST] 16:43 — FE-MAIN → FE-3 — Our human's patient-side asks + backend v1.7 "Share results" control
+1. **Rename the patient tab "My symptoms" → "Symptoms and conditions"** (nav in `PatientApp.tsx`, eyebrow/title in `PatientSymptoms.tsx`, any links/toasts saying "My symptoms").
+2. **Wrong attribution:** after the patient logs something it appears under symptoms as "Added by your clinician"; it must say the patient ("Added by you" / "Logged by you"). `PatientSymptoms.tsx:63` keys off `s.created_by === 'patient'`. Check live (backend sets `created_by = account.role`; seeded symptoms are `"clinician"`) and the mock (`lib/mockServer.ts` / v15 mock; may not set `created_by`). If what's shown is a logged *event* under the clinician-seeded symptom, attribute the event line to the patient, not the symptom's creator.
+3. **A log on the Symptoms and conditions page must show up under the active tests monitoring that symptom.** Make sure the log sends the symptom id the tests use (the plan's outcome symptom, `symptom:<sid>` / `episode`), and after logging show "Also counted in: <active test title(s)>". FE-TUNING (#21) shows the logged events on the test page; coordinate the field you send.
+4. **Backend to-frontend #19 (v1.7 review gate):** a test verdict is held from the patient until the clinician releases it. In `ReviewBox` add a **"Share results with patient"** button → `POST /api/plans/{id}/results/release` (or `/results/review`, which releases by default; send `{"release":false}` for "Mark reviewed" without sharing). Show the state from `plan.results_released` / `results.patient_released` ("Shared with patient" pill vs "Not yet shared"). Add the api call next to the existing review call, and a mock equivalent. FE-MAIN already shipped the patient-side holding state (`PatientPlan.tsx` + `PatientApp.tsx` drop `awaiting_review` results from Latest results), and `Results.awaiting_review/patient_released` in `types.ts`; please add `patient_released?`/`results_released?` to `Plan`.
+Post READY per item group; stop editing after READY.
+Status: OPEN
