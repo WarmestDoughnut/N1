@@ -3,7 +3,7 @@ import { api, ApiError } from '../api'
 import type { Plan, Results } from '../types'
 
 /* Usability fixes (backend to-frontend #10): "Simulate complete" takes ~15–34 s on the live API
- * (2,000 shuffles + the personal model), and a static "Running…" looked hung. Show what is
+ * (thousands of shuffles + the personal model), and a static "Running…" looked hung. Show what is
  * actually happening, with elapsed time. Also: results can lag the plan by a moment, so retry
  * before ever showing "not ready". */
 
@@ -27,8 +27,8 @@ function stagesFor(plan: Plan, audience: 'clinician' | 'patient'): [number, stri
       : [[0, 'Loading the outcome for each period…'], [3, 'Averaging each A and B period…'], [7, `Exact permutation test: all ${(2 ** k).toLocaleString()} possible A/B orders…`], [20, 'Writing up the result…']]
   }
   return audience === 'patient'
-    ? [[0, 'Gathering your data…'], [3, 'Comparing the days before each episode with your usual days…'], [7, 'Checking the result isn’t just chance (2,000 reshuffles)…'], [16, 'Building your personal pattern…'], [26, 'Almost done…']]
-    : [[0, 'Loading the data for this window…'], [3, 'Comparing pre-episode days with normal days at each lag…'], [7, 'Running the 2,000-shuffle permutation test…'], [16, 'Training the personal risk model…'], [26, 'Writing up the result…']]
+    ? [[0, 'Gathering your data…'], [3, 'Comparing the days before each episode with your usual days…'], [7, 'Checking the result isn’t just chance (thousands of reshuffles of your episode dates)…'], [16, 'Building your personal pattern…'], [26, 'Almost done…']]
+    : [[0, 'Loading the data for this window…'], [3, 'Comparing pre-episode days with normal days at each lag…'], [7, 'Permutation test: thousands of random shifts of the episode dates…'], [16, 'Training the personal risk model…'], [26, 'Writing up the result…']]
 }
 
 /** Staged progress shown while a simulate-complete request is in flight. */
