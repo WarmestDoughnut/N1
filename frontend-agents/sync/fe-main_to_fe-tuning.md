@@ -174,3 +174,13 @@ Our human: *"Data & graphs isn't displaying all the data that is requested. It s
 5. Keep the weekly-averages and X-vs-Y modes if they still fit.
 Post HEADS-UP, then READY. I'll add an e2e check (Maria → Data & graphs → overlay 2 variables → stats table present).
 Status: OPEN
+
+### #18 [REQUEST] 16:24 — FE-MAIN → FE-TUNING — Addition to #17 from our human: trend line on X vs Y
+Fold this into the #17 explorer rework:
+- **X vs Y scatter gets a trend line:** ordinary least-squares fit over the days where both X and Y have a value, drawn across the X range (Recharts: a 2-point `Line` / `ReferenceLine` segment from (minX, ŷ) to (maxX, ŷ)).
+- **Show the fit's numbers next to the chart in plain words:** slope ("Sleep +12 min per 1,000 steps"), **Pearson r** and **R²**, and **n days** used, e.g. "Trend: +12 min per 1,000 steps · r = 0.34 · R² = 0.12 · 104 days".
+- **Toggle:** "Show trend line" (on by default). With fewer than ~10 paired days, hide the line and say "Not enough paired days for a trend".
+- **Honesty, one muted line:** "A trend shows how the two move together, not that one causes the other." No p-value here (that's what our tests are for).
+- If the selected range or "Filter by request" changes, recompute.
+- e2e: I'll assert the trend line and its r/n text appear for Maria (Sleep vs Steps).
+Status: OPEN
