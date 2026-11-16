@@ -138,8 +138,8 @@ function ClinicianResults({ results, plan, aside }: { results: Results; plan?: P
                   sub={exact
                     ? (chance.atFloor ? 'possible A/B orders were at least this strong: only the real one' : `possible A/B orders were at least this strong (${chance.pctText})`)
                     : (chance.atFloor ? 'shuffles were at least this strong: the real result beat every one' : `shuffles were at least this strong (${chance.pctText})`)} />
-                <NullHistogram nulls={results.null_distribution} observed={results.effect_pct} sign={sign} height={240} />
-                {nullStatistic && <div className="chart-sub" style={{ textAlign: 'center' }}>Horizontal axis: {nullStatistic}</div>}
+                <NullHistogram nulls={results.null_distribution} observed={results.effect_pct} sign={sign} height={240} exact={exact} />
+                {nullStatistic && <div className="chart-sub" style={{ textAlign: 'center' }}>{nullStatistic === 'effect_pct' ? (exact ? 'Effect in each possible A/B order (%)' : 'Effect in each shuffle (%)') : `Horizontal axis: ${nullStatistic}`}</div>}
               </>
             )}
             {tab === 'model' && results.model && <ModelPanel results={results} />}
@@ -161,19 +161,6 @@ function ClinicianResults({ results, plan, aside }: { results: Results; plan?: P
                 <span><i style={{ background: '#e05a5f' }} />{isObs ? 'Episodes' : 'Periods'} <b>{nUnits}</b></span>
                 <span><i style={{ background: '#c9c9d3' }} />p-value <b>{fmtP(results.p_value)}</b></span>
               </div>
-            </div>
-            <div className={`insight ${passed ? '' : 'warn'}`}>
-              <span><Icon name="sparkles" size={17} /></span>
-              <p>
-                <strong>{passed ? 'Unlikely to be chance' : results.verdict === 'not_enough_data' ? 'Not enough data to judge' : 'Chance explains it easily'}</strong>
-                {exact
-                  ? (chance.atFloor
-                    ? `The strongest result of all ${chance.nText} possible A/B orders.`
-                    : `${chance.kText} of the ${chance.nText} possible A/B orders gave a result at least this strong (${chance.pctText}).`)
-                  : (chance.atFloor
-                    ? `Stronger than all ${chance.nText} shuffles.`
-                    : `A pattern this strong appeared in ${chance.kText} of ${chance.nText} shuffles (${chance.pctText}).`)}
-              </p>
             </div>
           </aside>
         </div>
@@ -260,9 +247,9 @@ function ModelPanel({ results }: { results: Results }) {
     }
     const [title, body] = why[m.reason ?? ''] ?? ['No risk model', `The model wasn't trained: ${m.reason ?? 'not enough data'}.`]
     return (
-      <div className="insight" style={{ marginTop: 4 }}>
-        <span><Icon name="info" size={17} /></span>
-        <p><strong>{title}</strong>{body}</p>
+      <div style={{ marginTop: 4 }}>
+        <div className="chart-title">{title}</div>
+        <p className="muted" style={{ margin: '6px 0 0', maxWidth: 640 }}>{body}</p>
       </div>
     )
   }

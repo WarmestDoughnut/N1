@@ -192,32 +192,48 @@ export function LagScanChart({ lagScan, best }: { lagScan: LagScanEntry[]; best:
 }
 
 // ---------- permutation null histogram ----------
-export function NullHistogram({ nulls, observed, sign, height = 200 }: { nulls: number[]; observed: number; sign: 1 | -1; height?: number }) {
+export function NullHistogram({ nulls, observed, sign, height = 200, exact = false }: { nulls: number[]; observed: number; sign: 1 | -1; height?: number; exact?: boolean }) {
   if (!nulls.length) return <div className="muted small">No shuffle distribution provided.</div>
   const lo = Math.min(...nulls, observed)
   const hi = Math.max(...nulls, observed)
-  const nb = 28
-  const w = (hi - lo) / nb || 1
-  const bins = Array.from({ length: nb }, (_, i) => ({ x: lo + (i + 0.5) * w, n: 0 }))
-  nulls.forEach((v) => { bins[Math.min(nb - 1, Math.floor((v - lo) / w))].n++ })
-  const obsBin = bins[Math.min(nb - 1, Math.floor((observed - lo) / w))]
+  const w = (hi - lo) / 28 || 1
+  // Bin edges are lined up on the real result, so "at least as strong" is whole bars, never part of one.
+  // A shuffle exactly equal to the real result counts as at least as strong (inclusive), on whichever side
+  // "stronger" lies: to the right when a higher effect is the hypothesis (sign +1), to the left when lower (-1).
+  // In an exact test the real order is itself one of the values. Its effect arrives rounded to one decimal, so
+  // when rounding leaves nothing at or beyond it, the most extreme value is the real order and marks the edge.
+  const extreme = sign * Math.max(...nulls.map((v) => sign * v))
+  const edge = exact && sign * extreme < sign * observed ? extreme : observed
+  const left = Math.ceil((edge - lo) / w - 1e-9)
+  const start = edge - left * w
+  const nb = Math.max(left + 1, Math.ceil((hi - start) / w + 1e-9) + (sign === 1 ? 1 : 0))
+  const bins = Array.from({ length: nb }, (_, i) => ({ x: start + (i + 0.5) * w, n: 0, strong: sign === 1 ? i >= left : i < left }))
+  const binOf = (v: number) => {
+    const t = (v - start) / w
+    const i = sign === 1 ? Math.floor(t + 1e-9) : Math.ceil(t - 1e-9) - 1
+    return Math.max(0, Math.min(nb - 1, i))
+  }
+  nulls.forEach((v) => { bins[binOf(v)].n++ })
+  // The same inclusive, sign-aware rule, counted directly from the values.
+  const strongCount = nulls.filter((v) => sign * v >= sign * edge).length
+  const obsBin = bins[Math.max(0, Math.min(nb - 1, sign === 1 ? left : left - 1))]
   return (
     <div>
       <ResponsiveContainer width="100%" height={height}>
         <BarChart data={bins} margin={{ top: 26, right: 22, bottom: 0, left: 22 }} barCategoryGap={1}>
           <XAxis dataKey="x" type="category" tickFormatter={(v: number) => `${Math.round(v)}%`} interval={6} {...axisProps} />
           <YAxis hide />
-          <Tooltip formatter={(v: number) => [v, 'shuffles']} labelFormatter={(x) => `≈ ${pct(Number(x), 0)}`} />
+          <Tooltip formatter={(v: number) => [v, exact ? 'orders' : 'shuffles']} labelFormatter={(x) => `≈ ${pct(Number(x), 0)}`} />
           <Bar dataKey="n" isAnimationActive={false} radius={[3, 3, 0, 0]}>
-            {bins.map((b) => <Cell key={b.x} fill={sign * b.x >= sign * observed ? C.nulStrong : C.nul} />)}
+            {bins.map((b) => <Cell key={b.x} fill={b.strong ? C.nulStrong : C.nul} />)}
           </Bar>
           <ReferenceLine x={obsBin.x} stroke={C.episode} strokeWidth={3}
             label={{ value: `This patient: ${pct(observed)}`, position: observed < (lo + hi) / 2 ? 'insideTopLeft' : 'insideTopRight', fill: C.episode, fontSize: 12.5, fontWeight: 700 }} />
         </BarChart>
       </ResponsiveContainer>
       <div className="legend">
-        <span><i className="box" style={{ background: C.nul }} />Random shuffles</span>
-        <span><i className="box" style={{ background: C.nulStrong }} />At least as strong</span>
+        <span><i className="box" style={{ background: C.nul }} />{exact ? 'Every possible A/B order' : 'Random shuffles'}</span>
+        <span><i className="box" style={{ background: C.nulStrong }} />At least as strong: {strongCount.toLocaleString()} of {nulls.length.toLocaleString()} shown</span>
         <span><i style={{ background: C.episode, width: 3, height: 12 }} />Real result</span>
       </div>
     </div>

@@ -1,13 +1,19 @@
 import { useState } from 'react'
 import type { Plan } from '../../types'
-import { formatLogTime, readSymptomLogs, recordSymptomLog, type SymptomLogEntry } from '../../lib/symptomLog'
 import { friendlyError } from '../../api'
 import { useAsync } from '../../lib/hooks'
-import { v15, v15Plan, type Symptom, type SymptomKind } from '../../lib/v15'
+import { v15, v15Plan, type LogEntry, type Symptom, type SymptomKind } from '../../lib/v15'
 import { formatDate } from '../../lib/util'
 import { Icon } from '../../components/Icon'
 
 const KIND_LABEL: Record<SymptomKind, string> = { symptom: 'Symptom', condition: 'Condition', event: 'Event' }
+
+/** "Nov 15, 2:10 pm" */
+function formatLogTime(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).replace(' AM', ' am').replace(' PM', ' pm')
+}
 
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 
@@ -20,7 +26,11 @@ export function PatientSymptoms({ patientId, plans }: { patientId: string; plans
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const items = q.data ?? []
-  const [logs, setLogs] = useState<SymptomLogEntry[]>(() => readSymptomLogs(patientId))
+  // One source for logged events on every patient page (v15.logs): the server once it can return them,
+  // otherwise what was logged from this browser, including from a test page's Log dialog.
+  const logsQ = useAsync<LogEntry[]>(() => v15.logs(patientId).catch(() => [] as LogEntry[]), [patientId])
+  const logs = logsQ.data ?? []
+  const nameOf = (id: string | null) => items.find((x) => x.id === id)?.name ?? 'Logged event'
   const [logging, setLogging] = useState<Symptom | null>(null)
   const [logDate, setLogDate] = useState(today())
   const [note, setNote] = useState('')
@@ -37,7 +47,7 @@ export function PatientSymptoms({ patientId, plans }: { patientId: string; plans
     setBusy(true); setErr(null)
     try {
       await v15.logSymptom({ patient_id: patientId, date: logDate, symptom_id: logging.id, note: note.trim() || undefined })
-      setLogs(recordSymptomLog(patientId, { symptom_id: logging.id, symptom_name: logging.name, date: logDate, logged_at: new Date().toISOString(), note: note.trim() || undefined }))
+      logsQ.reload()
       setLastLogged({ name: logging.name, tests: testsFor(logging).map((p) => p.title) })
       setLogging(null); setNote(''); setLogDate(today())
     } catch (e) { setErr(friendlyError(e)) } finally { setBusy(false) }
@@ -96,7 +106,7 @@ export function PatientSymptoms({ patientId, plans }: { patientId: string; plans
                     <strong>{s.name}</strong>
                     <small>
                       {s.created_by === 'patient' ? 'Added by you' : 'Added by your clinician'} · {formatDate(s.created_at)}
-                      {logs.find((l) => l.symptom_id === s.id) && <> · Last logged by you {formatLogTime(logs.find((l) => l.symptom_id === s.id)!.logged_at)}</>}
+                      {logs.find((l) => l.symptom_id === s.id) && <> · Last logged by you {(() => { const l = logs.find((x) => x.symptom_id === s.id)!; return l.logged_at ? formatLogTime(l.logged_at) : formatDate(l.date) })()}</>}
                     </small>
                   </span>
                   <span className="chip">{KIND_LABEL[s.kind] ?? s.kind}</span>
@@ -110,10 +120,10 @@ export function PatientSymptoms({ patientId, plans }: { patientId: string; plans
 
       {logs.length > 0 && (
         <article className="card mt">
-          <div className="card-title"><h3 style={{ fontSize: 18 }}>What you logged</h3><span className="muted small">on this device</span></div>
+          <div className="card-title"><h3 style={{ fontSize: 18 }}>What you logged</h3></div>
           {logs.slice(0, 8).map((l, i) => (
             <div key={i} className="patient-row" style={{ gridTemplateColumns: 'minmax(0,1fr) auto', cursor: 'default' }}>
-              <span><strong>{l.symptom_name}</strong><small>Logged by you · {formatLogTime(l.logged_at)}{l.note ? ` · ${l.note}` : ''}</small></span>
+              <span><strong>{nameOf(l.symptom_id)}</strong><small>Logged by you{l.logged_at ? ` · ${formatLogTime(l.logged_at)}` : ''}{l.note ? ` · ${l.note}` : ''}</small></span>
               <span className="muted small">for {formatDate(l.date)}</span>
             </div>
           ))}

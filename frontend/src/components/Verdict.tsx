@@ -44,19 +44,20 @@ export function chanceCount(p: number, n: number, exact = false) {
   return { exact, atFloor, k, n, beaten: n - k, pctText, nText: n.toLocaleString(), kText: k.toLocaleString() }
 }
 
-/** Donut used for the "chance check": share of shuffles (or possible A/B orders) the real result beat.
- *  Pass `n` (results.n_permutations) so it can say "all 2,000" instead of a rounded ">99.9%". */
+/** Donut used for the "chance check". One framing everywhere: the share of shuffles (or possible A/B orders)
+ *  that were at least as strong as the real result. The ring fills by that share, so a strong result is a
+ *  nearly empty ring; the centre is the count, e.g. "0 of 2,000 shuffles as strong", "1 of 64 orders as strong".
+ *  Pass `n` (results.n_permutations) to get the count; without it the centre falls back to the percentage. */
 export function ChanceDonut({ p, n, exact = false, size }: { p: number; n?: number; exact?: boolean; size?: number }) {
   const c = n ? chanceCount(p, n, exact) : null
-  const beat = c ? c.beaten / c.n : Math.max(0, Math.min(1, 1 - p))
+  const share = c ? c.k / c.n : Math.max(0, Math.min(1, p))
   const color = p < 0.05 ? '#149274' : p < 0.15 ? '#d29a2c' : '#9b9ba8'
-  const label = c?.atFloor ? (exact ? `${c.beaten} of ${c.nText}` : `all ${c.nText}`) : beat >= 0.999 ? '>99.9%' : `${(beat * 100).toFixed(beat > 0.99 ? 1 : 0)}%`
-  const unit = exact ? 'possible orders' : 'shuffles'
+  const unit = exact ? 'orders' : 'shuffles'
   return (
-    <div className="donut" style={{ '--progress': `${beat * 100}%`, '--donut': color, ...(size ? { width: size, height: size } : {}) } as React.CSSProperties}>
+    <div className="donut" style={{ '--progress': `${share * 100}%`, '--donut': color, ...(size ? { width: size, height: size } : {}) } as React.CSSProperties}>
       <div>
-        <strong style={label.length > 6 ? { fontSize: '0.8em' } : undefined}>{label}</strong>
-        <span>{c && !c.atFloor ? `of ${c.nText} ${unit} beaten` : c ? `${exact ? 'other orders' : unit} beaten` : 'of shuffles beaten'}</span>
+        <strong>{c ? c.kText : `${(share * 100).toFixed(share < 0.1 ? 1 : 0)}%`}</strong>
+        <span>{c ? `of ${c.nText} ${unit} as strong` : 'of shuffles as strong'}</span>
       </div>
     </div>
   )
