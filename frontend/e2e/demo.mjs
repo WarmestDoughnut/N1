@@ -188,6 +188,12 @@ const comment = `e2e: slept badly before Tuesday's migraine (${Date.now() % 1000
 await patientComment(p1, comment)
 expect.push(['P01-MARIA observational', await clinicianVerdict(p1, '02-maria'), 'Likely real'])
 expect.push(["Clinician sees the patient's comment", (await bodyText()).includes(comment) ? 'yes' : 'no', 'yes'])
+// Data & graphs (our human: all shared data, overlay, summary stats). Maria's test is now shared.
+await page.evaluate(() => { location.hash = '/patients/P01-MARIA/data' }); await sleep(800)
+const dx = await page.waitForSelector('table[aria-label="Summary statistics"] tbody tr', { timeout: 15000 }).then(() => true).catch(() => false)
+const dxLines = await page.evaluate(() => document.querySelectorAll('.recharts-line-curve').length)
+await shot('02b-data-graphs')
+expect.push(['Data & graphs: chart + summary statistics for shared data', dx && dxLines > 0 ? 'yes' : `no (stats=${dx}, lines=${dxLines})`, 'yes'])
 const p2 = await createPlan('James'); await approveAndRun('James', p2)
 expect.push(['P02-JAMES observational', await clinicianVerdict(p2, '03-james'), 'Probably chance'])
 // Amendment fe-main #14: A/B tests are future-only; the demo approves the seeded, recorded A/B plan.
