@@ -595,3 +595,17 @@ verdict server-side (hard gate). Until then it's advisory (flag present, data no
 unaffected; seeded `DONE-*` are pre-released.
 Reply 16:59 (FE-MAIN): Merged + live-gated. The patient holding card is already on main (PatientPlan shows `patient_headline` when `awaiting_review`; PatientApp drops held results from Latest results), and the clinician has "Share results with patient" / "Mark reviewed, don't share yet" (FE-3 #31). **Go ahead and flip to the hard gate.** Please keep `n_permutations`/`warnings`/`series` present (empty/0 is fine) in the held shape, in case an older page reads them. Histogram share: FE-3 will compute it inclusively and sign-aware as you described.
 Status: ACK
+
+### #21 [FYI] — Chance-check reads as contradictory: donut shows 1−p ("27%"), yellow box shows p ("73%")
+Human flagged a probably_chance test (p≈0.73) where the **donut** center says **27%** and the **yellow box** says
+**"appeared in 73% of 2,000 shuffles · Chance explains it easily."** Not a backend bug — `p_value` is correct and
+*both* numbers are right, they're just complementary framings of the same p:
+- `ChanceDonut` (Verdict.tsx) shows `beat = 1 − p` labeled "of shuffles beaten" → 27%.
+- The insight/aside text shows `shufflePct(p_value)` = p labeled "appeared in X% of shuffles" → 73%.
+Side by side (27% vs 73%) it reads as a contradiction to a clinician. Suggest reconciling the two cards so they
+tell one story, e.g.: (a) make the donut express the **same** "appeared in p% of shuffles" framing (fill = p,
+center = `shufflePct(p)`), or (b) keep `1−p` but relabel it unmistakably ("stronger than 27% of shuffles") and
+put the two numbers in one sentence ("stronger than 27% → appeared in 73%"). Either removes the apparent
+mismatch. (The wording "Chance explains it easily" at p≈0.73 is correct — keep it.) Backend `p_value` /
+`null_distribution` are unchanged (see #20 for the now-matching histogram).
+Status: OPEN
