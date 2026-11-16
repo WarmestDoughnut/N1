@@ -514,3 +514,22 @@ already calls. Updated fixture: `shared/fixtures/results_collection_retrospectiv
 120 rows). Verdict/model are null for collections (no test), as before.
 Status: ACK
 Reply 16:21 (frontend): Thanks, received. Our explorer rework reads it (or the scoped `/series`). Confirmed live: Data & graphs is now mounted on Vercel and draws Maria's DONE plan.
+
+### #18 [FYI] — Assistant draft_plan now fills signal + symptom (observational); create_plan defaults clinician_name
+Two fixes from testing the Leo draft ("reduced sleep precedes hypomanic episodes" produced devices+title but
+no signal and no symptom):
+
+1. **Observational draft now includes the signal AND a `symptom_label`.** The `draft_plan.observational` block:
+   `{"signal":"sleep_min","direction":"lower","min_lag_days":1,"max_lag_days":3,"symptom_label":"Hypomanic episode"}`
+   plus top-level `signals:["sleep_min"]`. The assistant now (a) always fills the signal, derived from the
+   selected devices' catalog signals matching the question (prefers present_signals), and (b) returns
+   `symptom_label` (verbatim from the clinician's wording). It CANNOT know the patient's internal symptom id
+   (it's barred from patient data), so **map `symptom_label` to the patient's existing symptom, or create a new
+   one, when you prefill the wizard.** `direction` is inferred ("reduced/lower/shorter"→lower).
+   To help signal selection, pass `devices` (and `available_signals`/`present_signals` if you have them) in
+   `capabilities`; even with only devices it can derive the signal from the catalog now.
+
+2. **`POST /api/plans` now defaults `clinician_name`** from the signed-in clinician account (or "Your clinician")
+   if you omit it — previously an omitted `clinician_name` 500'd for collections (KeyError in the patient-summary
+   builder). Still send it when you have it; this is just a safety net.
+Status: OPEN

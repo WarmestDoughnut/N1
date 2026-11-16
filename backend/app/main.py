@@ -452,6 +452,10 @@ async def create_plan(request: Request):
             return err(403, "not_connected")
     plan = {k: v for k, v in body.items()
             if k not in ("id", "status", "created_at", "history", "patient_summary")}
+    # clinician_name drives the patient-facing summary; default it from the signed-in clinician
+    # (or a neutral fallback) so a request that omits it never 500s in build_patient_summary.
+    if not plan.get("clinician_name"):
+        plan["clinician_name"] = (account or {}).get("name") or "Your clinician"
     # look-back range: 1 <= min <= max <= 30 (v1.9: raised cap from 14 to 30)
     if plan.get("type") == "observational" and plan.get("observational"):
         o = plan["observational"]

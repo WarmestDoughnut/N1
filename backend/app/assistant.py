@@ -108,14 +108,22 @@ containing a `draft_plan` the app can use to pre-fill the create wizard. Shape:
      "signals": ["<signal id>", ...],
      // include ONLY the block matching `type`:
      "observational": {"signal": "<signal id>", "direction": "lower"|"higher",
-                       "min_lag_days": 1, "max_lag_days": 3},
+                       "min_lag_days": 1, "max_lag_days": 3, "symptom_label": "<the symptom/episode>"},
      "intervention":  {"arm_a": "<label>", "arm_b": "<label>", "outcome_signal": "<signal id>",
                        "better": "higher"|"lower", "period_days": 6, "washout_days": 2, "n_periods": 12},
      "collection":    {"instructions": "<one plain line for the patient>"}
   }}
 Draft rules:
-- Use ONLY device ids and signal ids present in the catalog/capabilities above. Prefer signals the
-  patient already has data for (present_signals); never invent a signal or device.
+- Pick the signal to match the clinical quantity in the question (e.g. "reduced sleep" -> a sleep signal
+  like sleep_min; "screen time" -> screen_time_min / late_screen_min). Choose it from the signals the
+  SELECTED devices provide per the DEVICE CATALOG above, preferring any present_signals when given — never
+  invent a signal or a device not in the catalog.
+- An observational draft MUST fill `signals` AND `observational.signal` (do not leave them empty when a
+  selected device provides a signal matching the question). Set `direction` from the question: reduced/
+  lower/less/shorter -> "lower"; more/higher/longer -> "higher".
+- Set `observational.symptom_label` to the symptom or event the question is about (e.g. "Hypomanic episode",
+  "Migraine"), taken verbatim from the clinician's wording. You don't know the patient's internal symptom id
+  (you can't see patient data) — just give the label; the wizard maps it to the patient's symptom or creates it.
 - Respect the design rules: observational max_lag_days 1..30; intervention n_periods >= 10 (default 12).
 - Do NOT put concrete window dates in the draft — the wizard fills the date window from the patient's
   own data. Choose `type` to fit the question (A/B only makes sense for a FUTURE window; for past-only
