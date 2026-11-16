@@ -6,7 +6,8 @@ import { DEVICE_ICON, Icon, SIGNAL_ICON } from '../../components/Icon'
 import { StatusChip } from '../../components/Verdict'
 import { ResultsView } from '../../components/ResultsView'
 import { ABCalendar } from '../../components/TestDesign'
-import { isCollection, v15, v15Plan, type CollectionResults, type Symptom } from '../../lib/v15'
+import { deliveryOf, isCollection, splitWindow, v15, v15Plan, type CollectionResults, type Symptom } from '../../lib/v15'
+import { NotesPanel } from '../../components/NotesPanel'
 import { CollectionCoverage } from '../../components/CollectionPanel'
 import { useToast } from '../../components/Shell'
 import { RunProgress, resultsWithRetry } from '../../components/RunProgress'
@@ -51,10 +52,17 @@ export function PatientPlan({ planId, data }: { planId: string; data: PatientDat
   const devicesFor = (sig: string) =>
     (devicesQ.data ?? []).filter((d) => plan.devices.includes(d.id) && d.signals.includes(sig as never))
   const approvedAt = plan.history.find((h) => h.event.startsWith('approve'))?.at
-  const totalDays = daysBetween(plan.window.start, plan.window.end) + 1
+  // v1.6 (fe-main #13): past data is shared at approval. Seeded demo plans keep the prospective flow (backend #15).
+  const seeded = !!(plan as { seeded?: boolean }).seeded
+  const split = splitWindow(plan.window)
+  const delivery = seeded ? 'prospective' : deliveryOf(plan)
+  const sharedAt = plan.history.find((h) => h.event.startsWith('shared'))?.at ?? approvedAt
+  /** the part still being collected: the new-data part of a mixed window, else the whole window */
+  const liveWin = delivery === 'mixed' && split.live ? split.live : plan.window
+  const totalDays = daysBetween(liveWin.start, liveWin.end) + 1
   const elapsed = approvedAt ? Math.min(totalDays, Math.max(1, daysBetween(approvedAt.slice(0, 10), new Date().toISOString().slice(0, 10)) + 1)) : 0
   /** the plan date that corresponds to "today" (demo data is historical: day N of the plan = N days since approval) */
-  const today = elapsed ? addDays(plan.window.start, elapsed - 1) : null
+  const today = elapsed ? addDays(liveWin.start, elapsed - 1) : null
 
   return (
     <div className="stack">
@@ -70,6 +78,12 @@ export function PatientPlan({ planId, data }: { planId: string; data: PatientDat
             <p className="eyebrow">{plan.clinician_name} is asking</p>
             <h1>{plan.title}</h1>
             <div className="summary-text">{plan.patient_summary}</div>
+            {!seeded && (split.past || split.live) && (
+              <div className="mt" style={{ display: 'grid', gap: 6, fontSize: 15.5 }}>
+                {split.past && <div><strong>Your past data</strong> from {formatDate(split.past.start)} to {formatDate(split.past.end)} will be shared as soon as you approve.</div>}
+                {split.live && delivery !== 'retrospective' && <div><strong>New data</strong> will be collected from {formatDate(split.live.start)} to {formatDate(split.live.end)}.{split.past ? ' You can pause or stop that part any time.' : ''}</div>}
+              </div>
+            )}
             <Instructions plan={plan} />
             {plan.intervention && (
               <>
@@ -110,12 +124,15 @@ export function PatientPlan({ planId, data }: { planId: string; data: PatientDat
         <section className="bottom-grid">
           <article className="card">
             {plan.intervention?.schedule && plan.status === 'active' && today && <TodayBanner plan={plan} today={today} />}
-            <p className="eyebrow">Test in progress</p>
+            <p className="eyebrow">{isCollection(plan) ? 'Sharing in progress' : 'Test in progress'}</p>
             <h1>{plan.title}</h1>
+            {delivery === 'mixed' && sharedAt && split.live && (
+              <div className="alert alert-info mt"><Icon name="check" />Past data shared on {formatDate(sharedAt)} · collecting new data until {formatDate(split.live.end)}. Pause and Stop apply to the new data only.</div>
+            )}
             {plan.status === 'paused' && <div className="alert alert-warn mt"><Icon name="pause" />Paused. Nothing new is being collected until you resume.</div>}
             <div className="row-between mt" style={{ fontSize: 17 }}>
               <strong>Day {elapsed} of {totalDays}</strong>
-              <span className="muted">{formatDate(plan.window.start)} – {formatDate(plan.window.end)}</span>
+              <span className="muted">{formatDate(liveWin.start)} – {formatDate(liveWin.end)}</span>
             </div>
             <div className="progress mt" aria-label="progress"><div style={{ width: `${(elapsed / totalDays) * 100}%` }} /></div>
             <Instructions plan={plan} />
@@ -149,10 +166,21 @@ export function PatientPlan({ planId, data }: { planId: string; data: PatientDat
       {finished && (
         resultsQ.loading && !resultsQ.data ? <div className="spinner">Calculating your result…</div>
           : resultsQ.error ? <div className="alert alert-error">{resultsQ.error}</div>
-            : resultsQ.data && isCollection(plan) ? <div className="card"><h1>{plan.title}</h1><p>Thank you. This collection is finished. Your clinician can now look at your data.</p><CollectionCoverage results={resultsQ.data as unknown as CollectionResults} /></div>
-            : resultsQ.data ? <ResultsView results={resultsQ.data} plan={plan} audience="patient" />
+            : resultsQ.data && isCollection(plan) ? (
+              <div className="card"><h1>{plan.title}</h1>
+                <p>{delivery === 'retrospective' && sharedAt ? `Shared on ${formatDate(sharedAt)}. Your clinician is reviewing it.` : 'Thank you. This collection is finished. Your clinician can now look at your data.'}</p>
+                <CollectionCoverage results={resultsQ.data as unknown as CollectionResults} />
+              </div>
+            )
+            : resultsQ.data ? <>
+                {delivery === 'retrospective' && sharedAt && <div className="muted small" style={{ marginBottom: -6 }}>Shared on {formatDate(sharedAt)}</div>}
+                <ResultsView results={resultsQ.data} plan={plan} audience="patient" />
+              </>
               : <div className="card"><h1>{plan.title}</h1><p>Your result is still being calculated.</p><button className="button secondary" onClick={resultsQ.reload}>Check again</button></div>
       )}
+
+      {/* fe-main #15: patients can comment on any plan, in every state (FE-3's NotesPanel; deep link ?focus=notes) */}
+      <NotesPanel planId={plan.id} role="patient" />
 
       {confirm && (
         <div className="modal-back" onClick={() => setConfirm(null)}>
