@@ -57,7 +57,7 @@ const verdictOnPage = async () => {
 }
 const planIdFromUrl = () => decodeURIComponent(page.url().split('/plans/')[1] ?? '')
 
-async function createPlan(patient, { intervention = false, grayOutDemo = false } = {}) {
+async function createPlan(patient, { intervention = false, grayOutDemo = false, signal = 'Sleep', direction = 'lower' } = {}) {
   await signInAs('clinician', 'Dr. Rivera')
   await page.evaluate(() => { location.hash = '/new' }); await sleep(600)
   await page.waitForSelector('.option', { timeout: 10000 }) // patients load async
@@ -106,7 +106,7 @@ async function createPlan(patient, { intervention = false, grayOutDemo = false }
     await page.waitForSelector('.td-editor .td-chip', { timeout: 10000 })
     await page.evaluate(() => document.querySelector('.td-editor .td-chip').click()); await sleep(300); await click('Done')
     await click('What might come first', '.td-slot')
-    await click('Sleep', '.td-chip'); await click('lower', '.td-editor .seg button'); await click('Done')
+    await click(signal, '.td-chip'); await click(direction, '.td-editor .seg button'); await click('Done')
     await click('How far back', '.td-slot'); await page.type('[aria-label="Shortest look-back"]', '1'); await page.type('[aria-label="Longest look-back"]', '3'); await click('Done')
     await click('Over what dates', '.td-slot'); await click('All past data', '.td-editor button'); await click('Done')
   }
@@ -209,8 +209,20 @@ else {
 }
 // Live only: the seeded phone-only patient (backend v1.4, P08-SAM). Late-night screen time precedes migraines.
 if (LIVE) {
-  const sam = 'DEMO-P08-SAM'
-  await approveAndRun('Sam', sam)
+  // Backend's 4-min demo (docs/demo-script-sam.md): a NEW wizard plan on Sam's past data, iPhone only,
+  // late-night screen time higher → patient approves → clinician sees likely_real → Share → patient sees it.
+  const samNew = await createPlan('Sam', { signal: 'Late-night screen', direction: 'higher' })
+  await approveAndRun('Sam', samNew)
+  await page.evaluate((id) => { location.hash = '/plans/' + encodeURIComponent(id) }, samNew); await sleep(1500)
+  const heldText = await bodyText()
+  const held = /reviewed by your clinician|with your clinician/i.test(heldText)
+  console.log(held ? '✓ Sam sees the "with your clinician" holding state before sharing' : '· Sam saw the result before sharing (gate not active)')
+  expect.push(['P08-SAM late-night screen (live demo)', await clinicianVerdict(samNew, '04c-sam-live'), 'Likely real'])
+  await click('Share results with patient'); await sleep(1200)
+  await signInAs('patient', 'Sam')
+  await page.evaluate((id) => { location.hash = '/plans/' + encodeURIComponent(id) }, samNew); await sleep(1800)
+  if (/being reviewed by your clinician/i.test(await bodyText())) throw new Error('Sam still sees the holding state after Share results')
+  console.log('✓ after Share, Sam sees the result')
     // backend demo (0be204c): Sam's pre-completed test is the honest negative (total screen time → probably chance)
   expect.push(['P08-SAM total screen time, pre-completed (phone only)', await clinicianVerdict('DONE-P08-SAM', '04b-sam'), 'Probably chance'])
 }
