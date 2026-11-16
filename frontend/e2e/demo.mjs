@@ -20,6 +20,7 @@ page.on('pageerror', (e) => errors.push('pageerror: ' + e.message))
 const EXPECTED = (r) =>
   (r.status() === 401 && /\/api\/auth\/login$/.test(r.url())) || // the deliberate wrong-password check
   (r.status() === 404 && /\/results$/.test(r.url())) || // results not computed yet
+  (r.status() === 404 && /\/api\/patients\/[^/]+\/episodes$/.test(r.url())) || // patient log list (falls back to this browser until the backend ships it)
   // v1.5 endpoints the frontend calls before the backend ships them (handled: falls back to the mock)
   (r.status() === 404 && /\/api\/(patients\/[^/]+\/symptoms|plans\/[^/]+\/(notes|analyses|results\/(comment|review)))/.test(r.url()))
 page.on('response', (r) => { if (r.status() >= 400 && !EXPECTED(r)) errors.push(`http ${r.status()}: ${r.url()}`) })
@@ -210,7 +211,8 @@ else {
 if (LIVE) {
   const sam = 'DEMO-P08-SAM'
   await approveAndRun('Sam', sam)
-  expect.push(['P08-SAM late-night screen time (phone only)', await clinicianVerdict(sam, '04b-sam'), 'Likely real'])
+  // no Simulate any more: seeded prospective plans stay active after approval, so read the pre-completed copy
+  expect.push(['P08-SAM late-night screen time (phone only)', await clinicianVerdict('DONE-P08-SAM', '04b-sam'), 'Likely real'])
 }
 await page.evaluate(() => { location.hash = '/' }); await sleep(1500); await shot('05-overview')
 
