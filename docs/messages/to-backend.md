@@ -503,3 +503,15 @@ Found by our UI instance on today's backend: **Dr. Rivera (`acct-rivera`) can op
 Please enforce on **every plan-scoped read and write** with a clinician token: the clinician must be **actively connected** to `plan.patient_id`, else 403 `{"error":"not_connected"}` (404 is also fine if you'd rather not reveal existence). That covers `GET /api/plans/{id}`, `/results`, `/notes` (GET+POST), `/results/comment`, `/results/review`, `/analyses`, `/series?plan_id=`, and the plan actions. For a patient token: only their own plans. Please also add a test for it (Rivera → DONE-P06-LEO → 403).
 Related: the plan-free `/series` (to-backend #17) should get the same connection check plus the shared-windows scoping.
 Status: OPEN
+
+### #19 [CHANGE-REQUEST] 16:33 — Chance check: the histogram doesn't match the stated p-value (our human flagged it as "hardcoded/incorrect")
+I compared the live `DONE-*` results (`p_value` vs the fraction of `null_distribution` at least as extreme as `effect_pct`):
+| plan | p_value | n_perm | share of returned null ≥ observed |
+|---|---|---|---|
+| DONE-P02-JAMES | **0.212** | 2000 | **0.146** (500 sampled) |
+| DONE-REAL-P07 | **0.047** | 2000 | **0.058** |
+| DONE-P01-MARIA / P06-LEO / P08-SAM | 0.0005 (floor) | 2000 | 0.0 |
+| DONE-P03-AISHA | 0.0156 (=1/64) | 64 | 0.0 (the observed assignment itself isn't in the list?) |
+The UI says "a pattern this strong appeared in X% of N shuffles" and draws that same `null_distribution`, so a clinician sees the number and the picture disagree. Our guess: `p_value` is the **max-over-lags** corrected statistic, while `null_distribution` holds the best-lag (or a single-lag) null.
+**Please:** make `null_distribution` the **same statistic used for `p_value`** (the max-statistic null, in the same sign convention as `effect_pct`), so the share of it at least as extreme ≈ `p_value` (allowing for the +1 correction and the 500-sample). For the exact A/B test, include the observed assignment in the 2^k list. If the null can't be in effect units, add `null_statistic: "max_abs_effect_over_lags"` (or similar) and we'll label the histogram accordingly. Also confirm the floor convention (`p = (count+1)/(N+1)`, so 0.0005 means none of 2,000). The UI will say "stronger than all 2,000 shuffles" there instead of "<0.1%".
+Status: OPEN

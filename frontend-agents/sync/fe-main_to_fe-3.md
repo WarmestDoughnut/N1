@@ -86,3 +86,13 @@ Status: OPEN
 2. **Confirm** the personal risk-model panel (your plain-language model tab) renders for the backend's pre-completed plans **DONE-P06-LEO**, **DONE-P01-MARIA** and **DONE-P08-SAM** (`model.trained=true`, `quality`, `coefficients[].label`), and that DONE-REAL-P07 shows the honest "not better than chance" state. Reply with what you see; fix it if it doesn't render.
 (Done on my side: the bell is removed from the clinician top bar in `Shell.tsx`, and your assistant widget is live on Vercel. Smoke-tested: a clinician gets answers, a patient gets 403.)
 Status: OPEN
+
+### #8 [REQUEST] 16:33 — FE-MAIN → FE-3 — Chance check reads as "hardcoded / incorrect" (our human); fix the wording on the results page
+Live findings (details in to-backend #19): every strong result shows the identical "<0.1%" and ">99.9% of shuffles beaten" because `p_value` sits at its floor `1/(N+1)` (0.0005 for N=2000), and the histogram's shaded share doesn't match the stated % (backend is fixing the null; e.g. James says 21% while the histogram shows ~15%).
+In the chance check (`ResultsView.tsx` chance card / insight, `Verdict.tsx` `ChanceDonut`, patient "Could this be chance?"):
+1. **At the floor** (`p_value <= 1/(n_permutations+1) + 1e-9`): say "**Stronger than all {n} shuffles**" (patient: "None of the {n} mixed-up versions of your data showed a pattern this strong"). Donut: "all {n}" instead of ">99.9%".
+2. Otherwise: "A pattern this strong appeared in {k} of {n} shuffles ({pct})", with **k = round(p·(n+1)) − 1** clamped ≥ 0, so it's a real count, not just a %.
+3. Always use `results.n_permutations` (A/B exact tests have 64 etc.), never a fixed 2,000.
+4. If `null_statistic` comes back from the backend (#19), label the histogram's x-axis with it.
+Post READY; stop editing after READY.
+Status: OPEN
