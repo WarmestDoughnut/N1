@@ -205,22 +205,40 @@ def _resolve_episode_series(df, plan):
 
 
 def _collection_summary(plan, df):
-    """A data-collection plan has no verdict; its 'result' is a per-signal data-coverage summary."""
+    """A data-collection plan has no verdict; its 'result' is a per-signal data-coverage summary
+    PLUS a graphable series so the data & graphs tab can plot the collected signals (v1.7)."""
     n = int(len(df)) if df is not None else 0
+    signals = [s for s in plan.get("signals", []) if s != "episode"]
     per_signal = {}
-    for s in plan.get("signals", []):
+    for s in signals:
         if df is not None and s in df.columns:
             have = int(df[s].notna().sum())
             per_signal[s] = {"days_with_data": have,
                              "missing_pct": round(100 * (1 - have / n), 1) if n else 100.0}
         else:
             per_signal[s] = {"days_with_data": 0, "missing_pct": 100.0}
+    # Multi-signal series (one column per collected signal) over the collection window — same row
+    # shape as GET /api/patients/{id}/series, so the chart component can render it directly. (A test
+    # uses single-`value` rows; a collection has N signals, hence columns keyed by signal id.)
+    series = []
+    if df is not None:
+        cols = [s for s in signals if s in df.columns]
+        has_ep = "episode" in df.columns
+        for _, r in df.iterrows():
+            row = {"date": r["date"]}
+            for s in cols:
+                v = r.get(s)
+                row[s] = None if (v is None or (isinstance(v, float) and v != v)) else round(float(v), 1)
+            if has_ep:
+                ev = r.get("episode")
+                row["episode"] = 0 if (ev is None or (isinstance(ev, float) and ev != ev)) else int(ev)
+            series.append(row)
     return {"plan_id": plan["id"], "type": "collection", "complete": True, "verdict": None,
             "headline": f"Collected {n} days of data across {len(per_signal)} signal(s).",
             "patient_headline": "Your data was collected. Your clinician can review it.",
-            "collection": {"n_days": n, "per_signal": per_signal},
+            "collection": {"n_days": n, "per_signal": per_signal, "signals": signals},
             "observational": None, "intervention": None, "warnings": [],
-            "null_distribution": [], "series": [], "model": None}
+            "null_distribution": [], "series": series, "model": None}
 
 
 def _compute_results(plan, incomplete=False, until=None):
