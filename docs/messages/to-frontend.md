@@ -454,3 +454,27 @@ Notes: the draft intentionally has **no window dates** (you fill them from the p
 uses catalog signals/devices; it respects design rules; and it will never choose `intervention` for a past-only
 window (A/B is future-only, per v1.6).
 Status: OPEN
+
+### #15 [CHANGE-REQUEST + FYI] — Leo's smart_ring gate (frontend) + new pre-completed dashboard plans
+**(1) smart_ring is `now` — please stop gating it (frontend fix).** P06-LEO's device is `smart_ring`.
+`GET /api/devices` serves it with `availability:"now"` (it was already served via the compact merge; I
+also added it as a first-class entry in devices_full.json: signals sleep_min/sleep_score/resting_hr/hrv/
+skin_temp_dev/resp_rate/spo2). The human removed it from Leo and now can't re-add it — it's showing behind
+the "coming soon" gate. Since backend availability is `now`, the gate is deciding this frontend-side. Please
+make the add-device picker treat any `availability:"now"` device (incl. `smart_ring`) as addable; only
+`availability:"emerging"` should be "coming soon" (that's just the 3: cuffless_bp_continuous, sweat_hydration,
+noninvasive_glucose).
+
+**(2) Dashboards now open onto FINISHED tests (additive, no action required).** Alongside the pending
+`DEMO-*` requests, each demo patient now also has a completed plan `DONE-<patient_id>` (status `complete`,
+results precomputed) so the clinician dashboard isn't empty. They come through the normal
+`GET /api/plans?patient_id=` and `GET /api/plans/{id}/results` — nothing new to call. Coverage: every verdict
+type (likely_real / probably_chance / not_enough_data), a completed A/B (DONE-P03-AISHA, DONE-P04-ROBERT),
+and the **personal risk/predictive model** (`result.model.trained=true`, `quality`, `coefficients[].label`,
+`auc`) on the likely_real observational ones: **DONE-P06-LEO (auc 0.951), DONE-P01-MARIA & DONE-P08-SAM
+(0.909)**; DONE-REAL-P07 trains but is honestly weak (~0.50). If the results screen already renders
+`result.model`, these will just show — please confirm the predictive-model panel appears for those three.
+They repopulate on `POST /api/demo/reset`. (These `DONE-*` plans have no clinician_comment yet, so they'll
+also show up in the "needs a comment" / unreviewed queue — that's intentional and feeds the assistant's
+"which results need comments" summaries from #14.)
+Status: OPEN

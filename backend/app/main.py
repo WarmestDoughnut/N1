@@ -258,6 +258,38 @@ def _compute_results(plan, incomplete=False, until=None):
 
 
 # --------------------------------------------------------------------------- #
+# Pre-completed demo plans — so BOTH clinician dashboards open onto finished tests (verdicts, graphs,
+# and, for likely_real observational, the personal risk/predictive model), not an empty queue. Built
+# by cloning the exact seeded demo designs (so verdicts match ground truth) into separate DONE-* ids,
+# marked complete with a full approve→shared→complete history. Additive: the pending DEMO-* requests
+# are untouched, so a patient now has both a finished test and a fresh request — a realistic dashboard.
+# Idempotent (skips if the plan+result already exist), so it only pays the compute cost on first seed.
+# --------------------------------------------------------------------------- #
+def seed_completed():
+    import copy
+    for src in SEED_PLANS:
+        cid = f"DONE-{src['patient_id']}"
+        if STORE.get_plan(cid) is not None and STORE.get_result(cid) is not None:
+            continue
+        plan = copy.deepcopy(src)
+        plan["id"] = cid
+        plan["seeded"] = True            # exempt from retrospective rules (a prospective trial that has finished)
+        now = _now()
+        plan["created_at"] = now
+        plan["status"] = "complete"
+        plan["history"] = [{"at": now, "event": e} for e in ("created", "approve", "shared", "complete")]
+        _apply_delivery(plan)
+        STORE.add_plan(plan)
+        try:
+            _compute_results(plan, incomplete=False)
+        except Exception:
+            pass   # a design that can't compute shouldn't block startup; the pending DEMO-* twin still works
+
+
+seed_completed()   # runs once at import (store already seeded above); idempotent on reboot
+
+
+# --------------------------------------------------------------------------- #
 # Health / devices / patients
 # --------------------------------------------------------------------------- #
 @app.get("/api/health")
@@ -297,6 +329,7 @@ def demo_reset():
     STORE.seed(SEED_PLANS)
     STORE.seed_auth(PATIENTS)
     STORE.seed_symptoms(PATIENTS)
+    seed_completed()            # repopulate the finished-test dashboard cards after a reset
     return {"ok": True}
 
 

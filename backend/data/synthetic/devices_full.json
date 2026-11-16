@@ -34,6 +34,11 @@
    "signals": ["sleep_min", "resting_hr", "hrv", "skin_temp_dev", "resp_rate"],
    "notes": "No subscription."},
 
+  {"id": "smart_ring", "name": "Smart ring (Oura-class)", "category": "smart_ring", "availability": "now",
+   "access": "Oura API / Samsung Health / HealthKit",
+   "signals": ["sleep_min", "sleep_score", "resting_hr", "hrv", "skin_temp_dev", "resp_rate", "spo2"],
+   "notes": "Generic smart-ring profile (Oura/Galaxy-class) for patients who track sleep with a ring."},
+
   {"id": "whoop_mg", "name": "WHOOP MG", "category": "band", "availability": "now",
    "access": "WHOOP API",
    "signals": ["sleep_min", "resting_hr", "hrv", "resp_rate", "skin_temp_dev", "spo2", "systolic_bp", "diastolic_bp", "strain_score"],
