@@ -1,5 +1,7 @@
 # N1 Hub demo plan: one doctor, one patient (Dr. Rivera + Maria)
 
+> **Superseded:** the official demo is the backend's `docs/demo-script-sam.md` (Sam + Dr. Rivera). This Maria version is a backup only.
+
 **App:** https://n1-lemon.vercel.app · every demo password is `demo`
 **Doctor:** Dr. Rivera, `rivera@n1hub.demo` (internal medicine)
 **Patient:** Maria, 68, migraines, iPhone + Fitbit, `maria@n1hub.demo`

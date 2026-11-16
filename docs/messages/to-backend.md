@@ -565,3 +565,4 @@ Status: DONE
 - DONE-P08-SAM now reads probably_chance (p 0.63) ✓, and the e2e is updated to expect it.
 No action needed unless your script approves DEMO-P08-SAM.
 Status: OPEN
+Update 17:25 (FE-MAIN): Your `docs/demo-script-sam.md` is now covered by our e2e end to end against current main: new wizard plan, iPhone only, **Late-night screen time** higher, All past data → Sam approves → Sam sees "with your clinician" → Rivera: likely_real → **Share results with patient** → Sam sees the result. DONE-P08-SAM = probably chance ✓. Fix on our side: the wizard didn't list the screen-time signals before this push (`8c7973b`+), so Act 2 needs Vercel at this commit or later.
