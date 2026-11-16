@@ -40,7 +40,7 @@ from app.model import fit_risk_model
 from app.schedule import generate_schedule, smallest_possible_p
 from app.store import Store, build_patient_summary, _now
 
-CONTRACT_VERSION = "1.6"
+CONTRACT_VERSION = "1.7"
 
 app = FastAPI(title="N1 Hub API", version=CONTRACT_VERSION)
 # Local dev by default; ALLOWED_ORIGINS (comma-separated) overrides. Any *.vercel.app deploy
@@ -378,8 +378,120 @@ def patient(patient_id: str):
     return meta
 
 
+def _deny_plan_access(request, plan):
+    """Consent guard (v1.7, to-backend #18): a tokened caller may touch a plan only if a clinician is
+    ACTIVELY connected to the patient, or the caller IS that patient. Tokenless demo calls pass.
+    Returns an error response to return, or None if allowed."""
+    if not _may_write_patient(current_account(request), plan["patient_id"]):
+        return err(403, "not_connected")
+    return None
+
+
+def _shared_signal_windows(patient_id):
+    """Consent map (v1.7, to-backend #17): for a patient, signal -> [{start,end,plan_id}] over every
+    plan they've SHARED (status in SCOPE_OK), each signal only within that plan's already-collected window
+    (clipped to collected_until, and — for prospective/mixed — to today). Plus the symptom ids in scope."""
+    windows, sym_ids = {}, set()
+    as_of = _as_of()
+    for p in STORE.list_plans(patient_id):
+        if p.get("status") not in SCOPE_OK:
+            continue
+        win = p.get("window") or {}
+        start, end = win.get("start"), win.get("end")
+        if not (start and end):
+            continue
+        _apply_delivery(p)
+        eff_end = end
+        if p.get("collected_until"):
+            eff_end = min(eff_end, p["collected_until"])
+        if p.get("delivery") in ("prospective", "mixed"):
+            eff_end = min(eff_end, as_of)     # only the already-elapsed (shared) part is visible
+        if eff_end < start:
+            continue
+        for s in p.get("signals", []):
+            if s != "episode":
+                windows.setdefault(s, []).append({"start": start, "end": eff_end, "plan_id": p["id"]})
+        if p.get("type") == "observational":
+            sid = (p.get("observational") or {}).get("symptom_id") or STORE.default_symptom_id(patient_id)
+            if sid:
+                sym_ids.add(sid)
+    return windows, sym_ids
+
+
+def _shared_data(patient_id, requested=None, start_f=None, end_f=None):
+    """Consent-scoped union of everything a patient has shared — the Data & graphs source
+    (to-backend #16/#17). Values are null on days outside a signal's shared windows."""
+    import statistics as _st
+    full = DAILY.get(patient_id)
+    windows, sym_ids = _shared_signal_windows(patient_id)
+    signals = [s for s in (requested or list(windows.keys())) if s in windows]
+    if full is None or not signals:
+        return {"patient_id": patient_id, "range": None, "signals": {}, "symptoms": [],
+                "rows": [], "summary": {}}
+    starts = [w["start"] for s in signals for w in windows[s]]
+    ends = [w["end"] for s in signals for w in windows[s]]
+    rng_start, rng_end = min(starts), max(ends)
+    if start_f:
+        rng_start = max(rng_start, start_f)
+    if end_f:
+        rng_end = min(rng_end, end_f)
+    df = full[(full["date"] >= rng_start) & (full["date"] <= rng_end)].reset_index(drop=True)
+    sym_hits = {}
+    for sid in sym_ids:
+        if STORE.symptom_maps_episode(sid):
+            sym_hits[sid] = set(df.loc[df["episode"].fillna(0).astype(int) == 1, "date"])
+        else:
+            sym_hits[sid] = {e["date"] for e in STORE.episodes
+                             if e.get("symptom_id") == sid and e.get("patient_id") == patient_id}
+
+    def _in(sig, d):
+        return any(w["start"] <= d <= w["end"] for w in windows[sig])
+    rows = []
+    for _, r in df.iterrows():
+        d = r["date"]
+        row = {"date": d}
+        for s in signals:
+            v = r.get(s) if s in df.columns else None
+            row[s] = (round(float(v), 1) if _in(s, d) and v is not None
+                      and not (isinstance(v, float) and v != v) else None)
+        for sid in sym_ids:
+            row[f"symptom:{sid}"] = int(d in sym_hits[sid])
+        if "episode" in df.columns:
+            ev = r.get("episode")
+            row["episode"] = 0 if (ev is None or (isinstance(ev, float) and ev != ev)) else int(ev)
+        rows.append(row)
+    label = getattr(stats, "_signal_label", lambda s: s)
+    summary, total = {}, len(rows)
+    for s in signals:
+        vals = [row[s] for row in rows if row[s] is not None]
+        nd = len(vals)
+        summary[s] = ({"n_days": nd, "missing_pct": round(100 * (1 - nd / total), 1) if total else 100.0,
+                       "mean": round(_st.mean(vals), 1), "median": round(_st.median(vals), 1),
+                       "sd": round(_st.pstdev(vals), 1) if nd > 1 else 0.0,
+                       "min": min(vals), "max": max(vals)} if vals else
+                      {"n_days": 0, "missing_pct": 100.0, "mean": None, "median": None,
+                       "sd": None, "min": None, "max": None})
+    return {"patient_id": patient_id, "range": {"start": rng_start, "end": rng_end},
+            "signals": {s: {"label": label(s), "shared_windows": windows[s]} for s in signals},
+            "symptoms": [{"id": sid, "name": (STORE.get_symptom(sid) or {}).get("name")} for sid in sym_ids],
+            "rows": rows, "summary": summary}
+
+
+@app.get("/api/patients/{patient_id}/shared-data")
+def shared_data(patient_id: str, request: Request, signals: str = "", start: str = "", end: str = ""):
+    """Consent-scoped union of all a patient's shared data (to-backend #16). Connected clinician or the
+    patient themself only."""
+    if patient_id not in PATIENTS:
+        return err(404, "not_found")
+    account = current_account(request)
+    if not _may_write_patient(account, patient_id):
+        return err(403, "not_connected")
+    requested = [s for s in signals.split(",") if s] or None
+    return _shared_data(patient_id, requested, start or None, end or None)
+
+
 @app.get("/api/patients/{patient_id}/series")
-def series(patient_id: str, signals: str = "", plan_id: str = ""):
+def series(patient_id: str, request: Request, signals: str = "", plan_id: str = ""):
     full = DAILY.get(patient_id)
     if full is None:
         return err(404, "not_found")
@@ -390,6 +502,9 @@ def series(patient_id: str, signals: str = "", plan_id: str = ""):
         plan = STORE.get_plan(plan_id)
         if plan is None or plan["patient_id"] != patient_id:
             return err(404, "not_found")
+        deny = _deny_plan_access(request, plan)   # #18: must be connected / own the plan
+        if deny:
+            return deny
         if plan["status"] not in SCOPE_OK:
             return err(403, "not_in_scope")
         scope = set(plan["signals"])
@@ -400,6 +515,13 @@ def series(patient_id: str, signals: str = "", plan_id: str = ""):
             if sid:
                 symptom_ids.append(sid)
     else:
+        # No plan_id: a CLINICIAN gets the consent-scoped union (shared data only, #17); the PATIENT
+        # (or a tokenless demo call) may see all of their own history.
+        account = current_account(request)
+        if account is not None and account["role"] == "clinician":
+            if not STORE.is_connected(account["id"], patient_id):
+                return err(403, "not_connected")
+            return _shared_data(patient_id, requested or None)
         df = full
         present = set(PATIENTS[patient_id].get("signals_present", [])) | {"episode"}
         cols = [s for s in (requested or list(present)) if s in df.columns]
@@ -513,18 +635,25 @@ def list_plans(request: Request, patient_id: str = ""):
 
 
 @app.get("/api/plans/{plan_id}")
-def get_plan(plan_id: str):
+def get_plan(plan_id: str, request: Request):
     plan = STORE.get_plan(plan_id)
     if plan is None:
         return err(404, "not_found")
+    deny = _deny_plan_access(request, plan)   # #18: direct reads by id are connection-checked too
+    if deny:
+        return deny
     _apply_delivery(plan)
     return plan
 
 
-def _event_endpoint(plan_id, event):
-    plan, error = STORE.transition(plan_id, event)
-    if error == "not_found":
+def _event_endpoint(plan_id, event, request):
+    plan = STORE.get_plan(plan_id)
+    if plan is None:
         return err(404, "not_found")
+    deny = _deny_plan_access(request, plan)
+    if deny:
+        return deny
+    plan, error = STORE.transition(plan_id, event)
     if error == "invalid_transition":
         return err(409, "invalid_transition")
     if event == "stop":
@@ -536,14 +665,18 @@ def _event_endpoint(plan_id, event):
 
 
 @app.post("/api/plans/{plan_id}/approve")
-def approve(plan_id: str):
+def approve(plan_id: str, request: Request):
     """Approve a plan. v1.6: if the window reaches into the past, that past data is 'shared' at
     once — a retrospective plan jumps straight to `complete` with results computed immediately
     (so the patient never sees a collection period); a mixed plan shares the past part now and
     stays `active` for the live part."""
-    plan, error = STORE.transition(plan_id, "approve")
-    if error == "not_found":
+    plan = STORE.get_plan(plan_id)
+    if plan is None:
         return err(404, "not_found")
+    deny = _deny_plan_access(request, plan)
+    if deny:
+        return deny
+    plan, error = STORE.transition(plan_id, "approve")
     if error == "invalid_transition":
         return err(409, "invalid_transition")
     d = _apply_delivery(plan)
@@ -560,31 +693,34 @@ def approve(plan_id: str):
 
 
 @app.post("/api/plans/{plan_id}/decline")
-def decline(plan_id: str):
-    return _event_endpoint(plan_id, "decline")
+def decline(plan_id: str, request: Request):
+    return _event_endpoint(plan_id, "decline", request)
 
 
 @app.post("/api/plans/{plan_id}/pause")
-def pause(plan_id: str):
-    return _event_endpoint(plan_id, "pause")
+def pause(plan_id: str, request: Request):
+    return _event_endpoint(plan_id, "pause", request)
 
 
 @app.post("/api/plans/{plan_id}/resume")
-def resume(plan_id: str):
-    return _event_endpoint(plan_id, "resume")
+def resume(plan_id: str, request: Request):
+    return _event_endpoint(plan_id, "resume", request)
 
 
 @app.post("/api/plans/{plan_id}/stop")
-def stop(plan_id: str):
-    return _event_endpoint(plan_id, "stop")
+def stop(plan_id: str, request: Request):
+    return _event_endpoint(plan_id, "stop", request)
 
 
 @app.post("/api/plans/{plan_id}/simulate-complete")
-def simulate_complete(plan_id: str):
+def simulate_complete(plan_id: str, request: Request):
     """Demo only: instantly run the plan over its historical data and mark it complete."""
     plan = STORE.get_plan(plan_id)
     if plan is None:
         return err(404, "not_found")
+    deny = _deny_plan_access(request, plan)
+    if deny:
+        return deny
     # v1.6: a retrospective plan auto-completes on approve, so a caller that still chains
     # approve → simulate-complete finds it already complete — treat that as an idempotent no-op
     # (recompute + return), never a 409.
@@ -593,7 +729,7 @@ def simulate_complete(plan_id: str):
         return plan
     # allow from active/paused; if still pending, approve first (which itself completes retrospective)
     if plan["status"] == "pending_approval":
-        approve(plan_id)
+        approve(plan_id, request)
         plan = STORE.get_plan(plan_id)
         if plan["status"] == "complete":   # retrospective — approve already finished it
             return plan
@@ -615,6 +751,9 @@ def results(plan_id: str, request: Request):
     plan = STORE.get_plan(plan_id)
     if plan is None:
         return err(404, "not_found")
+    deny = _deny_plan_access(request, plan)   # #18: non-connected clinician can't read results
+    if deny:
+        return deny
     r = STORE.get_result(plan_id)
     if r is None:
         return err(404, "no_results")
@@ -796,9 +935,13 @@ def delete_symptom(patient_id: str, sid: str, request: Request):
 # Notes on a plan, both sides (v1.5 B6)
 # --------------------------------------------------------------------------- #
 @app.get("/api/plans/{plan_id}/notes")
-def list_notes(plan_id: str):
-    if STORE.get_plan(plan_id) is None:
+def list_notes(plan_id: str, request: Request):
+    plan = STORE.get_plan(plan_id)
+    if plan is None:
         return err(404, "not_found")
+    deny = _deny_plan_access(request, plan)
+    if deny:
+        return deny
     return STORE.list_notes(plan_id)
 
 
@@ -809,7 +952,7 @@ async def add_note(plan_id: str, request: Request):
         return err(404, "not_found")
     account = current_account(request)
     if not _may_write_patient(account, plan["patient_id"]):
-        return err(403, "forbidden")
+        return err(403, "not_connected")
     body = await request.json()
     text = (body.get("text") or "").strip()
     if not text:
@@ -824,6 +967,12 @@ async def add_note(plan_id: str, request: Request):
 # --------------------------------------------------------------------------- #
 @app.post("/api/plans/{plan_id}/results/comment")
 async def result_comment(plan_id: str, request: Request):
+    plan = STORE.get_plan(plan_id)
+    if plan is None:
+        return err(404, "not_found")
+    deny = _deny_plan_access(request, plan)
+    if deny:
+        return deny
     result = STORE.get_result(plan_id)
     if result is None:
         return err(404, "no_results")
@@ -841,10 +990,15 @@ async def result_review(plan_id: str, request: Request):
     """Clinician reviews a result. By default this also RELEASES the test verdict to the patient
     (the review gate, v1.7) — the clinician's 'I've looked at this, share it' gesture. Pass
     {"release": false} to mark reviewed without releasing yet."""
+    plan = STORE.get_plan(plan_id)
+    if plan is None:
+        return err(404, "not_found")
+    deny = _deny_plan_access(request, plan)
+    if deny:
+        return deny
     result = STORE.get_result(plan_id)
     if result is None:
         return err(404, "no_results")
-    plan = STORE.get_plan(plan_id)
     try:
         body = await request.json()
     except Exception:
@@ -860,12 +1014,15 @@ async def result_review(plan_id: str, request: Request):
 
 
 @app.post("/api/plans/{plan_id}/results/release")
-def result_release(plan_id: str):
+def result_release(plan_id: str, request: Request):
     """Explicit 'share these results with the patient' (v1.7) — releases the held test verdict without
     requiring a comment. Idempotent."""
     plan = STORE.get_plan(plan_id)
     if plan is None:
         return err(404, "not_found")
+    deny = _deny_plan_access(request, plan)
+    if deny:
+        return deny
     plan["patient_released"] = True
     STORE.save()
     return {"ok": True, "patient_released": True}
@@ -879,6 +1036,9 @@ async def create_analysis(collection_id: str, request: Request):
     coll = STORE.get_plan(collection_id)
     if coll is None:
         return err(404, "not_found")
+    deny = _deny_plan_access(request, coll)
+    if deny:
+        return deny
     if coll.get("type") != "collection":
         return err(422, "not_a_collection")
     # v1.6: analyses run only once the collection's data has been shared (approved). A pending or
@@ -929,14 +1089,24 @@ async def create_analysis(collection_id: str, request: Request):
 
 
 @app.get("/api/plans/{collection_id}/analyses")
-def list_analyses(collection_id: str):
-    if STORE.get_plan(collection_id) is None:
+def list_analyses(collection_id: str, request: Request):
+    plan = STORE.get_plan(collection_id)
+    if plan is None:
         return err(404, "not_found")
+    deny = _deny_plan_access(request, plan)
+    if deny:
+        return deny
     return STORE.list_analyses(collection_id)
 
 
 @app.get("/api/plans/{collection_id}/analyses/{aid}")
-def get_analysis(collection_id: str, aid: str):
+def get_analysis(collection_id: str, aid: str, request: Request):
+    plan = STORE.get_plan(collection_id)
+    if plan is None:
+        return err(404, "not_found")
+    deny = _deny_plan_access(request, plan)
+    if deny:
+        return deny
     a = STORE.get_analysis(aid)
     if a is None or a.get("collection_id") != collection_id:
         return err(404, "not_found")
