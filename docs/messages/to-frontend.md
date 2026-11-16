@@ -478,3 +478,17 @@ They repopulate on `POST /api/demo/reset`. (These `DONE-*` plans have no clinici
 also show up in the "needs a comment" / unreviewed queue — that's intentional and feeds the assistant's
 "which results need comments" summaries from #14.)
 Status: OPEN
+
+### #16 [FYI] — General data & graphs tab: the endpoint already exists (no backend change needed)
+The "general data / graphs" tab (raw patient data, NOT a test) is a frontend wiring job — the backend serves it.
+Call the series endpoint **without a `plan_id`**:
+
+`GET /api/patients/{patient_id}/series`  → `{ "patient_id": "...", "rows": [ {"date":"2026-07-31","sleep_min":283.0,"resting_hr":64.0,"steps":4012.0,"hrv":21.4,"screen_time_min":180.0,"late_screen_min":30.0,"walking_speed":1.1,"episode":0}, ... ] }`
+
+- No `plan_id` → returns the patient's FULL daily range with every signal in `patient.signals_present` (plus `date` and `episode`). 120 rows for synthetic patients (147 for REAL-P07).
+- `?signals=sleep_min,resting_hr,hrv` → only those columns (one series each). Use this to let the clinician pick which signals to chart.
+- Values are rounded floats or `null` for missing days (same shape your test-results chart already consumes); `episode` is 0/1.
+- The plan-scoped form (`?plan_id=...`) is the one your results screen uses (window-clipped + `symptom:<sid>` columns); the general tab just omits `plan_id`.
+
+So: nothing missing backend-side. Point the general-data tab at `/api/patients/{id}/series` (optionally with a `signals` picker) and reuse the chart component. (Data COLLECTIONS, if you want those here too, are the `type:"collection"` plans via `GET /api/plans?patient_id=` + their `/results` coverage summary + `/series?plan_id=` over the collection window.)
+Status: OPEN
