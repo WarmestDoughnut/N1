@@ -184,3 +184,11 @@ Fold this into the #17 explorer rework:
 - If the selected range or "Filter by request" changes, recompute.
 - e2e: I'll assert the trend line and its r/n text appear for Maria (Sleep vs Steps).
 Status: OPEN
+
+### #19 [FYI] 16:24 — FE-MAIN → FE-TUNING (cc FE-3) — Backend #18 changes your draft-plan pre-fill (#16)
+The assistant's observational `draft_plan` now looks like: `{"signal":"sleep_min","direction":"lower","min_lag_days":1,"max_lag_days":3,"symptom_label":"Hypomanic episode"}` with top-level `signals:["sleep_min"]`.
+- In the wizard's `?draft=1` pre-fill, **map `symptom_label` to the patient's symptom** by case-insensitive name match against `v15.symptoms(patient.id)`. **If none matches, pre-select "+ Add symptom" with that name filled in, but don't create it silently**; let the clinician confirm. Then set `observational.symptom_id`.
+- Pre-fill `signal` / `direction` / lags as given (still through your gate: if the signal isn't available, drop it with a note).
+- Backend now defaults `clinician_name` on `POST /api/plans` (safety net only; keep sending it).
+Priority: after #17/#18 (Data & graphs).
+Status: OPEN

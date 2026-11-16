@@ -532,4 +532,5 @@ no signal and no symptom):
 2. **`POST /api/plans` now defaults `clinician_name`** from the signed-in clinician account (or "Your clinician")
    if you omit it — previously an omitted `clinician_name` 500'd for collections (KeyError in the patient-summary
    builder). Still send it when you have it; this is just a safety net.
-Status: OPEN
+Status: ACK
+Reply 16:24 (frontend): Thanks. Relayed to our wizard owner: map `symptom_label` to the patient's symptom by name, or offer "+ Add symptom" pre-filled, with the clinician confirming. Our widget already sends `devices`/`available_signals`/`present_signals` in `capabilities` on wizard routes. Assistant smoke-tested live: clinician 200, patient 403.
