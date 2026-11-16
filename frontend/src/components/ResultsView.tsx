@@ -1,10 +1,10 @@
 import { useState, type ReactNode } from 'react'
 import type { Plan, Results } from '../types'
-import { ChanceDonut, VerdictBadge } from './Verdict'
+import { chanceCount, ChanceDonut, isExactTest, VerdictBadge } from './Verdict'
 import { ScheduleTimeline } from './ScheduleTimeline'
 import { Icon, SIGNAL_COLOR, SIGNAL_ICON } from './Icon'
 import { ABMeansChart, ArmSeriesChart, CoefficientChart, LagScanChart, NullHistogram, PeriodMeansChart, SignalChart } from './charts'
-import { formatValue, pct, shufflePct, signalLabel, SIGNAL_INFO, VERDICT_INFO, warningLabel } from '../lib/util'
+import { formatValue, pct, signalLabel, SIGNAL_INFO, VERDICT_INFO, warningLabel } from '../lib/util'
 
 interface Props {
   results: Results
@@ -52,6 +52,10 @@ function ClinicianResults({ results, plan, aside }: { results: Results; plan?: P
   ]
   const [tab, setTab] = useState<Tab>('time')
   const passed = results.p_value < 0.05
+  const exact = isExactTest(results.type, results.n_permutations)
+  const chance = chanceCount(results.p_value, results.n_permutations, exact)
+  // v1.6+: what the histogram's horizontal axis measures, when the backend says (to-backend #19)
+  const nullStatistic = (results as Results & { null_statistic?: string | null }).null_statistic
   const nUnits = isObs ? results.n_episodes ?? 0 : (iv?.n_periods_a ?? 0) + (iv?.n_periods_b ?? 0)
 
   return (
@@ -80,7 +84,7 @@ function ClinicianResults({ results, plan, aside }: { results: Results; plan?: P
         {isObs
           ? <Summary icon="calendar" tone="tone-yellow" k="Strongest lag" v={obs ? `${obs.best_lag_days} day${obs.best_lag_days > 1 ? 's' : ''}` : '—'} s="before episodes" />
           : <Summary icon={SIGNAL_ICON[signal] ?? 'activity'} tone="tone-yellow" k="A → B average" v={iv ? `${formatValue(signal, iv.mean_a)} → ${formatValue(signal, iv.mean_b)}` : '—'} s={`${armA} → ${armB}`} small />}
-        <Summary icon="shuffle" tone={passed ? 'tone-green' : 'tone-gray'} k="Permutation p" v={fmtP(results.p_value)} s={`${results.n_permutations.toLocaleString()} shuffles`} />
+        <Summary icon="shuffle" tone={passed ? 'tone-green' : 'tone-gray'} k="Permutation p" v={fmtP(results.p_value)} s={`${chance.nText} ${exact ? 'possible A/B orders' : 'shuffles'}`} />
         <Summary icon={isObs ? 'heart' : 'grid'} tone="tone-coral" k={isObs ? 'Episodes' : 'Periods'} v={String(nUnits)}
           s={isObs ? `over ${results.n_days} days` : `${iv?.n_periods_a ?? 0} A · ${iv?.n_periods_b ?? 0} B`} />
       </section>
@@ -130,8 +134,12 @@ function ClinicianResults({ results, plan, aside }: { results: Results; plan?: P
             )}
             {tab === 'chance' && (
               <>
-                <ChartHead k="Where the real result falls among random shuffles" v={`${shufflePct(results.p_value)}`} sub={`of ${results.n_permutations.toLocaleString()} shuffles were at least this strong`} />
+                <ChartHead k={exact ? 'Where the real result falls among every possible A/B order' : 'Where the real result falls among random shuffles'} v={`${chance.kText} of ${chance.nText}`}
+                  sub={exact
+                    ? (chance.atFloor ? 'possible A/B orders were at least this strong: only the real one' : `possible A/B orders were at least this strong (${chance.pctText})`)
+                    : (chance.atFloor ? 'shuffles were at least this strong: the real result beat every one' : `shuffles were at least this strong (${chance.pctText})`)} />
                 <NullHistogram nulls={results.null_distribution} observed={results.effect_pct} sign={sign} height={240} />
+                {nullStatistic && <div className="chart-sub" style={{ textAlign: 'center' }}>Horizontal axis: {nullStatistic}</div>}
               </>
             )}
             {tab === 'model' && results.model && <ModelPanel results={results} />}
@@ -146,7 +154,7 @@ function ClinicianResults({ results, plan, aside }: { results: Results; plan?: P
               <span className={`pill ${passed ? 'pill-green' : results.p_value < 0.15 ? 'pill-yellow' : 'pill-gray'}`}>{passed ? 'Passed' : results.p_value < 0.15 ? 'Borderline' : 'Not passed'}</span>
             </div>
             <div className="donut-row">
-              <ChanceDonut p={results.p_value} />
+              <ChanceDonut p={results.p_value} n={results.n_permutations} exact={exact} />
               <div className="range-list">
                 <span><i style={{ background: '#6258df' }} />Effect <b>{pct(results.effect_pct)}</b></span>
                 {isObs && obs && <span><i style={{ background: '#d29a2c' }} />Lag <b>{obs.best_lag_days} d</b></span>}
@@ -158,7 +166,13 @@ function ClinicianResults({ results, plan, aside }: { results: Results; plan?: P
               <span><Icon name="sparkles" size={17} /></span>
               <p>
                 <strong>{passed ? 'Unlikely to be chance' : results.verdict === 'not_enough_data' ? 'Not enough data to judge' : 'Chance explains it easily'}</strong>
-                A pattern this strong appeared in {passed ? 'only ' : ''}{shufflePct(results.p_value)} of {results.n_permutations.toLocaleString()} random shuffles.
+                {exact
+                  ? (chance.atFloor
+                    ? `The strongest result of all ${chance.nText} possible A/B orders.`
+                    : `${chance.kText} of the ${chance.nText} possible A/B orders gave a result at least this strong (${chance.pctText}).`)
+                  : (chance.atFloor
+                    ? `Stronger than all ${chance.nText} shuffles.`
+                    : `A pattern this strong appeared in ${chance.kText} of ${chance.nText} shuffles (${chance.pctText}).`)}
               </p>
             </div>
           </aside>
@@ -281,6 +295,8 @@ function PatientResults({ results, plan }: { results: Results; plan?: Plan | nul
   const iv = results.intervention
   const cfg = plan?.intervention
   const passed = results.p_value < 0.05
+  const exact = isExactTest(results.type, results.n_permutations)
+  const chance = chanceCount(results.p_value, results.n_permutations, exact)
   return (
     <div className="stack">
       <div className="card">
@@ -317,12 +333,20 @@ function PatientResults({ results, plan }: { results: Results; plan?: Plan | nul
         <aside className="card">
           <div className="card-title"><div><h3 style={{ fontSize: 18 }}>Could this be chance?</h3></div></div>
           <div className="donut-row" style={{ paddingTop: 4 }}>
-            <ChanceDonut p={results.p_value} />
+            <ChanceDonut p={results.p_value} n={results.n_permutations} exact={exact} />
             <p style={{ margin: 0, fontSize: 15.5, color: '#4c4c58' }}>
-              We mixed up your data {results.n_permutations.toLocaleString()} times.
-              {passed
-                ? ` A pattern this strong showed up ${shufflePct(results.p_value).startsWith('<') ? shufflePct(results.p_value).replace('<', 'less than ') : `only ${shufflePct(results.p_value)}`} of the time, so it's unlikely to be luck.`
-                : ` A pattern like this showed up ${shufflePct(results.p_value)} of the time, so it could easily be luck.`}
+              {exact ? `We checked all ${chance.nText} possible orders of A and B.` : `We mixed up your data ${chance.nText} times.`}
+              {exact
+                ? (chance.atFloor
+                  ? ' The order you actually followed gave the strongest result of them all, so it\'s unlikely to be luck.'
+                  : passed
+                    ? ` Only ${chance.kText} of them gave a result this strong (${chance.pctText}), so it's unlikely to be luck.`
+                    : ` ${chance.kText} of them gave a result this strong (${chance.pctText}), so it could easily be luck.`)
+                : (chance.atFloor
+                  ? ` None of the ${chance.nText} mixed-up versions of your data showed a pattern this strong, so it's unlikely to be luck.`
+                  : passed
+                    ? ` A pattern this strong showed up in only ${chance.kText} of them (${chance.pctText}), so it's unlikely to be luck.`
+                    : ` A pattern like this showed up in ${chance.kText} of them (${chance.pctText}), so it could easily be luck.`)}
             </p>
           </div>
           <div className="row">

@@ -5,7 +5,7 @@ import { deliveryOf, sharedOn } from '../../components/DeliveryBadge'
 import { navigate } from '../../lib/hooks'
 import { firstName, type Session } from '../../lib/session'
 import { Icon, SIGNAL_ICON } from '../../components/Icon'
-import { ChanceDonut, StatusChip, VerdictBadge } from '../../components/Verdict'
+import { ChanceDonut, isExactTest, StatusChip, VerdictBadge } from '../../components/Verdict'
 import { SignalChart, ABMeansChart } from '../../components/charts'
 import { describe } from '../../components/ResultsView'
 import { formatDate, SIGNAL_INFO } from '../../lib/util'
@@ -65,7 +65,7 @@ export function PatientHome({ session, data }: { session: Session; data: Patient
           )}
           {latest && lr && (
             <div className="donut-row" style={{ borderTop: '1px solid var(--border-2)', marginTop: 14 }}>
-              <ChanceDonut p={lr.p_value} />
+              <ChanceDonut p={lr.p_value} n={lr.n_permutations} exact={isExactTest(lr.type, lr.n_permutations)} />
               <p style={{ margin: 0, fontSize: 14.5, color: '#5d5e6b' }}>Chance check</p>
             </div>
           )}
