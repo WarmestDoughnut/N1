@@ -120,6 +120,16 @@ async function approveAndRun(patient, id) {
   const canSimulate = await page.evaluate(() => [...document.querySelectorAll('button')].some((b) => b.textContent.includes('Simulate complete') && !b.disabled))
   if (canSimulate) { await click('Simulate complete'); await sleep(1800) } else await sleep(1500)
 }
+// Patient comments (our human asked us to make sure patients can comment on tests).
+async function patientComment(id, text) {
+  // assumes the patient is signed in (right after approveAndRun)
+  await page.evaluate((id) => { location.hash = '/plans/' + encodeURIComponent(id) }, id); await sleep(900)
+  await page.waitForSelector('[aria-label="Add a note"]', { timeout: 10000 })
+  await page.type('[aria-label="Add a note"]', text)
+  await click('Send comment'); await sleep(900)
+  if (!(await bodyText()).includes(text)) throw new Error('patient comment did not appear on the patient page')
+  console.log('✓ patient can comment on a test')
+}
 async function clinicianVerdict(id, name) {
   await signInAs('clinician', 'Dr. Rivera')
   await page.evaluate((id) => { location.hash = '/plans/' + encodeURIComponent(id) }, id); await sleep(1800)
@@ -174,7 +184,10 @@ console.log('✓ clinician accepts → patient appears in wizard; pending patien
 
 const expect = []
 const p1 = await createPlan('Maria', { grayOutDemo: true }); await approveAndRun('Maria', p1)
+const comment = `e2e: slept badly before Tuesday's migraine (${Date.now() % 100000})`
+await patientComment(p1, comment)
 expect.push(['P01-MARIA observational', await clinicianVerdict(p1, '02-maria'), 'Likely real'])
+expect.push(["Clinician sees the patient's comment", (await bodyText()).includes(comment) ? 'yes' : 'no', 'yes'])
 const p2 = await createPlan('James'); await approveAndRun('James', p2)
 expect.push(['P02-JAMES observational', await clinicianVerdict(p2, '03-james'), 'Probably chance'])
 // Amendment fe-main #14: A/B tests are future-only; the demo approves the seeded, recorded A/B plan.
