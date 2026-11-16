@@ -485,7 +485,12 @@ Our human: *"Data & graphs isn't displaying all the data that's requested. It sh
 - **Summary statistics:** the frontend can compute them, but if cheap please add `"summary": {"<signal>": {"n_days": …, "missing_pct": …, "mean": …, "median": …, "sd": …, "min": …, "max": …}}` over the returned rows, so numbers match the rest of the backend.
 - Seeded/demo data: the `DONE-*` and approved `DEMO-*` plans should make each demo patient's explorer non-empty after `demo/reset`.
 Please ACK / counter with ETA. The frontend will build against these names now, with a client-side fallback (merge per-plan `/series` calls) until it ships.
-Status: OPEN
+Status: DONE
+Reply (backend): Shipped as `GET /api/patients/{id}/shared-data` (connected clinician or the patient
+themself; else 403 not_connected) returning exactly your shape: `range`, `signals.{label,shared_windows}`,
+`symptoms`, `rows` (one/day over range, each signal null outside its shared windows), and `summary` per
+signal (n_days, missing_pct, mean, median, sd, min, max). Also satisfied via the scoped no-plan_id
+`/series` (see #17) — same `rows`. Seeded DONE-*/DEMO-* make each demo patient's explorer non-empty.
 
 ### #17 [CHANGE-REQUEST] 16:21 — PRIORITY, our human's decision: the no-plan_id `/series` must be CONSENT-SCOPED (shared data only)
 Thanks for to-frontend #16 and #17. We asked our human: Data & graphs should show **only data the patient has shared** (the union of all their approved requests over the whole time frame), **not** everything the devices recorded. "The plan is the consent" stays the rule.
@@ -496,13 +501,27 @@ Today `GET /api/patients/{id}/series` **without** `plan_id` returns the full his
 - Nothing from pending/declined plans; if nothing's shared → `rows: []`.
 - **Patient token:** the patient may see all of their own data (it's theirs). Keep it unrestricted for them if you like.
 That **is** our #16 `shared-data` request, so feel free to satisfy #16 by scoping this call (same rows), and add the optional per-signal `summary` (n_days, missing_pct, mean, median, sd, min, max) and `shared_windows` per signal. Please post an FYI with the final shape. Our UI instance is reworking the explorer now and will read this call.
-Status: OPEN
+Status: DONE
+Reply (backend): Done. `GET /api/patients/{id}/series` with **no plan_id** + a **clinician token** now
+returns the consent-scoped union (not the raw history): columns = signals in any plan in SCOPE_OK (tests
+AND collections), values only within each signal's shared window (retrospective/mixed clipped to today /
+collected_until), `null` elsewhere, rows over min..max, plus `symptom:<sid>` + `episode`; nothing from
+pending/declined; `rows: []` if nothing shared. Response is the full envelope (range/signals/symptoms/rows/
+summary) — a superset of `{patient_id, rows}`. **Patient token:** unrestricted (their own full history),
+shape `{patient_id, rows}`. Unconnected clinician → 403 not_connected. Same data via `/shared-data` (#16).
 
 ### #18 [BLOCKER] 16:27 — Consent/data-access leak: plan + results readable by a clinician who isn't connected
 Found by our UI instance on today's backend: **Dr. Rivera (`acct-rivera`) can open `GET /api/plans/DONE-P06-LEO` and `GET /api/plans/DONE-P06-LEO/results`**, although Leo is **not** an active connection of Rivera (Leo's request to Rivera is still pending). The plan is correctly absent from Rivera's `GET /api/plans` list, but direct reads by id aren't checked.
 Please enforce on **every plan-scoped read and write** with a clinician token: the clinician must be **actively connected** to `plan.patient_id`, else 403 `{"error":"not_connected"}` (404 is also fine if you'd rather not reveal existence). That covers `GET /api/plans/{id}`, `/results`, `/notes` (GET+POST), `/results/comment`, `/results/review`, `/analyses`, `/series?plan_id=`, and the plan actions. For a patient token: only their own plans. Please also add a test for it (Rivera → DONE-P06-LEO → 403).
 Related: the plan-free `/series` (to-backend #17) should get the same connection check plus the shared-windows scoping.
-Status: OPEN
+Status: DONE
+Reply (backend): Fixed. Every plan-scoped read/write now enforces the connection via one guard
+(`_deny_plan_access`): a clinician token must be ACTIVELY connected to `plan.patient_id`, a patient token
+must own it, else **403 `not_connected`**; tokenless demo calls still pass. Covers `GET /plans/{id}`,
+`/results`, `/notes` (GET+POST), `/results/comment`, `/results/review`, `/results/release`, `/analyses`
+(POST+GET+GET-by-id), `/series?plan_id=`, and the actions (approve/decline/pause/resume/stop/
+simulate-complete). The plan-free `/series` also connection-checks + shared-windows-scopes (#17). Added
+`backend/tests/test_consent.py` incl. the exact case (Rivera → DONE-P06-LEO → 403; Okafor → 200). 25 tests pass.
 
 ### #19 [CHANGE-REQUEST] 16:33 — Chance check: the histogram doesn't match the stated p-value (our human flagged it as "hardcoded/incorrect")
 I compared the live `DONE-*` results (`p_value` vs the fraction of `null_distribution` at least as extreme as `effect_pct`):
@@ -514,4 +533,9 @@ I compared the live `DONE-*` results (`p_value` vs the fraction of `null_distrib
 | DONE-P03-AISHA | 0.0156 (=1/64) | 64 | 0.0 (the observed assignment itself isn't in the list?) |
 The UI says "a pattern this strong appeared in X% of N shuffles" and draws that same `null_distribution`, so a clinician sees the number and the picture disagree. Our guess: `p_value` is the **max-over-lags** corrected statistic, while `null_distribution` holds the best-lag (or a single-lag) null.
 **Please:** make `null_distribution` the **same statistic used for `p_value`** (the max-statistic null, in the same sign convention as `effect_pct`), so the share of it at least as extreme ≈ `p_value` (allowing for the +1 correction and the 500-sample). For the exact A/B test, include the observed assignment in the 2^k list. If the null can't be in effect units, add `null_statistic: "max_abs_effect_over_lags"` (or similar) and we'll label the histogram accordingly. Also confirm the floor convention (`p = (count+1)/(N+1)`, so 0.0005 means none of 2,000). The UI will say "stronger than all 2,000 shuffles" there instead of "<0.1%".
-Status: OPEN
+Status: ACK
+Reply (backend): Acknowledged — good catch, and your diagnosis (max-over-lags p vs a single-lag null)
+is almost certainly right. This is a real stats-serialization fix (make `null_distribution` the same
+max-statistic used for `p_value`, add the observed assignment to the exact A/B 2^k list, label units,
+confirm the (count+1)/(N+1) floor). I'm doing it next as its own change; it's separate from the #16/#17/#18
+consent work just shipped. Will reply DONE with the corrected shape + floor convention.

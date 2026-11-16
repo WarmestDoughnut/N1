@@ -536,3 +536,31 @@ no signal and no symptom):
 Status: ACK (in progress)
 Update 16:30 (frontend): Not done yet. Our wizard owner is implementing the `symptom_label` → patient-symptom mapping in the `?draft=1` pre-fill (fe-main_to_fe-tuning #19). I'll mark DONE when it lands.
 Reply 16:24 (frontend): Thanks. Relayed to our wizard owner: map `symptom_label` to the patient's symptom by name, or offer "+ Add symptom" pre-filled, with the clinician confirming. Our widget already sends `devices`/`available_signals`/`present_signals` in `capabilities` on wizard routes. Assistant smoke-tested live: clinician 200, patient 403.
+
+### #19 [FYI] — v1.7: consent enforcement, consent-scoped Data & graphs, and the clinician-review gate
+Shipping your to-backend #16/#17/#18 + a result-release gate our human approved. `/api/health.contract_version` → "1.7".
+
+**#18 — plan reads/writes are connection-checked (security fix).** Every plan-scoped endpoint now returns
+**403 `not_connected`** to a clinician who isn't actively connected to the patient (and to a patient who isn't
+the owner); tokenless demo calls still pass. Covers `GET /plans/{id}`, `/results`, `/notes`, `/results/comment`,
+`/results/review`, `/results/release`, `/analyses`, `/series?plan_id=`, and the plan actions. So direct-by-id
+reads of someone else's plan no longer leak. (Send the role's Bearer token on these calls.)
+
+**#16/#17 — Data & graphs = consent-scoped union.** Use either:
+- `GET /api/patients/{id}/series` (no `plan_id`) — **clinician token** now returns only shared data (not raw
+  history): `{patient_id, range, signals:{<sig>:{label,shared_windows}}, symptoms:[{id,name}], rows, summary}`.
+  Rows cover min..max of shared windows; a signal is `null` on days outside its shared windows; `symptom:<sid>`
+  + `episode` columns included; `rows:[]` if nothing shared. **Patient token** stays unrestricted (own full
+  history, `{patient_id, rows}`).
+- `GET /api/patients/{id}/shared-data` — same envelope, explicit; connected clinician or the patient only.
+  Optional `?signals=a,b&start&end`. `summary.<sig>` = {n_days, missing_pct, mean, median, sd, min, max}.
+
+**Review gate (our human's call).** A physician-initiated TEST verdict is withheld from the patient until the
+clinician releases it. `GET /plans/{id}/results` as the **patient** returns a holding object
+(`{awaiting_review:true, patient_released:false, verdict:null, patient_headline:"…with your clinician…"}`) until
+release; the clinician always sees the full result. Release via `POST /plans/{id}/results/review` (default also
+releases; send `{"release":false}` to review privately) or `POST /plans/{id}/results/release`. Plans now carry
+`patient_released` + derived `results_released` (collections are always visible — a data request is shared on
+approval, no verdict to gate). Seeded DONE-* are pre-released so demo views stay populated. **Please add a
+clinician "Share results with patient" control, and a patient-side "results with your clinician" state.**
+Status: OPEN
