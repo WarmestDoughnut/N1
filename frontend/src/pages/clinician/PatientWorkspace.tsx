@@ -10,6 +10,7 @@ import type { ClinicianData } from './ClinicianApp'
 import { PlanDetail } from './PlanDetail'
 import { PlanWizard } from '../../components/PlanWizard'
 import { CollectionPanel } from '../../components/CollectionPanel'
+import { DataExplorer } from '../../components/DataExplorer'
 import { NotesPanel } from '../../components/NotesPanel'
 import { ReviewBox } from '../../components/ReviewBox'
 import { useAsync } from '../../lib/hooks'
@@ -83,7 +84,7 @@ export function PatientWorkspace({ patient, data, catalog, tab: rawTab, sub }: {
           ? <OpenTest planId={sub} base={base} data={data} />
           : <TestsTab plans={tests} data={data} base={base} />)}
         {tab === 'collection' && <CollectionPanel patient={patient} />}
-        {tab === 'data' && <ComingSoon icon="activity" title="Data & graphs" body="Charts of this patient's consented signals and logged symptoms will appear here." />}
+        {tab === 'data' && <DataExplorer patient={patient} />}
         {tab === 'new' && (sub === 'test'
           ? <PlanWizard patient={patient} kind="test" onDone={(id) => navigate(`${base}/tests/${encodeURIComponent(id)}`)} />
           : sub === 'collection'
@@ -254,18 +255,6 @@ function NewTab({ base }: { base: string }) {
         <strong>New data collection</strong>
         <small>Gather signals now and decide on a test later.</small>
       </button>
-    </section>
-  )
-}
-
-function ComingSoon({ icon, title, body }: { icon: Parameters<typeof Icon>[0]['name']; title: string; body: string }) {
-  return (
-    <section className="workspace">
-      <div className="empty">
-        <div className="summary-icon tone-gray"><Icon name={icon} /></div>
-        <p style={{ fontSize: 16, color: '#4c4c58' }}><strong>{title}</strong></p>
-        <p>{body}</p>
-      </div>
     </section>
   )
 }
