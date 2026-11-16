@@ -289,17 +289,38 @@ def _compute_results(plan, incomplete=False, until=None):
 # --------------------------------------------------------------------------- #
 # bump when the seeded results must be recomputed (e.g. a stats change) so an already-seeded
 # prod store self-heals on the next boot instead of serving stale results.
-SEED_COMPLETED_VERSION = 2
+SEED_COMPLETED_VERSION = 3
+
+# Demo override: Sam's PRE-EXISTING completed test is the honest negative (TOTAL screen time →
+# migraines = probably_chance), so the LIVE demo test (late-NIGHT screen = likely_real + model) is
+# the reveal and isn't spoiled on the dashboard. Window/clinician come from Sam's demo plan.
+_COMPLETED_OVERRIDES = {
+    "P08-SAM": {
+        "title": "Does more total screen time precede Sam's migraines?",
+        "type": "observational",
+        "devices": ["iphone"],
+        "signals": ["screen_time_min", "episode"],
+        "observational": {"signal": "screen_time_min", "direction": "higher",
+                          "min_lag_days": 1, "max_lag_days": 3},
+        "intervention": None,
+    },
+}
 
 def seed_completed():
     import copy
     for src in SEED_PLANS:
-        cid = f"DONE-{src['patient_id']}"
+        pid = src["patient_id"]
+        cid = f"DONE-{pid}"
         existing = STORE.get_plan(cid)
         if (existing is not None and existing.get("_seedv") == SEED_COMPLETED_VERSION
                 and STORE.get_result(cid) is not None):
             continue   # up-to-date; skip the recompute cost
-        plan = copy.deepcopy(src)
+        if pid in _COMPLETED_OVERRIDES:
+            plan = {"patient_id": pid, "clinician_name": src.get("clinician_name", "Dr. Rivera"),
+                    "window": copy.deepcopy(src.get("window")),
+                    **copy.deepcopy(_COMPLETED_OVERRIDES[pid])}
+        else:
+            plan = copy.deepcopy(src)
         plan["id"] = cid
         plan["_seedv"] = SEED_COMPLETED_VERSION
         plan["seeded"] = True            # exempt from retrospective rules (a prospective trial that has finished)
