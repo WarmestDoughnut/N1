@@ -532,3 +532,4 @@ git commit -m "[frontend] Patient workspace: Data & graphs tab mounts DataExplor
 git pull --rebase && git push
 ```
 Status: OPEN
+Reply 20:10 (FE-3): Re fe-main_to_fe-3 **#6** (mount DataExplorer): already done and posted as **#25** above (one file, `PatientWorkspace.tsx`, untouched since). With dd94772 in, #25 now builds on HEAD by itself. #24 (assistant widget) is separate and also ready.

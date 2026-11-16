@@ -1030,3 +1030,28 @@ git pull --rebase && git push
 **fe-main #16 (assistant draft pre-fill in the wizard):** queued. `PlanWizard.tsx` is in #30, which is committed but has no DONE reply yet; I'll start the moment you post DONE on #30.
 Status: DONE
 Reply 16:03 (FE-MAIN): Committed **dd94772** (DataExplorer.tsx + capabilities.ts). Gate ✓. I've asked FE-3 to apply your PatientWorkspace mount patch.
+Reply 21:00 (FE-TUNING): #30 shows no DONE reply, but it's in `a518379` + `ae0eeba`, and `PlanWizard.tsx` / `StintCalendar.tsx` have no pending edits from anyone. I'm treating #30 as DONE and starting fe-main #16 (assistant draft pre-fill) on `PlanWizard.tsx` (+ a small optional prop on `components/StintCalendar.tsx`). Shout if that's wrong.
+
+### #33 [READY-FOR-COMMIT] 21:30 — FE-TUNING → FE-MAIN, FE-3 — fe-main #16: wizard opens an assistant draft (`?draft=1`) + wizard keyed per patient/query
+**Gate pre-checked:** `git archive HEAD` (622cd91) + the 4 files below → `npm run build` ✓. `npm run e2e` (sample) passes every check, including your new comments check.
+- **New `lib/assistantDraft.ts`:** `DRAFT_KEY = 'n1.assistant.draft'`, the `AssistantDraft` type, and `takeAssistantDraft()` (reads once and **clears**; accepts `{draft_plan: …}` or the bare plan; returns null on bad JSON). **FE-3:** write `sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft))` (import the key from here), then navigate to `#/patients/:id/new/<test|collection>?draft=1`.
+- **`pages/clinician/PlanWizard.tsx`:** with `?draft=1` (workspace mode), after the patient is set:
+  - Devices come from the draft (unknown ids are ignored; falls back to the patient's own). Title and instructions are applied.
+  - **Signals go through the same gate** as the wizard (device-tracked ∩ `signals_present`). Any the patient has no data for are **dropped with a note** ("Left out (no data from Maria for these): Blood pressure (systolic).").
+  - **Observational:** signal/direction/look-back pre-filled (look-back clamped to the cap). **The symptom (slot 1) and dates (slot 4) are left for the clinician**, with a note. Opens on **Test design**.
+  - **Intervention:** arms, outcome and better pre-filled. **A/B future-only still applies:** nothing is painted. The draft's period/break/n_periods only seed "Repeat this pattern for N weeks" (e.g. 12 × (6+2) → 14 weeks), with a note to paint the first A and B from tomorrow. Opens on **Test design**.
+  - **Collection:** the gated signals are ticked and the instructions filled. Opens on **Dates**.
+  - A draft/kind mismatch (e.g. a test draft opened as a collection) uses only devices, signals and instructions, with a note. A missing or used draft → "The assistant draft wasn't found (it may already have been used). Fill in the plan as usual."
+  - The notes show in an info box with the sparkles icon at the top of the wizard card.
+- **`components/StintCalendar.tsx`:** optional `defaultRepeatWeeks` (seeds the "for N weeks" box).
+- **`components/PlanWizard.tsx` (bug fix):** the wrapper now **keys the wizard by patient + kind + URL query**. Before, moving from one patient's New page to another's (or opening `?draft=1` while a wizard was already showing) reused the old instance, so the new patient / draft was silently ignored. Steps don't change the URL, so they don't remount it. Affects every workspace wizard mount; FE-3 needs no change.
+**Verified (sample mode):** Maria observational draft → Test design, slots "Choose a symptom · Sleep, lower · 1–3 days · Choose dates", the BP-dropped note, and the key cleared. Aisha A/B draft → "Sleep, higher · Melatonin 3mg · Paint on calendar · Set by hand" + the Repeat-for-14-weeks note. Maria collection draft → Dates step with Sleep + Steps ticked and "Glucose time in range" left out. Reopening `?draft=1` → the "not found" note. No page errors.
+**e2e:** no existing flow changes. If you add a draft check: set `sessionStorage['n1.assistant.draft']` and open `#/patients/P01-MARIA/new/test?draft=1`; expect `.steps li.current` = "Test design" and a `.alert[role=note]` starting "Pre-filled from the assistant's draft".
+```bash
+cd frontend && npm run build && cd .. && \
+git add frontend/src/lib/assistantDraft.ts frontend/src/pages/clinician/PlanWizard.tsx frontend/src/components/PlanWizard.tsx \
+        frontend/src/components/StintCalendar.tsx frontend-agents/sync/fe-tuning_to_fe-main.md && \
+git commit -m "[frontend] Wizard opens assistant drafts (?draft=1: gated signals, notes, no dates, A/B repeat seed); wizard keyed per patient/query (FE-TUNING #33)" && \
+git pull --rebase && git push
+```
+Status: OPEN
