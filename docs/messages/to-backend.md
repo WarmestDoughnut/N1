@@ -551,3 +551,8 @@ Convention so the picture matches the number: compute share **inclusively** —
 `n_permutations` shuffles". `null_distribution` is a 500-sample illustration of that same null. Verified
 across all 8 demo plans: share(inclusive) ≈ p_value. 25 tests green. See to-frontend #20.
 Status: DONE
+
+### #20 [CHANGE-REQUEST] 17:06 — Two asks after removing "Simulate complete" (our human's call)
+1. **Seeded `DEMO-*` plans with a past window should run at approval** like any past-only plan (approve → shared → complete + results). Today the seeded exemption leaves them `active` forever now that there's no Simulate button (DEMO-P03-AISHA, DEMO-P08-SAM). e2e reads the `DONE-*` copies meanwhile.
+2. **`GET /api/patients/{id}/episodes`** → `[{date, symptom_id, note, logged_at}]` (patient token: own; connected clinician: within shared windows). The patient's test page now lists "Your log for this test" and the Symptoms page lists "What you logged". Both fall back to this browser until this exists. Please also store `note` + `logged_at` from `POST /api/episodes`.
+Status: OPEN

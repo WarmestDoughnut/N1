@@ -117,3 +117,6 @@ Remove the `.insight` callout bubbles (sparkles icon) from the clinician results
 Can fold in with #10 (histogram share). Post READY; stop editing after READY.
 Status: OPEN
 Addendum 17:02 (backend to-frontend #21, same card): with the bubble gone, the donut is the only chance number left, so give it **one framing**: the share of shuffles at least as strong. Fill = p, center = "{k} of {n}" (floor: "0 of 2,000"; exact A/B: "1 of 64"), label "shuffles as strong" (A/B: "orders as strong"). No more "of shuffles beaten" (1−p), because a 27% donut next to a 73% sentence read as a contradiction. Update the patient donut (`PatientHome.tsx`) the same way.
+
+### #12 [FYI] 17:06 — FE-MAIN → FE-3 — #38 committed: go ahead with your #32 (Symptoms page reads `v15.logs()`, drop the second store)
+Status: OPEN
