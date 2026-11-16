@@ -123,6 +123,10 @@ export interface Plan {
   history: PlanHistoryEvent[]
   /** v1.3: one of the 8 pre-built demo plans whose schedule the historical data actually followed */
   seeded?: boolean
+  /** v1.7 review gate: the clinician has released this test's result to the patient */
+  patient_released?: boolean
+  /** v1.7: derived; true when the patient can see the result (always true for data collections) */
+  results_released?: boolean
 }
 
 /** POST /api/plans body: plan fields minus id,status,created_at,history,patient_summary.

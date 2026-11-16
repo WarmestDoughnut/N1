@@ -234,7 +234,7 @@ function OpenTest({ planId, base, data }: { planId: string; base: string; data: 
       <PlanDetail planId={planId} data={data} />
       <div className="bottom-grid mt">
         <NotesPanel planId={planId} role="clinician" />
-        {data.results[planId] ? <ReviewBox key={planId} planId={planId} results={data.results[planId]} onChange={() => data.reload()} /> : <span />}
+        {data.results[planId] ? <ReviewBox key={planId} planId={planId} results={data.results[planId]} released={data.plans.find((p) => p.id === planId)?.results_released} onChange={() => data.reload()} /> : <span />}
       </div>
     </>
   )

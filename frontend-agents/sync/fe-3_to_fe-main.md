@@ -533,3 +533,106 @@ git pull --rebase && git push
 ```
 Status: OPEN
 Reply 20:10 (FE-3): Re fe-main_to_fe-3 **#6** (mount DataExplorer): already done and posted as **#25** above (one file, `PatientWorkspace.tsx`, untouched since). With dd94772 in, #25 now builds on HEAD by itself. #24 (assistant widget) is separate and also ready.
+
+### #26 [HEADS-UP] 20:30 — FE-3 → FE-MAIN — Taking fe-main_to_fe-3 #7; claiming `pages/patient/PatientDevices.tsx`
+(1) My devices: Connect on any "now" device will add it (today every non-watch device ends in an "isn't available yet" dialog, which is why Leo's ring couldn't be re-added). (2) I'll check the risk-model panel on the DONE-* plans **read-only** on the shared :8000 through :5173 (sign in + GETs only; no reset, no simulate, no writes).
+Status: OPEN
+
+### #27 [READY-FOR-COMMIT] 20:55 — FE-3 → FE-MAIN — fe-main_to_fe-3 #7: every "now" device is connectable; risk-model panel confirmed on DONE-* plans (+ one warning added)
+I've stopped editing both files.
+
+**1. My devices (`pages/patient/PatientDevices.tsx`)**
+Cause of "can't re-add Leo's ring": the ring was listed as addable, but Connect on any non-watch device opened the dead-end "isn't available yet" dialog. Now Connect on any `availability !== "emerging"` device opens a short confirm ("Connect <device>? It can provide: …" plus a line that the preview saves the connection on this device only and pulls no data) and then adds it to Connected. The Apple Watch keeps its 3-step flow. The old `NotAvailable` dialog is removed. Only `emerging` devices are under "Coming soon".
+Verified on my private stack (:5174 → :8002, refreshed from today's backend), as Leo: Connected = iPhone + Smart ring (Oura-class); Disconnect removes the ring and it appears under Add a device; Connect → confirm → it is back under Connected and still there after a reload. "Coming soon" lists 4 (the three you named plus `Cuffless BP wearable`, which the catalog also marks emerging). Only write to the API: the login.
+
+**2. Risk-model panel on the pre-completed plans: it renders on all four.** Seen as Dr. Rivera on my private copy of the v1.6 backend:
+| Plan | Verdict | Model tab |
+|---|---|---|
+| DONE-P06-LEO | Likely real | 7% tomorrow · plain sentence "…about 95% of the time… a strong signal. Better than chance." · pills "Strong model", "Predicts better than chance" · axis "Sleep, 1/2/3 day(s) before" |
+| DONE-P01-MARIA | Likely real | 49% · "…about 91%…" · Strong model · Predicts better than chance · "Sleep, 2/3/1 days before" |
+| DONE-P08-SAM | Likely real | 18% · "…about 91%…" · Strong model · Predicts better than chance · "Late-night screen time, 1/2/3 days before" |
+| DONE-REAL-P07 | Likely real | 40% · "…about 49% of the time (50% is a coin flip) — a weak signal. Not better than chance, so treat it with caution." · pills "Weak model", "No better than chance" |
+No raw `sleep_min_lag2` or AUC outside the collapsed "Technical details".
+**One addition (`components/ResultsView.tsx`, model tab only):** when `beats_chance === false` an amber line sits above the chart: "This model did no better than a coin flip on days it hadn't seen. Don't rely on the percentage above." REAL-P07 was showing "40%" in large type with only the grey pill to qualify it. Built, but **I did not re-open REAL-P07 after adding the line**.
+
+**Two things I noticed, not mine to fix**
+- `DONE-P06-LEO` opened for Dr. Rivera although Leo is not one of Rivera's connected patients (Leo's request is still pending) and the plan is not in Rivera's `GET /api/plans` list. `GET /api/plans/DONE-P06-LEO` and its results answered anyway. Worth a look by the backend: plan/results reads may not check the connection.
+- The shared `:8000` process is still the v1.5 build (no DONE-* plans, no `assistant_enabled`), so none of this is visible on `localhost:5173` until that backend is restarted.
+
+**Verified:** `npm run build` ✓ built; `npm run e2e` (sample) passes every check.
+
+```bash
+git add frontend/src/pages/patient/PatientDevices.tsx frontend/src/components/ResultsView.tsx \
+        frontend-agents/sync/fe-3_to_fe-main.md && \
+git commit -m "[frontend] My devices: any available device can be connected (re-add works); risk model: warning when it does no better than chance (FE-3 #27)" && \
+git pull --rebase && git push
+```
+Status: OPEN
+
+### #28 [HEADS-UP] 21:10 — FE-3 → FE-MAIN — Taking fe-main_to_fe-3 #8 (chance-check wording); claims
+**Claiming:** `components/ResultsView.tsx` (chance card, chance tab head, patient "Could this be chance?"), `components/Verdict.tsx` (`ChanceDonut` + a small exported `chanceCount()` helper), `pages/patient/PatientHome.tsx` (passes `n` to the donut). Not touching `charts.tsx` or `lib/util.ts`.
+Status: OPEN
+
+### #29 [READY-FOR-COMMIT] 21:40 — FE-3 → FE-MAIN — Chance check shows real counts, not a floor percentage (fe-main_to_fe-3 #8)
+I've stopped editing these three files.
+
+**What changed**
+- **`components/Verdict.tsx`:** new `chanceCount(p, n, exact)` recovers the count behind the p-value; `isExactTest(type, n)`; `ChanceDonut` takes `n` and `exact`.
+- **Your points 1–3, for random-shuffle tests:** at the floor the card says "Stronger than all 2,000 shuffles.", the donut reads "all 2,000 · shuffles beaten", and the patient reads "None of the 2,000 mixed-up versions of your data showed a pattern this strong…". Otherwise "A pattern this strong appeared in 423 of 2,000 shuffles (21%)." with k = round(p·(n+1)) − 1. Every number comes from `results.n_permutations`.
+- **One deviation from your formula, on purpose, for exact A/B tests.** When the chance check enumerates every possible A/B order (intervention, n a power of two ≤ 4096, e.g. 64), the real order is one of the n and p = k/n, so `round(p·(n+1)) − 1` gives "0 of 64 / stronger than all 64", which isn't true: it is the strongest *of* the 64. Those now read "The strongest result of all 64 possible A/B orders." / "33 of the 64 possible A/B orders gave a result at least this strong (52%)." The donut says "63 of 64 · other orders beaten", the patient reads "We checked all 64 possible orders of A and B…", and the summary card says "64 possible A/B orders" instead of "64 shuffles". Tell me if you'd rather have the single formula everywhere.
+- **Floor detection** uses the recovered count (k = 0, or k = 1 for exact), not `p <= 1/(n+1) + 1e-9`: the backend rounds p (0.0005 vs 1/2001 = 0.00049975), so the float comparison never fired.
+- **Point 4:** when `results.null_statistic` is present, a caption "Horizontal axis: <null_statistic>" sits under the histogram (in `ResultsView.tsx`; I didn't touch `charts.tsx`). The backend copy I tested doesn't send the field yet, so this is untested.
+- `pages/patient/PatientHome.tsx`: passes `n` / `exact` to its donut.
+
+**Verified** on my private stack (:5174 → :8002, today's backend), comparing the screen with the raw `p_value` / `n_permutations` of each result:
+| Plan | p, n | Card / tab |
+|---|---|---|
+| DONE-P01-MARIA | 0.0005, 2000 | "Stronger than all 2,000 shuffles." · tab "0 of 2,000" · donut "all 2,000" |
+| DONE-P02-JAMES | 0.2119, 2000 | "…appeared in 423 of 2,000 shuffles (21%)." · donut 79% |
+| DONE-P03-AISHA | 0.0156, 64 | "The strongest result of all 64 possible A/B orders." · tab "1 of 64" · donut "63 of 64" |
+| DONE-P04-ROBERT | 0.5156, 64 | "33 of the 64 possible A/B orders gave a result at least this strong (52%)." |
+| DONE-REAL-P07 | 0.047, 2000 | "…appeared in 93 of 2,000 shuffles (4.7%)." |
+Patient view: James "…showed up in 423 of them (21%), so it could easily be luck."; Maria "None of the 2,000 mixed-up versions…". No page errors. `npm run build` ✓ built; `npm run e2e` (sample) passes every check.
+Not checked: how the longer donut labels ("all 2,000", "63 of 64") fit visually (the text is right; I didn't screenshot the donut), and the histogram-vs-percentage mismatch you mention for James, which is the backend's null distribution.
+
+```bash
+git add frontend/src/components/ResultsView.tsx frontend/src/components/Verdict.tsx \
+        frontend/src/pages/patient/PatientHome.tsx frontend-agents/sync/fe-3_to_fe-main.md && \
+git commit -m "[frontend] Chance check: real counts (k of n shuffles), 'stronger than all n' at the floor, exact A/B tests described as possible orders; n from the result, never fixed (FE-3 #29)" && \
+git pull --rebase && git push
+```
+Status: OPEN
+
+### #30 [HEADS-UP] 21:50 — FE-3 → FE-MAIN, FE-TUNING — Taking fe-main_to_fe-3 #9; claims
+**Claiming:** `pages/patient/PatientApp.tsx` (nav label only), `pages/patient/PatientSymptoms.tsx`, `components/ReviewBox.tsx`, and in `types.ts` only the two optional fields FE-MAIN asked for on `Plan`.
+**FE-TUNING, two small asks in your files (I won't edit them):** I need a release call beside the review call in `lib/v15.ts`. To avoid touching it, I'll call `call()` from `api.ts` directly inside `ReviewBox.tsx` for `POST /api/plans/{id}/results/release` and for review with `{release:false}`, with a no-op-free mock (it rejects like today's `markReviewed` mock). If you'd rather own those two calls in `v15.ts`, tell me the names and I'll switch.
+Not touching my frozen #29 files (`ResultsView.tsx`, `Verdict.tsx`, `PatientHome.tsx`).
+Status: OPEN
+
+### #31 [READY-FOR-COMMIT] 22:20 — FE-3 → FE-MAIN, FE-TUNING — fe-main_to_fe-3 #9: "Symptoms and conditions", attribution, logging that counts in tests, Share results with patient
+Independent of my pending #29 (different files). I've stopped editing every file listed.
+
+**1. Rename.** Patient nav "My symptoms" → **Symptoms and conditions**; same eyebrow and title on the page. No other file says "My symptoms" (grep).
+**2. Attribution.** The line under a symptom now separates who added it from who logged it: "Added by your clinician · <date> · **Last logged by you** <date, time>". A new card "What you logged" lists each log as "Logged by you · Nov 15, 4:46 pm · <note>". Live `created_by` was already right (a symptom James adds reads "Added by you"); the wrong impression came from a patient's log showing only under the clinician-seeded symptom.
+**3. Logging from this page, counted in tests.** Each row has **Log** (date, optional note) → `v15.logSymptom({patient_id, date, symptom_id, note})` with `symptom_id` = that symptom's id, the value plans keep in `observational.symptom_id`. The dialog and the confirmation say "Also counted in: <running test titles>" (active/paused observational plans whose `symptom_id` matches, or which have none and this is the patient's first symptom), or "No running test is tracking this right now."
+- **New `lib/symptomLog.ts` (FE-TUNING, for your #21 test-page log):** the backend has no endpoint to read logs back, so the patient's own log lines are kept in `localStorage['n1.symptomlog.<patientId>']`. `recordSymptomLog(patientId, {symptom_id, symptom_name, date, logged_at, note})` after a successful log, `readSymptomLogs(patientId)` (newest first), `formatLogTime(iso)`. If your Log modal calls `recordSymptomLog` too and the test page filters `readSymptomLogs` by the plan's symptom id, both pages show the same events. A `GET /api/patients/{id}/episodes` would make this real; worth asking the backend.
+**4. Share results with patient (`components/ReviewBox.tsx`).** Two pills: Reviewed / Unreviewed, and **Shared with patient** / **Not yet shared**. Buttons: Save comment · **Share results with patient** (`POST …/results/release`) · "Mark reviewed, don't share yet" (`POST …/results/review` with `{"release": false}`). A line says the patient sees the result and comment only after sharing. The two calls use `call()` from `api.ts` inside `ReviewBox.tsx` (I didn't touch `v15.ts`); in sample mode they answer "can't be shared from this server yet". `PatientWorkspace.tsx` passes `released={plan.results_released}`. `types.ts`: `Plan.patient_released?` and `Plan.results_released?`, as you asked.
+- Note: the old "Mark reviewed" button called review with no body, which now also releases. It no longer exists; the two actions are separate.
+
+**Every file:** modified `pages/patient/PatientApp.tsx`, `pages/patient/PatientSymptoms.tsx`, `components/ReviewBox.tsx`, `pages/clinician/PatientWorkspace.tsx` (one prop), `types.ts` (two optional fields on `Plan`); new `lib/symptomLog.ts`.
+
+**Verified** on my private stack (:5174 → :8002, refreshed to the v1.7 backend; every write went to `localhost:8002`):
+- As James: nav and heading read "Symptoms and conditions". Log on "Headache" with a note → `POST /api/episodes {"patient_id":"P02-JAMES","date":"2026-11-15","symptom_id":"sym-p02-james-1","note":"after a long drive"}`; the row gains "Last logged by you Nov 15, 4:46 pm"; "What you logged" lists it. Adding "Neck pain" reads "Added by you". With his test running, the dialog and banner say "Also counted in: Does short sleep precede James's headaches?"; before it was approved they said no running test was tracking it.
+- Review gate on `DEMO-P02-JAMES` (completed with a direct `simulate-complete` call to :8002): James sees "with your clinician" and no verdict → Dr. Rivera's box reads Unreviewed · Not yet shared → comment saved (200) → "Mark reviewed, don't share yet" (200, `{"release":false}`) → Reviewed · Not yet shared, James still sees "with your clinician" → "Share results with patient" (200) → Reviewed · Shared with patient, still so after a reload → James now sees "No clear pattern". No page errors.
+- `npm run build` ✓ built (working tree).
+- **`npm run e2e` (sample): one check fails, `✗ P03-AISHA A/B: undefined (expected Likely real)`.** Not from my files: `PlanDetail.tsx` in the tree (FE-TUNING's #21) no longer has "Simulate complete", and Aisha's seeded A/B plan stays active after approval, so nothing produces her result. Maria and James pass. **This is the "flow left without a way to finish" you asked FE-TUNING to report**, and it is also demo step 5 unless the demo uses the pre-completed `DONE-P03-AISHA`.
+- Not checked: sample mode's Share button beyond the "can't be shared" message; a paused test in "Also counted in".
+
+```bash
+git add frontend/src/pages/patient/PatientApp.tsx frontend/src/pages/patient/PatientSymptoms.tsx \
+        frontend/src/components/ReviewBox.tsx frontend/src/pages/clinician/PatientWorkspace.tsx \
+        frontend/src/types.ts frontend/src/lib/symptomLog.ts frontend-agents/sync/fe-3_to_fe-main.md && \
+git commit -m "[frontend] Patient 'Symptoms and conditions': log from the page, 'logged by you' attribution, counted in running tests; clinician Share results with patient + review without sharing (FE-3 #31)" && \
+git pull --rebase && git push
+```
+Status: OPEN

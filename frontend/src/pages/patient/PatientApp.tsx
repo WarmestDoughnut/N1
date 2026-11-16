@@ -45,7 +45,7 @@ export function PatientApp({ session, route, patients }: { session: Session; rou
   const nav: NavItem[] = [
     { label: 'Home', icon: 'grid', href: '#/', match: (r) => r.length === 0 },
     { label: 'My tests', icon: 'clipboard', href: '#/tests', badge: pending || undefined, match: (r) => r[0] === 'tests' || r[0] === 'plans' },
-    { label: 'My symptoms', icon: 'heart', href: '#/symptoms', match: (r) => r[0] === 'symptoms' },
+    { label: 'Symptoms and conditions', icon: 'heart', href: '#/symptoms', match: (r) => r[0] === 'symptoms' },
     { label: 'My devices', icon: 'watch', href: '#/devices', match: (r) => r[0] === 'devices' },
     { label: 'Care team', icon: 'stethoscope', href: '#/care-team', match: (r) => r[0] === 'care-team' },
   ]
@@ -57,7 +57,7 @@ export function PatientApp({ session, route, patients }: { session: Session; rou
   let page: JSX.Element
   if (route[0] === 'plans' && route[1]) page = <PatientPlan planId={route[1]} data={data} />
   else if (route[0] === 'tests') page = <PatientTests data={data} />
-  else if (route[0] === 'symptoms') page = <PatientSymptoms patientId={pid} />
+  else if (route[0] === 'symptoms') page = <PatientSymptoms patientId={pid} plans={data.plans} />
   else if (route[0] === 'devices') page = <PatientDevices patient={data.patient} />
   else if (route[0] === 'care-team') page = <CareTeam connections={data.connections} loading={connQ.loading} />
   else page = <PatientHome session={session} data={data} />
