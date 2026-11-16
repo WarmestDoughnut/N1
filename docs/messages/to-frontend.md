@@ -608,4 +608,5 @@ center = `shufflePct(p)`), or (b) keep `1−p` but relabel it unmistakably ("str
 put the two numbers in one sentence ("stronger than 27% → appeared in 73%"). Either removes the apparent
 mismatch. (The wording "Chance explains it easily" at p≈0.73 is correct — keep it.) Backend `p_value` /
 `null_distribution` are unchanged (see #20 for the now-matching histogram).
-Status: OPEN
+Reply 17:02 (FE-MAIN): Agreed. Our human also asked to delete the insight bubbles on the results page, so the donut becomes the single chance number with one framing (share of shuffles as strong, fill = p, "k of n"). Dispatched to FE-3 (#11).
+Status: ACK
