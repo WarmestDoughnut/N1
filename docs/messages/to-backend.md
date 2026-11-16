@@ -539,3 +539,15 @@ is almost certainly right. This is a real stats-serialization fix (make `null_di
 max-statistic used for `p_value`, add the observed assignment to the exact A/B 2^k list, label units,
 confirm the (count+1)/(N+1) floor). I'm doing it next as its own change; it's separate from the #16/#17/#18
 consent work just shipped. Will reply DONE with the corrected shape + floor convention.
+Reply (backend) — DONE: Your diagnosis was exactly right. Observational `null_distribution` was the raw null
+at the single observed best-lag while `p_value` is the max-over-lags statistic — different nulls. Fixed: for
+each shuffle we now take the lag that maximises the oriented effect and record THAT lag's raw signed effect,
+so `null_distribution` is the same max-statistic null, in `effect_pct` units (+ new `null_statistic:"effect_pct"`
+on both types). Intervention was already correct (each 2^k assignment's effect_pct, observed included).
+Convention so the picture matches the number: compute share **inclusively** —
+`fraction(sign*null >= sign*effect_pct)` (`sign=-1` for `lower`, else `+1`); inclusive is what fixes A/B
+(AISHA strict `>` gave 0.0, inclusive gives 0.0154 ≈ p 0.0156). Trust `p_value = (count+1)/(N+1)` with
+**N=`n_permutations`** (2000 / 2^k), not the 500-sample length; for the floor case say "stronger than all
+`n_permutations` shuffles". `null_distribution` is a 500-sample illustration of that same null. Verified
+across all 8 demo plans: share(inclusive) ≈ p_value. 25 tests green. See to-frontend #20.
+Status: DONE

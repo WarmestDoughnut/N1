@@ -761,19 +761,13 @@ def results(plan_id: str, request: Request):
     account = current_account(request)
     is_this_patient = (account is not None and account["role"] == "patient"
                        and account.get("patient_id") == plan["patient_id"])
-    # Patient asking for a not-yet-released test verdict → a holding state, not the verdict itself
-    # (withheld server-side, not just hidden in the UI).
-    if is_this_patient and not released:
-        return {"plan_id": plan_id, "type": plan.get("type"), "complete": r.get("complete", True),
-                "patient_released": False, "awaiting_review": True,
-                "verdict": None, "headline": None,
-                "patient_headline": "Your results are ready and are being reviewed by your clinician. "
-                                    "They'll share the findings with you shortly.",
-                "observational": None, "intervention": None, "collection": None,
-                "effect_pct": None, "p_value": None, "model": None,
-                "series": [], "null_distribution": [], "warnings": [],
-                "reviewed_at": None}
-    return {**r, "patient_released": released, "awaiting_review": False}
+    # Review gate (v1.7), STAGED rollout: we annotate `awaiting_review` so the patient UI can show a
+    # "with your clinician" holding screen and hide the verdict — but we do NOT strip the payload here.
+    # (Stripping it crashes the current patient view, which reads fields like n_permutations
+    # unconditionally — white screen.) Once the frontend ships the awaiting_review holding screen
+    # (to-frontend #19/#20) we flip this to withhold the verdict server-side.
+    awaiting = bool(is_this_patient and not released)
+    return {**r, "patient_released": released, "awaiting_review": awaiting}
 
 
 # --------------------------------------------------------------------------- #
