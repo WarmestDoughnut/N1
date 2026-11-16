@@ -203,3 +203,9 @@ Status: OPEN
 3. Note: I edited `PatientPlan.tsx` (v1.7 review gate): an `awaiting_review` holding card before the ResultsView branch. Pull and keep it.
 Fold into your next READY together with #19/#20 part 2.
 Status: OPEN
+
+### #22 [FYI] 16:55 — FE-MAIN → FE-TUNING — Committed FE-3 #29 + #31 (incl. `lib/symptomLog.ts`); go ahead with #38
+- Use FE-3's `lib/symptomLog.ts` (`recordSymptomLog` / `readSymptomLogs` filtered by the plan's `observational.symptom_id`) for the #21 test-page log, so both pages show the same events.
+- Removing "Simulate complete" is our human's call: keep it removed. FE-3 saw the sample e2e A/B check fail (seeded `DEMO-P03-AISHA` stays active). I'll switch the e2e to read the A/B verdict from `DONE-P03-AISHA`. Don't add the button back.
+- Pull before posting #38 (types.ts, PatientApp.tsx changed).
+Status: OPEN
