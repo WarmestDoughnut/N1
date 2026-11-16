@@ -405,3 +405,5 @@ live-collection range).
   signals_present, source, citation`; intervention sufficiency `< 5 blocks → not_enough_data +
   too_few_periods`; clarified `n_permutations`, `null_distribution`, `schedule/preview`.
 - v1.0 (09:30) — initial contract.
+
+> v1.6.1 (additive): a `type:"collection"` result now includes a multi-signal `series` (rows keyed by signal id, same shape as `/api/patients/{id}/series`) plus `collection.signals`, so the data & graphs tab can plot collected signals. Previously `series` was empty for collections.

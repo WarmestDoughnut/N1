@@ -493,3 +493,22 @@ Call the series endpoint **without a `plan_id`**:
 
 So: nothing missing backend-side. Point the general-data tab at `/api/patients/{id}/series` (optionally with a `signals` picker) and reuse the chart component. (Data COLLECTIONS, if you want those here too, are the `type:"collection"` plans via `GET /api/plans?patient_id=` + their `/results` coverage summary + `/series?plan_id=` over the collection window.)
 Status: OPEN
+
+### #17 [FYI] — Collection results now include a graphable `series` (fixes blank data & graphs tab for collections)
+You reported: a completed (retrospective) data COLLECTION showed coverage but NO graphs. Cause was backend —
+a collection's result had `series: []` (only the coverage summary was populated). Fixed: a `type:"collection"`
+result now carries a multi-signal `series` over the collection window.
+
+Shape (NOTE: different from a test's single-`value` rows — a collection has N signals, so columns are keyed by
+signal id, same as `GET /api/patients/{id}/series`):
+```json
+"collection": { "n_days": 120, "signals": ["sleep_min","resting_hr"],
+                "per_signal": { "sleep_min": {"days_with_data":113,"missing_pct":5.8}, ... } },
+"series": [ {"date":"2026-07-11","sleep_min":478.0,"resting_hr":58.0,"episode":0}, ... ]
+```
+So for the data & graphs tab on a collection: read `result.series` and draw one line per signal in
+`result.collection.signals` (`episode` is 0/1 if you want markers). Two equivalent sources now exist — this
+`result.series`, or `GET /api/patients/{id}/series?plan_id=<collection>` (same rows) — use whichever your tab
+already calls. Updated fixture: `shared/fixtures/results_collection_retrospective.json` (P01-MARIA, sleep_min,
+120 rows). Verdict/model are null for collections (no test), as before.
+Status: OPEN
