@@ -53,9 +53,10 @@ export function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
 
 export const SIGNAL_ICON: Record<string, IconName> = {
   sleep_min: 'moon', resting_hr: 'heart', hrv: 'pulse', steps: 'steps', episode: 'calendar',
-  mood_log: 'sparkles', pain_level: 'activity',
+  mood_log: 'sparkles', pain_level: 'activity', screen_time_min: 'phone', late_screen_min: 'phone',
 }
 export const SIGNAL_COLOR: Record<string, string> = {
   sleep_min: '#6258df', resting_hr: '#e9566b', hrv: '#ef796b', steps: '#19a583', episode: '#ad7c28',
+  screen_time_min: '#3b82c4', late_screen_min: '#2f5fa8',
 }
 export const DEVICE_ICON: Record<string, IconName> = { iphone: 'phone', apple_watch: 'watch', fitbit: 'watch' }

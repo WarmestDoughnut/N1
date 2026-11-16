@@ -6,6 +6,8 @@ export type SignalId =
   | 'skin_temp_dev' | 'resp_rate' | 'spo2' | 'systolic_bp' | 'glucose_tir' | 'walking_speed'
   // self-reported in the patient app (backend data pending, see frontend-agents sync #10)
   | 'mood_log' | 'pain_level'
+  // v1.4 phone-only signals (P08-SAM; backend demo script)
+  | 'screen_time_min' | 'late_screen_min'
 export type DeviceId = string // catalog ids, e.g. "iphone" | "apple_watch" | "fitbit"
 
 export interface Device {
@@ -46,6 +48,8 @@ export interface SeriesRow {
   systolic_bp?: number | null
   glucose_tir?: number | null
   walking_speed?: number | null
+  screen_time_min?: number | null
+  late_screen_min?: number | null
   mood_log?: number | null
   pain_level?: number | null
 }
