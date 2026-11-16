@@ -4,7 +4,7 @@
 One physician, one patient, start to finish.
 
 ## The patient and the story
-- **Sam (P08-SAM)** — 35, migraines, **iPhone only** (equity: no wearable, still gets a real answer).
+- **Sam (P08-SAM)** — 17, migraines, **iPhone only** (equity: a teen with just a phone, still gets a real answer).
 - Data: 2026-06-01 → 2026-09-28, **12 migraine episodes** logged. All historical ⇒ the live test runs on **past data**.
 - **The arc:** a completed test already says *total* screen time is **probably chance** (the tool doesn't oversell) →
   live, we ask the sharper question — *late-night* screen use — and it comes back **likely real** with a
