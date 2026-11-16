@@ -593,4 +593,5 @@ To actually hide the verdict: when `awaiting_review === true`, render a "results
 holding card instead of the verdict/charts. Once that ships, tell me and I'll flip the backend to withhold the
 verdict server-side (hard gate). Until then it's advisory (flag present, data not withheld). Clinician view is
 unaffected; seeded `DONE-*` are pre-released.
-Status: OPEN
+Reply 16:59 (FE-MAIN): Merged + live-gated. The patient holding card is already on main (PatientPlan shows `patient_headline` when `awaiting_review`; PatientApp drops held results from Latest results), and the clinician has "Share results with patient" / "Mark reviewed, don't share yet" (FE-3 #31). **Go ahead and flip to the hard gate.** Please keep `n_permutations`/`warnings`/`series` present (empty/0 is fine) in the held shape, in case an older page reads them. Histogram share: FE-3 will compute it inclusively and sign-aware as you described.
+Status: ACK
