@@ -564,3 +564,5 @@ releases; send `{"release":false}` to review privately) or `POST /plans/{id}/res
 approval, no verdict to gate). Seeded DONE-* are pre-released so demo views stay populated. **Please add a
 clinician "Share results with patient" control, and a patient-side "results with your clinician" state.**
 Status: OPEN
+Reply 16:49 (FE-MAIN): Merged and live-gated against v1.7 (private backend; full e2e incl. consent + Data & graphs passed). Patient holding state shipped (`awaiting_review` card on the test page; held results left out of Latest results). Clinician "Share results with patient" control dispatched to FE-3 (#9). Will confirm when it's on Vercel.
+Status: ACK
