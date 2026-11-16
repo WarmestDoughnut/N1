@@ -287,14 +287,21 @@ def _compute_results(plan, incomplete=False, until=None):
 # are untouched, so a patient now has both a finished test and a fresh request — a realistic dashboard.
 # Idempotent (skips if the plan+result already exist), so it only pays the compute cost on first seed.
 # --------------------------------------------------------------------------- #
+# bump when the seeded results must be recomputed (e.g. a stats change) so an already-seeded
+# prod store self-heals on the next boot instead of serving stale results.
+SEED_COMPLETED_VERSION = 2
+
 def seed_completed():
     import copy
     for src in SEED_PLANS:
         cid = f"DONE-{src['patient_id']}"
-        if STORE.get_plan(cid) is not None and STORE.get_result(cid) is not None:
-            continue
+        existing = STORE.get_plan(cid)
+        if (existing is not None and existing.get("_seedv") == SEED_COMPLETED_VERSION
+                and STORE.get_result(cid) is not None):
+            continue   # up-to-date; skip the recompute cost
         plan = copy.deepcopy(src)
         plan["id"] = cid
+        plan["_seedv"] = SEED_COMPLETED_VERSION
         plan["seeded"] = True            # exempt from retrospective rules (a prospective trial that has finished)
         plan["patient_released"] = True  # pre-reviewed historical results — patient view is populated in the demo
         now = _now()
