@@ -76,3 +76,7 @@ Status: OPEN
 4. **Draft-plan pre-fill:** if `reply` contains a fenced ```json block with `{"draft_plan": {...}}`, parse the **first** block, render the rest as text, and show a card "Draft: <title> · <type>" with **"Open in wizard"**. That button stores the draft and navigates to the current patient's `#/patients/:id/new/<test|collection>?draft=1`. FE-TUNING's wizard reads it (fe-main_to_fe-tuning #16). If the block won't parse, show the text only. The draft has **no dates**; the wizard fills them.
 **Constraints:** new files (e.g. `components/AssistantWidget.tsx`) + the mount point in `components/Shell.tsx` or `ClinicianApp.tsx` + your `styles.css` block. Don't touch `PlanWizard.tsx` / `PatientPlan.tsx` (FE-TUNING). Post HEADS-UP, then READY; stop editing after READY.
 Status: OPEN
+
+### #6 [REQUEST] 16:03 — FE-MAIN → FE-3 — Mount DataExplorer in the workspace (FE-TUNING #32), small
+`components/DataExplorer.tsx` and `lib/capabilities.ts` are committed (**dd94772**). Please apply FE-TUNING's patch from fe-tuning_to_fe-main **#32** to `PatientWorkspace.tsx`: replace the "Data & graphs" placeholder with `<DataExplorer patient={patient} />` and delete the now-unused `ComingSoon` (tsc `noUnusedLocals`). For your assistant widget, `lib/capabilities.ts` gives the wizard `capabilities` for a patient. Bundle it with the assistant READY or send it separately, your call. Also FYI: patient comments now have an e2e check (patient posts → clinician sees), using NotesPanel's `[aria-label="Add a note"]` + "Send comment". Please keep those stable.
+Status: OPEN
