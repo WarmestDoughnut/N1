@@ -67,13 +67,22 @@ def observational(df, signal, direction, max_lag, rng, min_lag=1):
     # max-statistic null via circular shifts of the episode series (keeps autocorrelation)
     shifts = rng.integers(7, len(ep) - 7, N_PERM)
     null_max = np.empty(N_PERM)
-    null_best_raw = np.empty(N_PERM)          # raw (signed) null at the best lag, for the histogram
+    # #19 fix: the histogram null must be the SAME statistic used for the p-value. For each shuffle we
+    # take the lag that MAXIMISES the oriented effect (the max-over-lags statistic), and record that
+    # lag's RAW signed effect — so it lives in effect_pct's frame and `share(sign*null >= sign*effect)`
+    # ≈ p_value. (Previously this recorded the raw null at the one observed best lag, a different null.)
+    null_effect = np.empty(N_PERM)
     for i, s in enumerate(shifts):
         e2 = np.roll(ep, s)
         raw = np.array([obs_effect(sig, e2, L) for L in lags])   # one pass, reused below
         vals = raw * sign
-        null_max[i] = np.nanmax(vals) if not np.all(np.isnan(vals)) else np.nan
-        null_best_raw[i] = raw[best]
+        if np.all(np.isnan(vals)):
+            null_max[i] = np.nan
+            null_effect[i] = np.nan
+        else:
+            j = int(np.nanargmax(vals))
+            null_max[i] = vals[j]
+            null_effect[i] = raw[j]
 
     best_oriented = oriented[best]
     if all_nan or np.isnan(best_oriented):
@@ -111,7 +120,7 @@ def observational(df, signal, direction, max_lag, rng, min_lag=1):
         "pre_episode_mean": None if pre_mean is None else round(pre_mean, 1),
         "baseline_mean": None if base_mean is None else round(base_mean, 1),
         "windows_cover_most": coverage > 0.5,
-        "null_raw_best": null_best_raw,
+        "null_effect": null_effect,
         "best_lag_mask": pre,
     }
 
@@ -381,7 +390,8 @@ def run_plan(plan, daily):
             "warnings": warnings,
             "observational": obs_block,
             "intervention": None,
-            "null_distribution": _sample(r["null_raw_best"]),
+            "null_distribution": _sample(r["null_effect"]),
+            "null_statistic": "effect_pct",   # #19: null is in effect_pct units, max-over-lags; compare
             "series": _obs_series(daily, o["signal"], r["best_lag_mask"]),
             "model": None,
         }
@@ -430,6 +440,7 @@ def run_plan(plan, daily):
         "observational": None,
         "intervention": iv_block,
         "null_distribution": _sample(r["null_pct"]),
+        "null_statistic": "effect_pct",   # #19: exact 2^k null incl. the observed assignment
         "series": _iv_series(daily, iv),
         "model": None,
     }

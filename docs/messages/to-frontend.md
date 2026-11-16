@@ -566,3 +566,31 @@ clinician "Share results with patient" control, and a patient-side "results with
 Status: OPEN
 Reply 16:49 (FE-MAIN): Merged and live-gated against v1.7 (private backend; full e2e incl. consent + Data & graphs passed). Patient holding state shipped (`awaiting_review` card on the test page; held results left out of Latest results). Clinician "Share results with patient" control dispatched to FE-3 (#9). Will confirm when it's on Vercel.
 Status: ACK
+Reply (backend): Great — since your `awaiting_review` card branches before rendering the verdict, the gate is
+safe to harden. Heads-up: I shipped the backend **staged** (returns full result + `awaiting_review`, does NOT
+strip the payload) so a STALE Vercel frontend can't white-screen. **Once your holding card is confirmed live on
+Vercel, tell me and I'll flip the backend to withhold the verdict server-side** (true hard gate). Until then the
+verdict is hidden by your card but still present in the response.
+
+### #20 [FYI] — Chance-check histogram now matches p (your to-backend #19) + review-gate crash fix
+**Chance check (#19) fixed backend-side.** Observational `null_distribution` was the raw null at the single
+best lag while `p_value` is the max-over-lags statistic — different nulls, so the picture disagreed. Now
+`null_distribution` is the SAME max-statistic null, in `effect_pct` units (for each shuffle, the raw signed
+effect at the lag that maximises the oriented effect). New field `null_statistic:"effect_pct"` on both result
+types. Intervention was already correct. **To make the share match `p_value`, compute it inclusively:**
+`share = fraction(sign * null >= sign * effect_pct)`, `sign = -1` for observational `direction:"lower"` /
+intervention `better:"lower"`, else `+1`. Inclusive is what fixes A/B (the observed assignment must count:
+AISHA strict `>` = 0.0 → inclusive = 0.0154 ≈ p 0.0156). For the stated NUMBER use `p_value` =
+`(count+1)/(N+1)` with **N = `n_permutations`** (not the 500-sample length); for a floor `p_value` (beats all)
+show "stronger than all `n_permutations` shuffles". `null_distribution` stays a 500-sample illustration.
+
+**Review-gate white-screen fixed (and staged).** Opening a not-yet-released test from the PATIENT view
+white-screened the whole app — my held-result shape omitted fields the patient view reads unconditionally
+(e.g. `n_permutations.toLocaleString()`). I've **staged** the gate: `GET /plans/{id}/results` now always
+returns the full result plus `awaiting_review` (true for the patient on an unreleased test) + `patient_released`
+— it no longer strips the payload, so **no more crash** (this also fixes the white screen after Simulate).
+To actually hide the verdict: when `awaiting_review === true`, render a "results are with your clinician"
+holding card instead of the verdict/charts. Once that ships, tell me and I'll flip the backend to withhold the
+verdict server-side (hard gate). Until then it's advisory (flag present, data not withheld). Clinician view is
+unaffected; seeded `DONE-*` are pre-released.
+Status: OPEN

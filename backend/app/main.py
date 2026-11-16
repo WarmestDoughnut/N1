@@ -287,14 +287,21 @@ def _compute_results(plan, incomplete=False, until=None):
 # are untouched, so a patient now has both a finished test and a fresh request — a realistic dashboard.
 # Idempotent (skips if the plan+result already exist), so it only pays the compute cost on first seed.
 # --------------------------------------------------------------------------- #
+# bump when the seeded results must be recomputed (e.g. a stats change) so an already-seeded
+# prod store self-heals on the next boot instead of serving stale results.
+SEED_COMPLETED_VERSION = 2
+
 def seed_completed():
     import copy
     for src in SEED_PLANS:
         cid = f"DONE-{src['patient_id']}"
-        if STORE.get_plan(cid) is not None and STORE.get_result(cid) is not None:
-            continue
+        existing = STORE.get_plan(cid)
+        if (existing is not None and existing.get("_seedv") == SEED_COMPLETED_VERSION
+                and STORE.get_result(cid) is not None):
+            continue   # up-to-date; skip the recompute cost
         plan = copy.deepcopy(src)
         plan["id"] = cid
+        plan["_seedv"] = SEED_COMPLETED_VERSION
         plan["seeded"] = True            # exempt from retrospective rules (a prospective trial that has finished)
         plan["patient_released"] = True  # pre-reviewed historical results — patient view is populated in the demo
         now = _now()
@@ -761,19 +768,13 @@ def results(plan_id: str, request: Request):
     account = current_account(request)
     is_this_patient = (account is not None and account["role"] == "patient"
                        and account.get("patient_id") == plan["patient_id"])
-    # Patient asking for a not-yet-released test verdict → a holding state, not the verdict itself
-    # (withheld server-side, not just hidden in the UI).
-    if is_this_patient and not released:
-        return {"plan_id": plan_id, "type": plan.get("type"), "complete": r.get("complete", True),
-                "patient_released": False, "awaiting_review": True,
-                "verdict": None, "headline": None,
-                "patient_headline": "Your results are ready and are being reviewed by your clinician. "
-                                    "They'll share the findings with you shortly.",
-                "observational": None, "intervention": None, "collection": None,
-                "effect_pct": None, "p_value": None, "model": None,
-                "series": [], "null_distribution": [], "warnings": [],
-                "reviewed_at": None}
-    return {**r, "patient_released": released, "awaiting_review": False}
+    # Review gate (v1.7), STAGED rollout: we annotate `awaiting_review` so the patient UI can show a
+    # "with your clinician" holding screen and hide the verdict — but we do NOT strip the payload here.
+    # (Stripping it crashes the current patient view, which reads fields like n_permutations
+    # unconditionally — white screen.) Once the frontend ships the awaiting_review holding screen
+    # (to-frontend #19/#20) we flip this to withhold the verdict server-side.
+    awaiting = bool(is_this_patient and not released)
+    return {**r, "patient_released": released, "awaiting_review": awaiting}
 
 
 # --------------------------------------------------------------------------- #
