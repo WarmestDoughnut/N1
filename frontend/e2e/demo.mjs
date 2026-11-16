@@ -211,8 +211,8 @@ else {
 if (LIVE) {
   const sam = 'DEMO-P08-SAM'
   await approveAndRun('Sam', sam)
-  // no Simulate any more: seeded prospective plans stay active after approval, so read the pre-completed copy
-  expect.push(['P08-SAM late-night screen time (phone only)', await clinicianVerdict('DONE-P08-SAM', '04b-sam'), 'Likely real'])
+    // backend demo (0be204c): Sam's pre-completed test is the honest negative (total screen time → probably chance)
+  expect.push(['P08-SAM total screen time, pre-completed (phone only)', await clinicianVerdict('DONE-P08-SAM', '04b-sam'), 'Probably chance'])
 }
 await page.evaluate(() => { location.hash = '/' }); await sleep(1500); await shot('05-overview')
 
