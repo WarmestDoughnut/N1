@@ -37,6 +37,7 @@ export function PatientDevices({ patient }: { patient?: Patient }) {
   const mineIds = [...new Set([...(patient?.devices ?? []), ...draft.added])].filter((id) => !draft.removed.includes(id))
   const mine = mineIds.map((id) => catalog.find((d) => d.id === id) ?? ({ id, name: id, signals: [] } as Device))
   const others = catalog.filter((d) => !mineIds.includes(d.id))
+  // Everything the catalog marks available now is addable (rings, CGMs, cuffs…). Only "emerging" devices wait under Coming soon.
   const now = others.filter((d) => d.availability !== 'emerging')
   const soon = others.filter((d) => d.availability === 'emerging')
 
@@ -127,7 +128,7 @@ export function PatientDevices({ patient }: { patient?: Patient }) {
 
       {connecting && (connecting.id === 'apple_watch'
         ? <AppleWatchFlow device={connecting} onClose={() => setConnecting(null)} onConnected={(at) => connect(connecting, at)} />
-        : <NotAvailable device={connecting} onClose={() => setConnecting(null)} />)}
+        : <ConnectDevice device={connecting} onClose={() => setConnecting(null)} onConnected={() => connect(connecting)} />)}
 
       {confirmOff && (
         <div className="modal-back" onClick={() => setConfirmOff(null)}>
@@ -207,17 +208,17 @@ function AppleWatchFlow({ device, onClose, onConnected }: { device: Device; onCl
   )
 }
 
-function NotAvailable({ device, onClose }: { device: Device; onClose: () => void }) {
-  const [asked, setAsked] = useState(false)
+/** Any device that isn't the Apple Watch: one confirm step, then it joins the Connected list (draft: this browser only). */
+function ConnectDevice({ device, onClose, onConnected }: { device: Device; onClose: () => void; onConnected: () => void }) {
   return (
     <div className="modal-back" onClick={onClose}>
       <div className="modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
-        <h2>{device.name}</h2>
-        <p className="muted">Connecting {device.name} isn't available yet in this demo.</p>
-        {asked && <div className="alert alert-info mt"><Icon name="info" /><span>Noted on this screen only. Notifications aren't set up yet.</span></div>}
+        <h2>Connect {device.name}?</h2>
+        <p className="muted">It can provide: {signalList(device.signals) || 'no signals listed'}.</p>
+        <p className="muted small">Preview: the connection is saved on this device only, and no data is pulled from {device.name} yet.</p>
         <div className="row" style={{ justifyContent: 'flex-end', marginTop: 16 }}>
-          <button className="button ghost" onClick={onClose}>Close</button>
-          {!asked && <button className="button secondary" onClick={() => setAsked(true)}><Icon name="bell" /> Notify me</button>}
+          <button className="button ghost" onClick={onClose}>Cancel</button>
+          <button className="button primary" onClick={() => { onConnected(); onClose() }}><Icon name="plus" /> Connect</button>
         </div>
       </div>
     </div>

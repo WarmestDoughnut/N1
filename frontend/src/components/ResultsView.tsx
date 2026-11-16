@@ -263,6 +263,9 @@ function ModelPanel({ results }: { results: Results }) {
           {m.beats_chance != null && <span className={`pill ${m.beats_chance ? 'pill-green' : 'pill-yellow'}`}>{m.beats_chance ? 'Predicts better than chance' : 'No better than chance'}</span>}
         </div>
       )}
+      {m.beats_chance === false && (
+        <div className="alert alert-warn" style={{ marginBottom: 12 }}><Icon name="info" /><span>This model did no better than a coin flip on days it hadn't seen. Don't rely on the percentage above.</span></div>
+      )}
       <div className="chart-sub">What drives the prediction. A bar to the left means lower values raise episode risk.</div>
       <CoefficientChart coefficients={m.coefficients} />
       <p className="muted small">Exploratory. Not validated for clinical use.</p>
